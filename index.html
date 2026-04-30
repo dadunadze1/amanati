@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+<meta charset="UTF-8" />
+<title>Courier FLAGS PRO</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+body { margin:0; font-family:Arial; overflow:hidden; }
+#map { height:100vh; width:100vw; }
+
+#menuBtn{
+  position:absolute;
+  top:15px;
+  right:15px;
+  z-index:2000;
+  background:#111;
+  color:white;
+  padding:10px 14px;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+#sidebar{
+  position:fixed;
+  top:0;
+  right:-320px;
+  width:300px;
+  height:100%;
+  background:#111;
+  color:white;
+  padding:15px;
+  transition:0.3s;
+  z-index:3000;
+  overflow:auto;
+}
+
+#sidebar.open{ right:0; }
+
+button{
+  width:100%;
+  padding:8px;
+  margin-bottom:8px;
+  background:green;
+  color:white;
+  border:none;
+  cursor:pointer;
+}
+
+#overlay{
+  position:fixed;
+  top:0;left:0;
+  width:100vw;height:100vh;
+  background:rgba(0,0,0,0.4);
+  display:none;
+  z-index:2500;
+}
+#overlay.show{ display:block; }
+
+.stats{
+  background:#222;
+  padding:10px;
+  font-size:13px;
+  margin-bottom:10px;
+}
+
+.order{
+  background:#222;
+  padding:10px;
+  margin-bottom:8px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.order:hover{ background:#333; }
+
+input{
+  width:100%;
+  padding:8px;
+  margin-bottom:8px;
+  border:none;
+  border-radius:5px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="menuBtn" onclick="toggleMenu()">☰</div>
+<div id="overlay" onclick="closeMenu()"></div>
+
+<div id="sidebar">
+  <h3>📦 მენიუ</h3>
+
+  <input id="searchBox" placeholder="🔍 ძებნა">
+  <button onclick="searchAddress()">ძებნა</button>
+
+  <button onclick="enableAddMode()">➕ დამატება</button>
+  <button onclick="showHistory()">📊 ისტორია</button>
+  <button onclick="closeDay()">📅 დღის დასრულება</button>
+
+  <div class="stats">
+    📦 სულ: <span id="total">0</span><br>
+    🟢 მიტანილი: <span id="delivered">0</span><br>
+    🔴 ვერ მიტანილი: <span id="failed">0</span>
+  </div>
+
+  <div id="ordersList"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+
+const map = L.map('map').setView([41.7151,44.8271],12);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'&copy; OpenStreetMap'
+}).addTo(map);
+
+let addMode = false;
+let orders = [];
+let history = JSON.parse(localStorage.getItem("history")) || {};
+let searchMarker = null;
+let myMarker = null;
+let watchId = null;
+
+/* ICONS */
+function redFlag(){
+  return L.divIcon({
+    html:`<div style="width:12px;height:12px;background:red;border-radius:50%;border:2px solid darkred;"></div>`
+  });
+}
+
+function greenFlag(){
+  return L.divIcon({
+    html:`<div style="width:12px;height:12px;background:green;border-radius:50%;border:2px solid darkgreen;"></div>`
+  });
+}
+
+function failedFlag(){
+  return L.divIcon({
+    html:`<div style="width:12px;height:12px;background:orange;border-radius:50%;border:2px solid red;"></div>`
+  });
+}
+
+function carIcon(){
+  return L.icon({
+    iconUrl:"https://cdn-icons-png.flaticon.com/512/743/743920.png",
+    iconSize:[35,35]
+  });
+}
+
+/* GPS */
+function startGPS(){
+  if(!navigator.geolocation){
+    alert("GPS არ არის მხარდაჭერილი");
+    return;
+  }
+
+  watchId = navigator.geolocation.watchPosition(pos=>{
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+
+    if(!myMarker){
+      myMarker = L.marker([lat,lng],{icon:carIcon()})
+        .addTo(map)
+        .bindPopup("🚗 შენი ლოკაცია");
+    } else {
+      myMarker.setLatLng([lat,lng]);
+    }
+
+  }, err=>{
+    alert("❌ GPS არ ჩაირთო — ჩართე Location");
+  },{
+    enableHighAccuracy:true
+  });
+}
+
+window.onload = startGPS;
+
+/* MENU */
+function toggleMenu(){
+  sidebar.classList.toggle("open");
+  overlay.classList.toggle("show");
+}
+function closeMenu(){
+  sidebar.classList.remove("open");
+  overlay.classList.remove("show");
+}
+
+/* ADD MODE */
+function enableAddMode(){
+  addMode = true;
+  closeMenu();
+  alert("🟢 დააჭირე რუკაზე");
+}
+
+/* MAP CLICK */
+map.on("click", e=>{
+  if(!addMode) return;
+
+  const name = prompt("სახელი:");
+  const phone = prompt("ტელეფონი:");
+  const address = "რუკაზე დამატებული წერტილი";
+
+  if(!name || !phone) return;
+
+  const marker = L.marker([e.latlng.lat,e.latlng.lng],{icon:redFlag()}).addTo(map);
+
+  const order = {
+    id: Date.now(),
+    name,
+    phone,
+    address,
+    status:"pending",
+    marker
+  };
+
+  marker.bindPopup(`
+    📦 ${name}<br>
+    📞 ${phone}<br>
+    📍 ${address}<br><br>
+    <button onclick="deliver(${order.id})">✔ ჩაბარდა</button>
+    <button onclick="fail(${order.id})">❌ ვერ ჩაბარდა</button>
+  `);
+
+  orders.push(order);
+  addMode=false;
+  updateStats();
+});
+
+/* DELIVERY */
+function deliver(id){
+  const o = orders.find(x=>x.id===id);
+  if(!o) return;
+
+  o.status="delivered";
+  o.marker.setIcon(greenFlag());
+  o.marker.closePopup();
+  updateStats();
+}
+
+/* FAIL */
+function fail(id){
+  const o = orders.find(x=>x.id===id);
+  if(!o) return;
+
+  o.status="failed";
+  o.marker.setIcon(failedFlag());
+  o.marker.closePopup();
+  updateStats();
+}
+
+/* SEARCH */
+function searchAddress(){
+  const q = document.getElementById("searchBox").value;
+  if(!q) return;
+
+  fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`, {
+    headers: { "User-Agent": "CourierFLAGS/1.0" }
+  })
+  .then(r=>r.json())
+  .then(data=>{
+    if(!data.length) return alert("ვერ მოიძებნა");
+
+    const p = data[0];
+    const safeAddress = p.display_name.replace(/'/g, "\\'");
+
+    map.setView([p.lat,p.lon],17);
+
+    if(searchMarker){
+      map.removeLayer(searchMarker);
+    }
+
+    searchMarker = L.marker([p.lat,p.lon]).addTo(map);
+
+    searchMarker.bindPopup(`
+      📍 ${safeAddress}<br><br>
+      <button onclick="addOrderFromSearch(${p.lat},${p.lon},'${safeAddress}')">➕ დამატება</button>
+    `).openPopup();
+  });
+}
+
+/* ADD FROM SEARCH */
+function addOrderFromSearch(lat, lon, address){
+
+  const name = prompt("სახელი:");
+  const phone = prompt("ტელეფონი:");
+  if(!name || !phone) return;
+
+  const marker = L.marker([lat,lon],{icon:redFlag()}).addTo(map);
+
+  const order = {
+    id: Date.now(),
+    name,
+    phone,
+    address,
+    status:"pending",
+    marker
+  };
+
+  marker.bindPopup(`
+    📦 ${name}<br>
+    📞 ${phone}<br>
+    📍 ${address}<br><br>
+    <button onclick="deliver(${order.id})">✔ ჩაბარდა</button>
+    <button onclick="fail(${order.id})">❌ ვერ ჩაბარდა</button>
+  `);
+
+  orders.push(order);
+
+  if(searchMarker){
+    map.removeLayer(searchMarker);
+    searchMarker = null;
+  }
+
+  updateStats();
+}
+
+/* STATS */
+function updateStats(){
+  total.innerText = orders.length;
+  delivered.innerText = orders.filter(o=>o.status==="delivered").length;
+  failed.innerText = orders.filter(o=>o.status==="failed").length;
+
+  renderList();
+}
+
+/* LIST */
+function renderList(){
+  const div = document.getElementById("ordersList");
+  div.innerHTML="";
+
+  orders.forEach(o=>{
+    const el = document.createElement("div");
+    el.className="order";
+
+    el.innerHTML = `
+      📦 ${o.name}<br>
+      📞 ${o.phone}<br>
+      📍 ${o.address}<br>
+      ${o.status}
+    `;
+
+    el.onclick=()=>{
+      map.setView(o.marker.getLatLng(),16);
+      o.marker.openPopup();
+    };
+
+    div.appendChild(el);
+  });
+}
+
+/* CLOSE DAY */
+function closeDay(){
+  const today = new Date().toLocaleDateString("en-GB");
+
+  const deliveredArr = orders.filter(o=>o.status==="delivered");
+  const failedArr = orders.filter(o=>o.status==="failed");
+
+  history[today] = {
+    delivered: deliveredArr,
+    failed: failedArr
+  };
+
+  localStorage.setItem("history", JSON.stringify(history));
+
+  orders.forEach(o=>map.removeLayer(o.marker));
+  orders = [];
+
+  updateStats();
+
+  alert(`📅 დღე დაიხურა!\n✔ ${deliveredArr.length} | ❌ ${failedArr.length}`);
+}
+
+/* HISTORY */
+function showHistory(){
+  let text="📊 ისტორია:\n\n";
+
+  Object.keys(history).forEach(d=>{
+    const h = history[d];
+
+    text += `📅 ${d} | ✔ ${h.delivered.length} | ❌ ${h.failed.length}\n\n`;
+
+    h.delivered.forEach(o=>{
+      text += `✔ ${o.name} | ${o.phone}\n`;
+    });
+
+    h.failed.forEach(o=>{
+      text += `❌ ${o.name} | ${o.phone}\n`;
+    });
+
+    text += "\n----------------\n";
+  });
+
+  alert(text || "ცარიელია");
+}
+
+/* GLOBAL */
+window.deliver=deliver;
+window.fail=fail;
+window.enableAddMode=enableAddMode;
+window.showHistory=showHistory;
+window.closeDay=closeDay;
+window.searchAddress=searchAddress;
+window.addOrderFromSearch=addOrderFromSearch;
+window.toggleMenu=toggleMenu;
+window.closeMenu=closeMenu;
+
+</script>
+
+</body>
+</html>
