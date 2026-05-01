@@ -1,466 +1,436 @@
 <!DOCTYPE html>
 <html lang="ka">
 <head>
-<meta charset="UTF-8" />
-<title>Courier FLAGS PRO</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<style>
-body { margin:0; font-family:Arial; overflow:hidden; }
-#map { height:100vh; width:100vw; }
-
-/* AUTH */
-#authBox{
-  position:fixed;
-  top:0;left:0;
-  width:100vw;height:100vh;
-  background:#111;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  z-index:99999;
-}
-
-.authCard{
-  width:320px;
-  background:#1e1e1e;
-  padding:20px;
-  border-radius:10px;
-  color:white;
-}
-
-.authCard input{
-  width:100%;
-  padding:10px;
-  margin-bottom:8px;
-  border:none;
-  border-radius:5px;
-}
-
-.authCard button{
-  width:100%;
-  padding:10px;
-  background:green;
-  color:white;
-  border:none;
-  border-radius:5px;
-  cursor:pointer;
-}
-
-#extraFields{ display:none; }
-
-.smallText{
-  text-align:center;
-  font-size:12px;
-  margin-top:10px;
-  cursor:pointer;
-}
-
-/* MENU */
-#menuBtn{
-  position:absolute;
-  top:15px;
-  right:15px;
-  z-index:2000;
-  background:#111;
-  color:white;
-  padding:10px 14px;
-  border-radius:8px;
-  cursor:pointer;
-}
-
-#sidebar{
-  position:fixed;
-  top:0;
-  right:-320px;
-  width:300px;
-  height:100%;
-  background:#111;
-  color:white;
-  padding:15px;
-  transition:0.3s;
-  z-index:3000;
-  overflow:auto;
-}
-
-#sidebar.open{ right:0; }
-
-button{
-  width:100%;
-  padding:8px;
-  margin-bottom:8px;
-  background:green;
-  color:white;
-  border:none;
-  cursor:pointer;
-}
-
-#overlay{
-  position:fixed;
-  top:0;left:0;
-  width:100vw;height:100vh;
-  background:rgba(0,0,0,0.4);
-  display:none;
-  z-index:2500;
-}
-#overlay.show{ display:block; }
-
-.stats{
-  background:#222;
-  padding:10px;
-  font-size:13px;
-  margin-bottom:10px;
-}
-
-.order{
-  background:#222;
-  padding:10px;
-  margin-bottom:8px;
-  border-radius:6px;
-  cursor:pointer;
-}
-
-.order:hover{ background:#333; }
-
-input{
-  width:100%;
-  padding:8px;
-  margin-bottom:8px;
-  border:none;
-  border-radius:5px;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>კურიერის სისტემა - თბილისი</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing: border-box; font-family: system-ui, 'Segoe UI', sans-serif; }
+        body { background: #f5f7fb; padding: 16px; }
+        .app { max-width: 1400px; margin: 0 auto; background: white; border-radius: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); overflow: hidden; }
+        .tabs { display: none; background: #ffffff; gap: 6px; padding: 12px 24px 0 24px; border-bottom: 1px solid #eef2f6; }
+        .tabs.visible { display: flex; }
+        .tab-btn { background: transparent; border: none; padding: 10px 20px; font-size: 0.95rem; font-weight: 500; color: #5a6874; cursor: pointer; border-radius: 30px; transition: 0.2s; }
+        .tab-btn.active { background: #eef2ff; color: #1f2b3e; }
+        .tab-content { display: none; padding: 28px; }
+        .tab-content.active { display: block; }
+        .auth-container { display: flex; justify-content: center; align-items: center; min-height: 70vh; }
+        .auth-card { background: white; border-radius: 28px; box-shadow: 0 12px 30px rgba(0,0,0,0.05); padding: 36px 32px; width: 100%; max-width: 440px; }
+        .auth-card h2 { font-size: 26px; font-weight: 600; margin-bottom: 28px; color: #1e2a3a; text-align: center; }
+        .input-group { margin-bottom: 20px; }
+        .input-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #334155; }
+        .input-group input { width: 100%; padding: 12px 16px; border: 1px solid #cbd5e1; border-radius: 40px; font-size: 15px; background: #ffffff; }
+        .input-group input:focus { outline: none; border-color: #8b9eb0; }
+        .error-message { color: #c2410c; font-size: 12px; margin-top: 4px; margin-left: 12px; }
+        .btn-primary { width: 100%; background: #1e2a3a; color: white; border: none; padding: 12px; border-radius: 40px; font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 8px; }
+        .btn-primary:hover { background: #0f172a; }
+        .auth-footer { text-align: center; margin-top: 22px; font-size: 13px; }
+        .auth-link { color: #1e2a3a; font-weight: 500; background: none; border: none; cursor: pointer; }
+        .card { background: #ffffff; border-radius: 24px; padding: 20px; margin-bottom: 24px; border: 1px solid #edf2f7; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+        .map-container { height: 380px; border-radius: 20px; overflow: hidden; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+        #map, #adminMap { height: 100%; width: 100%; }
+        .flex-row { display: flex; flex-wrap: wrap; gap: 16px; }
+        .stat-card { background: #f8fafc; border-radius: 20px; padding: 16px; flex: 1; min-width: 140px; text-align: center; border: 1px solid #eef2f6; }
+        button, .btn { background: #eef2ff; color: #1f2b3e; border: none; padding: 8px 16px; border-radius: 32px; font-weight: 500; cursor: pointer; font-size: 0.85rem; }
+        button.danger { background: #fff1f0; color: #b91c1c; }
+        button.success { background: #e6f7ec; color: #15803d; }
+        input, select, textarea { width: 100%; padding: 10px 14px; margin: 6px 0; border: 1px solid #cfdfed; border-radius: 28px; font-size: 14px; }
+        .order-item { background: #ffffff; border-radius: 20px; padding: 14px; margin-bottom: 12px; border-left: 4px solid; display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; }
+        .delivered { border-left-color: #2b9348; }
+        .failed { border-left-color: #e85d04; }
+        .pending { border-left-color: #ffb703; }
+        .admin-submenu { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; padding-bottom: 8px; border-bottom: 1px solid #eef2f6; }
+        .admin-submenu button { background: #f1f5f9; color: #334155; }
+        .admin-submenu button.active-sub { background: #e2e8f0; color: #0f172a; font-weight: 600; }
+        .admin-section { display: none; }
+        .admin-section.active-section { display: block; }
+        .courier-row, .request-row { background: #fafcff; border-radius: 20px; padding: 14px; margin-bottom: 12px; border: 1px solid #eef2f6; }
+        .request-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        @media (max-width: 700px) { .tab-content { padding: 16px; } .auth-card { padding: 24px 20px; } }
+    </style>
 </head>
-
 <body>
-
-<div id="authBox">
-  <div class="authCard">
-
-    <h3 id="authTitle">Login</h3>
-
-    <input id="emailLogin" placeholder="მაილი">
-
-    <div id="extraFields">
-      <input id="fullName" placeholder="სახელი და გვარი">
-      <input id="phone" placeholder="მობილური">
-      <input id="verifyCode" placeholder="ვერიფიკაციის კოდი">
+<div class="app">
+    <div class="tabs" id="tabsBar">
+        <button class="tab-btn" data-tab="loginTab">შესვლა</button>
+        <button class="tab-btn" data-tab="courierTab">კურიერის პანელი</button>
+        <button class="tab-btn" data-tab="adminTab">ადმინ პანელი</button>
     </div>
 
-    <input id="password" type="password" placeholder="პაროლი">
-
-    <button onclick="authAction()">შესვლა / რეგისტრაცია</button>
-
-    <div class="smallText" onclick="toggleAuth()">
-      რეგისტრაცია / Login
+    <!-- LOGIN TAB -->
+    <div id="loginTab" class="tab-content active">
+        <div class="auth-container">
+            <div class="auth-card">
+                <div id="loginFormWrapper">
+                    <h2>შესვლა</h2>
+                    <div class="input-group">
+                        <label>ელფოსტა / მომხმარებელი</label>
+                        <input type="text" id="loginEmail" placeholder="admin ან courier@test.com" value="admin">
+                        <div id="loginEmailError" class="error-message" style="display: none;">ელფოსტის მისამართი არასრულია</div>
+                    </div>
+                    <div class="input-group">
+                        <label>პაროლი</label>
+                        <input type="password" id="loginPass" placeholder="********">
+                    </div>
+                    <button class="btn-primary" id="doLoginBtn">შესვლა</button>
+                    <div class="auth-footer">
+                        <button class="auth-link" id="showRegisterLink">რეგისტრაცია</button>
+                    </div>
+                    <div id="loginGeneralError" class="error-message" style="text-align: center; margin-top: 16px; display: none;">მონაცემები არასწორია</div>
+                </div>
+                <div id="registerFormWrapper" style="display: none;">
+                    <h2>რეგისტრაცია</h2>
+                    <div class="input-group">
+                        <label>სახელი გვარი</label>
+                        <input type="text" id="regName" placeholder="ნიკა კურიერი">
+                    </div>
+                    <div class="input-group">
+                        <label>ელფოსტა</label>
+                        <input type="email" id="regEmail" placeholder="courier@example.com">
+                    </div>
+                    <div class="input-group">
+                        <label>მობილური</label>
+                        <input type="tel" id="regPhone" placeholder="599 11 22 33">
+                    </div>
+                    <div class="input-group">
+                        <label>საბანკო რეკვიზიტები</label>
+                        <input type="text" id="regBank" placeholder="GE00TB000000...">
+                    </div>
+                    <div class="input-group">
+                        <label>პაროლი</label>
+                        <input type="password" id="regPass" placeholder="********">
+                    </div>
+                    <button class="btn-primary" id="doRegisterBtn">რეგისტრაცია</button>
+                    <div class="auth-footer">
+                        <button class="auth-link" id="showLoginLink">← დაბრუნდი შესვლაზე</button>
+                    </div>
+                    <div id="registerError" class="error-message" style="text-align: center; margin-top: 16px; display: none;"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
-  </div>
+    <!-- COURIER PANEL (idéntical) -->
+    <div id="courierTab" class="tab-content">
+        <div class="card">
+            <div style="display: flex; justify-content: space-between;">
+                <h2>კურიერის დაფა</h2>
+                <button id="logoutBtn">გასვლა</button>
+            </div>
+            <div id="courierProfile" class="card" style="background:#fafcff;"></div>
+        </div>
+        <div class="card">
+            <h3>რუკა – ამანათები</h3>
+            <div class="map-container"><div id="map"></div></div>
+            <div id="ordersListOnMap"></div>
+        </div>
+        <div class="card">
+            <h3>დღის სტატისტიკა</h3>
+            <div id="dailyStats" class="flex-row"></div>
+            <h3>თვის სტატისტიკა</h3>
+            <div id="monthlyStats" class="flex-row"></div>
+        </div>
+    </div>
+
+    <!-- ADMIN PANEL -->
+    <div id="adminTab" class="tab-content">
+        <div class="card">
+            <h2>ადმინისტრატორი</h2>
+            <button id="adminLogout">გასვლა</button>
+            <hr style="margin: 16px 0;">
+            <div class="admin-submenu">
+                <button id="adminMainBtn" class="active-sub">📦 ამანათის დამატება</button>
+                <button id="adminCouriersBtn">👥 კურიერები</button>
+                <button id="adminStatsBtn">📊 დღის სტატისტიკა</button>
+                <button id="adminRequestsBtn">📝 რეგისტრაციის მოთხოვნები</button>
+            </div>
+            <div id="adminMainSection" class="admin-section active-section">
+                <h3>ახალი ამანათი (რუკაზე მონიშვნით)</h3>
+                <div class="search-box" style="display: flex; gap: 8px;">
+                    <input type="text" id="searchAddress" placeholder="მისამართის ძებნა">
+                    <button id="searchBtn">ძებნა</button>
+                </div>
+                <div class="map-container" style="height: 320px;"><div id="adminMap"></div></div>
+                <p style="font-size:0.8rem;">📍 დააწკაპუნეთ რუკაზე პინის დასაყენებლად</p>
+                <input type="text" id="newOrderAddress" placeholder="მისამართი">
+                <input type="text" id="clientName" placeholder="მომხმარებლის სახელი და გვარი">
+                <input type="tel" id="clientPhone" placeholder="მომხმარებლის მობილური">
+                <select id="newOrderCourierAssign"><option value="">აირჩიე კურიერი</option></select>
+                <button id="createOrderBtn">ამანათის შექმნა</button>
+            </div>
+            <div id="adminCouriersSection" class="admin-section">
+                <h3>რეგისტრირებული კურიერები</h3>
+                <div id="couriersList"></div>
+            </div>
+            <div id="adminStatsSection" class="admin-section">
+                <h3>დღის სტატისტიკა</h3>
+                <div id="adminDailyStats" class="flex-row"></div>
+            </div>
+            <div id="adminRequestsSection" class="admin-section">
+                <h3>ახალი რეგისტრაციის მოთხოვნები</h3>
+                <div id="requestsList"></div>
+            </div>
+        </div>
+    </div>
 </div>
-
-<div id="menuBtn" onclick="toggleMenu()">☰</div>
-<div id="overlay" onclick="closeMenu()"></div>
-
-<div id="sidebar">
-  <h3>📦 მენიუ</h3>
-
-  <input id="searchBox" placeholder="🔍 ძებნა">
-  <button onclick="searchAddress()">ძებნა</button>
-
-  <button onclick="enableAddMode()">➕ დამატება</button>
-  <button onclick="showHistory()">📊 ისტორია</button>
-  <button onclick="closeDay()">📅 დღის დასრულება</button>
-
-  <div class="stats">
-    📦 სულ: <span id="total">0</span><br>
-    🟢 მიტანილი: <span id="delivered">0</span><br>
-    🔴 ვერ მიტანილი: <span id="failed">0</span>
-  </div>
-
-  <div id="ordersList"></div>
-</div>
-
-<div id="map"></div>
 
 <script>
+    let users = [];     
+    let orders = [];
+    let currentUser = null;
+    let adminMap = null, adminMarker = null, selectedLat = null, selectedLng = null;
+    let courierMap = null, courierMarkersLayer = null;
 
-const map = L.map('map').setView([41.7151,44.8271],12);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  attribution:'&copy; OpenStreetMap'
-}).addTo(map);
-
-let addMode = false;
-let orders = [];
-
-/* ================== FIXED HISTORY SYSTEM ================== */
-
-function closeDay(){
-
-  if(orders.length === 0){
-    alert("📅 არაფერი არ არის დასახურავი");
-    return;
-  }
-
-  const delivered = orders.filter(o => o.status === "delivered").length;
-  const failed = orders.filter(o => o.status === "failed").length;
-
-  const historyItem = {
-    date: new Date().toLocaleDateString("ka-GE"),
-    total: orders.length,
-    delivered: delivered,
-    failed: failed,
-    orders: orders.map(o => ({
-      name: o.name,
-      phone: o.phone,
-      status: o.status
-    }))
-  };
-
-  let history = JSON.parse(localStorage.getItem("history")) || [];
-  history.push(historyItem);
-  localStorage.setItem("history", JSON.stringify(history));
-
-  orders.forEach(o=>{
-    map.removeLayer(o.marker);
-  });
-
-  orders = [];
-  updateStats();
-
-  alert("📅 დღე დაიხურა და შეინახა ისტორიაში");
-}
-
-/* ================== HISTORY VIEW ================== */
-
-function showHistory(){
-  const history = JSON.parse(localStorage.getItem("history")) || [];
-
-  if(history.length === 0){
-    alert("📊 ისტორია ცარიელია");
-    return;
-  }
-
-  let text = "📊 HISTORY\n\n";
-
-  history.forEach((h, i)=>{
-    text += `📅 დღე ${i+1}: ${h.date}\n`;
-    text += `📦 სულ: ${h.total} | 🟢 ${h.delivered} | 🔴 ${h.failed}\n`;
-
-    h.orders.forEach(o=>{
-      text += `   - ${o.name} | ${o.phone} | ${o.status}\n`;
-    });
-
-    text += "\n";
-  });
-
-  alert(text);
-}
-
-/* ================== REST OF YOUR CODE (UNCHANGED) ================== */
-
-let isLogin = true;
-let currentUser = null;
-let users = JSON.parse(localStorage.getItem("users")) || {};
-
-function toggleAuth(){
-  isLogin = !isLogin;
-  document.getElementById("authTitle").innerText = isLogin ? "Login" : "Register";
-  document.getElementById("extraFields").style.display = isLogin ? "none" : "block";
-}
-
-function authAction(){
-
-  const email = emailLogin.value;
-  const pass = password.value;
-
-  if(isLogin){
-
-    const user = Object.values(users).find(u => u.email === email && u.password === pass);
-
-    if(user){
-      document.getElementById("authBox").style.display = "none";
-      currentUser = user;
-    } else {
-      alert("არასწორი მონაცემები");
+    function saveData() {
+        localStorage.setItem('courier_users', JSON.stringify(users));
+        localStorage.setItem('courier_orders', JSON.stringify(orders));
+        localStorage.setItem('courier_session', JSON.stringify(currentUser));
     }
-
-  } else {
-
-    if(verifyCode.value !== "123123"){
-      return alert("არასწორი კოდი");
+    function loadData() {
+        const storedUsers = localStorage.getItem('courier_users');
+        if(storedUsers) users = JSON.parse(storedUsers);
+        else {
+            users = [
+                { id: 1, name: "ნიკა კურიერი", email: "courier@test.com", phone: "599111222", bank: "GE00TB000000", password: "123", role: "courier", status: "active" },
+                { id: 2, name: "ადმინი", email: "admin", phone: "577000111", bank: "N/A", password: "123", role: "admin", status: "active" }
+            ];
+        }
+        const storedOrders = localStorage.getItem('courier_orders');
+        if(storedOrders) orders = JSON.parse(storedOrders);
+        else {
+            orders = [
+                { id: 101, address: "რუსთაველის გამზირი 5", lat: 41.6990, lng: 44.7945, status: "pending", courierId: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), clientName: "ანა ფანჯუკიძე", clientPhone: "598123456" },
+                { id: 102, address: "ვაჟა-ფშაველას გამზირი 33", lat: 41.7181, lng: 44.7519, status: "pending", courierId: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), clientName: "გიორგი კაპანაძე", clientPhone: "599876543" },
+                { id: 103, address: "საბურთალოს მოედანი", lat: 41.7202, lng: 44.7417, status: "delivered", courierId: 1, createdAt: new Date(Date.now() - 86400000).toISOString(), updatedAt: new Date().toISOString(), clientName: "მარიამ ბერიძე", clientPhone: "577112233" },
+                { id: 104, address: "გლდანი, მე-7 მ/რ", lat: 41.7509, lng: 44.8009, status: "failed", courierId: 1, createdAt: new Date(Date.now() - 172800000).toISOString(), updatedAt: new Date().toISOString(), clientName: "ლაშა ჩიხლაძე", clientPhone: "598445566" }
+            ];
+        }
+        const session = localStorage.getItem('courier_session');
+        currentUser = session ? JSON.parse(session) : null;
     }
+    loadData();
+    function persist() { saveData(); }
 
-    const id = "u_" + Date.now();
-
-    users[id] = {
-      email,
-      password: pass,
-      fullName: fullName.value,
-      phone: phone.value
-    };
-
-    localStorage.setItem("users", JSON.stringify(users));
-
-    alert("რეგისტრაცია წარმატებულია");
-    toggleAuth();
-  }
-}
-
-function redFlag(){
-  return L.divIcon({
-    html:`<div style="width:14px;height:14px;background:red;border-radius:50%;border:2px solid darkred;"></div>`,
-    iconSize:[16,16]
-  });
-}
-
-function greenFlag(){
-  return L.divIcon({
-    html:`<div style="width:14px;height:14px;background:green;border-radius:50%;border:2px solid darkgreen;"></div>`,
-    iconSize:[16,16]
-  });
-}
-
-function failedFlag(){
-  return L.divIcon({
-    html:`<div style="width:14px;height:14px;background:orange;border-radius:50%;border:2px solid red;"></div>`,
-    iconSize:[16,16]
-  });
-}
-
-function carIcon(){
-  return L.icon({
-    iconUrl:"https://cdn-icons-png.flaticon.com/512/743/743920.png",
-    iconSize:[35,35]
-  });
-}
-
-let myMarker = null;
-let watchId = null;
-
-function startGPS(){
-  if(watchId !== null) return;
-
-  watchId = navigator.geolocation.watchPosition(pos=>{
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
-
-    if(!myMarker){
-      myMarker = L.marker([lat,lng],{icon:carIcon()}).addTo(map);
-    } else {
-      myMarker.setLatLng([lat,lng]);
+    function getActiveCouriers() { return users.filter(u => u.role === 'courier' && u.status === 'active'); }
+    function getCourierOrders(courierId) { return orders.filter(o => o.courierId === courierId); }
+    function updateOrderStatus(orderId, newStatus) {
+        const idx = orders.findIndex(o => o.id == orderId);
+        if(idx !== -1) { orders[idx].status = newStatus; orders[idx].updatedAt = new Date().toISOString(); persist(); renderAll(); }
     }
-  });
-}
-
-window.onload = startGPS;
-
-function toggleMenu(){
-  document.getElementById("sidebar").classList.toggle("open");
-  document.getElementById("overlay").classList.toggle("show");
-}
-
-function closeMenu(){
-  document.getElementById("sidebar").classList.remove("open");
-  document.getElementById("overlay").classList.remove("show");
-}
-
-function enableAddMode(){
-  addMode = true;
-  closeMenu();
-  alert("დააჭირე რუკაზე");
-}
-
-map.on("click", e=>{
-  if(!addMode) return;
-
-  const name = prompt("სახელი:");
-  const phone = prompt("ტელეფონი:");
-
-  const marker = L.marker([e.latlng.lat,e.latlng.lng],{
-    icon:redFlag()
-  }).addTo(map);
-
-  const order = {
-    id: Date.now(),
-    name,
-    phone,
-    status:"pending",
-    marker
-  };
-
-  marker.bindPopup(`
-    📦 ${name}<br>
-    📞 ${phone}<br><br>
-    <button onclick="deliver(${order.id})">✔ ჩაბარდა</button>
-    <button onclick="fail(${order.id})">❌ ვერ ჩაბარდა</button>
-  `);
-
-  orders.push(order);
-  addMode=false;
-  updateStats();
-});
-
-function deliver(id){
-  const o = orders.find(x=>x.id===id);
-  if(!o) return;
-  o.status="delivered";
-  o.marker.setIcon(greenFlag());
-  o.marker.closePopup();
-  updateStats();
-}
-
-function fail(id){
-  const o = orders.find(x=>x.id===id);
-  if(!o) return;
-  o.status="failed";
-  o.marker.setIcon(failedFlag());
-  o.marker.closePopup();
-  updateStats();
-}
-
-function updateStats(){
-  document.getElementById("total").innerText = orders.length;
-  document.getElementById("delivered").innerText = orders.filter(o=>o.status==="delivered").length;
-  document.getElementById("failed").innerText = orders.filter(o=>o.status==="failed").length;
-  renderList();
-}
-
-function renderList(){
-  const div = document.getElementById("ordersList");
-  div.innerHTML="";
-
-  orders.forEach(o=>{
-    const el = document.createElement("div");
-    el.className="order";
-
-    el.innerHTML = `
-      📦 ${o.name}<br>
-      📞 ${o.phone}<br>
-      ${o.status}
-    `;
-
-    el.onclick=()=>{
-      map.setView(o.marker.getLatLng(),16);
-      o.marker.openPopup();
-    };
-
-    div.appendChild(el);
-  });
-}
-
-/* GLOBAL */
-window.deliver=deliver;
-window.fail=fail;
-window.enableAddMode=enableAddMode;
-window.toggleMenu=toggleMenu;
-window.closeMenu=closeMenu;
-window.showHistory=showHistory;
-window.closeDay=closeDay;
-
+    function changeUserPassword(userId, newPassword) {
+        const user = users.find(u => u.id === userId);
+        if(user) { user.password = newPassword; persist(); if(currentUser && currentUser.id === userId) currentUser.password = newPassword; renderAll(); alert("პაროლი შეიცვალა"); }
+    }
+    function approveRegistration(userId) {
+        const user = users.find(u => u.id === userId);
+        if(user && user.status === 'pending') { user.status = 'active'; user.role = 'courier'; persist(); renderAll(); }
+    }
+    function rejectRegistration(userId) { users = users.filter(u => u.id !== userId); persist(); renderAll(); }
+    function getDailyStats(ordersList) {
+        const today = new Date().toDateString();
+        const todayOrders = ordersList.filter(o => new Date(o.updatedAt).toDateString() === today || new Date(o.createdAt).toDateString() === today);
+        const delivered = todayOrders.filter(o => o.status === 'delivered').length;
+        const failed = todayOrders.filter(o => o.status === 'failed').length;
+        const pending = todayOrders.filter(o => o.status === 'pending').length;
+        return { delivered, failed, pending, total: todayOrders.length };
+    }
+    function getMonthlyStats(ordersList) {
+        const now = new Date();
+        const monthOrders = ordersList.filter(o => new Date(o.updatedAt).getMonth() === now.getMonth() && new Date(o.updatedAt).getFullYear() === now.getFullYear());
+        const delivered = monthOrders.filter(o => o.status === 'delivered').length;
+        const failed = monthOrders.filter(o => o.status === 'failed').length;
+        return { delivered, failed, total: monthOrders.length };
+    }
+    function initCourierMap() {
+        if(courierMap) courierMap.remove();
+        const mapDiv = document.getElementById('map');
+        if(!mapDiv) return;
+        courierMap = L.map('map').setView([41.7151, 44.8271], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM' }).addTo(courierMap);
+        renderCourierMapMarkers();
+    }
+    function renderCourierMapMarkers() {
+        if(!courierMap) return;
+        if(courierMarkersLayer) courierMap.removeLayer(courierMarkersLayer);
+        courierMarkersLayer = L.layerGroup().addTo(courierMap);
+        if(!currentUser || currentUser.role !== 'courier') return;
+        const ordersList = getCourierOrders(currentUser.id);
+        const listDiv = document.getElementById('ordersListOnMap');
+        if(listDiv) listDiv.innerHTML = '<strong>თქვენი ამანათები:</strong><br>';
+        ordersList.forEach(order => {
+            const marker = L.marker([order.lat, order.lng]).addTo(courierMarkersLayer);
+            marker.bindPopup(`<b>${order.address}</b><br>👤 ${order.clientName || ''}<br>📞 ${order.clientPhone || ''}<br>სტატუსი: ${order.status}<br><button onclick="updateStatus(${order.id}, 'delivered')">მივიტანე</button> <button onclick="updateStatus(${order.id}, 'failed')">ვერ მივიტანე</button>`);
+            if(listDiv) listDiv.innerHTML += `<div class="order-item ${order.status}"><div>📍 ${order.address}<br>👤 ${order.clientName} 📞 ${order.clientPhone}<br>სტატუსი: ${order.status}</div><div><button class="success" onclick="updateStatus(${order.id},'delivered')">მივიტანე</button><button class="danger" onclick="updateStatus(${order.id},'failed')">ვერ მივიტანე</button></div></div>`;
+        });
+    }
+    window.updateStatus = updateOrderStatus;
+    function renderCourierProfile() {
+        if(!currentUser || currentUser.role !== 'courier') return;
+        const container = document.getElementById('courierProfile');
+        container.innerHTML = `<h3>👤 პროფილი</h3><p><strong>სახელი:</strong> ${currentUser.name}</p><p><strong>მეილი:</strong> ${currentUser.email}</p><p><strong>მობილური:</strong> ${currentUser.phone || '-'}</p><p><strong>საბანკო:</strong> ${currentUser.bank || '-'}</p>`;
+        const ordersForStats = getCourierOrders(currentUser.id);
+        const daily = getDailyStats(ordersForStats);
+        const monthly = getMonthlyStats(ordersForStats);
+        document.getElementById('dailyStats').innerHTML = `<div class="stat-card">✅ მიტანილი: ${daily.delivered}</div><div class="stat-card">❌ ვერ მიტანილი: ${daily.failed}</div><div class="stat-card">⏳ მოსატანი: ${daily.pending}</div><div class="stat-card">📦 სულ დღეს: ${daily.total}</div>`;
+        document.getElementById('monthlyStats').innerHTML = `<div class="stat-card">📆 თვის მიტანილი: ${monthly.delivered}</div><div class="stat-card">❌ თვის ვერ მიტანილი: ${monthly.failed}</div><div class="stat-card">📦 თვის ჯამი: ${monthly.total}</div>`;
+        renderCourierMapMarkers();
+    }
+    function initAdminMap() {
+        if(adminMap) adminMap.remove();
+        const mapDiv = document.getElementById('adminMap');
+        if(!mapDiv) return;
+        adminMap = L.map('adminMap').setView([41.7151, 44.8271], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM' }).addTo(adminMap);
+        adminMap.on('click', function(e) { setAdminMarker(e.latlng.lat, e.latlng.lng); fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${e.latlng.lat}&lon=${e.latlng.lng}&accept-language=ka`).then(res=>res.json()).then(data=>{ if(data.display_name) document.getElementById('newOrderAddress').value = data.display_name; }).catch(()=>{}); });
+    }
+    function setAdminMarker(lat,lng) { if(adminMarker) adminMap.removeLayer(adminMarker); adminMarker = L.marker([lat,lng],{draggable:true}).addTo(adminMap); adminMarker.on('dragend',e=>{ const p=e.target.getLatLng(); selectedLat=p.lat; selectedLng=p.lng; fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${p.lat}&lon=${p.lng}&accept-language=ka`).then(res=>res.json()).then(data=>{ if(data.display_name) document.getElementById('newOrderAddress').value = data.display_name; }); }); selectedLat=lat; selectedLng=lng; }
+    async function searchAddress() { const q=document.getElementById('searchAddress').value; if(!q) return; const url=`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&accept-language=ka`; try { const res=await fetch(url); const data=await res.json(); if(data.length){ const{lat,lon,display_name}=data[0]; adminMap.setView([parseFloat(lat),parseFloat(lon)],15); setAdminMarker(parseFloat(lat),parseFloat(lon)); document.getElementById('newOrderAddress').value=display_name; } else alert("მისამართი ვერ მოიძებნა"); } catch(e){ alert("ძებნის შეცდომა"); } }
+    function createOrder() { const address=document.getElementById('newOrderAddress').value; const clientName=document.getElementById('clientName').value.trim(); const clientPhone=document.getElementById('clientPhone').value.trim(); const courierId=parseInt(document.getElementById('newOrderCourierAssign').value); if(!address||!clientName||!clientPhone) return alert("შეავსეთ ყველა ველი"); if(!selectedLat||!selectedLng) return alert("აირჩიეთ რუკაზე პინი"); if(!courierId) return alert("აირჩიეთ კურიერი"); orders.push({id:Date.now(), address, lat:selectedLat, lng:selectedLng, status:"pending", courierId, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(), clientName, clientPhone}); persist(); if(adminMarker) adminMap.removeLayer(adminMarker); adminMarker=null; selectedLat=null; selectedLng=null; document.getElementById('newOrderAddress').value=''; document.getElementById('clientName').value=''; document.getElementById('clientPhone').value=''; renderAll(); alert("ამანათი დაემატა"); }
+    function renderCouriersInfo() {
+        const container = document.getElementById('couriersList');
+        if(!container) return;
+        const couriers = getActiveCouriers();
+        let html = '';
+        for(let c of couriers) {
+            html += `<div class="courier-row"><strong>${c.name}</strong> (${c.email})<br>📞 ${c.phone || '-'} &nbsp; 🏦 ${c.bank || '-'}<br>🔒 პაროლი: ${c.password}<button class="change-pwd-btn" data-id="${c.id}" style="margin-left:12px;">პაროლის შეცვლა</button></div>`;
+        }
+        container.innerHTML = html || '<p>კურიერები არ არიან</p>';
+        document.querySelectorAll('.change-pwd-btn').forEach(btn => { btn.addEventListener('click', () => { const userId = parseInt(btn.getAttribute('data-id')); const newPass = prompt("შეიყვანეთ ახალი პაროლი:"); if(newPass && newPass.trim()) changeUserPassword(userId, newPass.trim()); }); });
+    }
+    function renderAdminDailyStats(){
+        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+        const todayEnd = new Date(); todayEnd.setHours(23,59,59,999);
+        const ordersToday = orders.filter(o => new Date(o.createdAt) >= todayStart && new Date(o.createdAt) <= todayEnd);
+        const deliveredToday = orders.filter(o => o.status === 'delivered' && new Date(o.updatedAt) >= todayStart && new Date(o.updatedAt) <= todayEnd).length;
+        const failedToday = orders.filter(o => o.status === 'failed' && new Date(o.updatedAt) >= todayStart && new Date(o.updatedAt) <= todayEnd).length;
+        const pendingNow = orders.filter(o => o.status === 'pending').length;
+        document.getElementById('adminDailyStats').innerHTML = `<div class="stat-card">📅 დღეს შექმნილი: ${ordersToday.length}</div><div class="stat-card">✅ დღეს ჩაბარებული: ${deliveredToday}</div><div class="stat-card">❌ დღეს ვერ ჩაბარებული: ${failedToday}</div><div class="stat-card">⏳ ჩასაბარებელი: ${pendingNow}</div>`;
+    }
+    function renderRequests() {
+        const container = document.getElementById('requestsList');
+        if(!container) return;
+        const pendingUsers = users.filter(u => u.status === 'pending' && u.role !== 'admin');
+        if(pendingUsers.length === 0) { container.innerHTML = '<p>ახალი მოთხოვნები არ არის</p>'; return; }
+        let html = '';
+        pendingUsers.forEach(u => { html += `<div class="request-row"><div><strong>${u.name}</strong> (${u.email})<br>📞 ${u.phone || '-'}<br>🏦 ${u.bank || '-'}</div><div><button class="approve-btn" data-id="${u.id}" style="background:#e6f7ec;">დადასტურება</button><button class="reject-btn" data-id="${u.id}" style="background:#fff1f0;">უარყოფა</button></div></div>`; });
+        container.innerHTML = html;
+        document.querySelectorAll('.approve-btn').forEach(btn => btn.addEventListener('click', () => approveRegistration(parseInt(btn.getAttribute('data-id')))));
+        document.querySelectorAll('.reject-btn').forEach(btn => btn.addEventListener('click', () => rejectRegistration(parseInt(btn.getAttribute('data-id')))));
+    }
+    function renderAdminPanel() {
+        if(!currentUser || currentUser.role !== 'admin') return;
+        const select = document.getElementById('newOrderCourierAssign');
+        const couriers = getActiveCouriers();
+        select.innerHTML = '<option value="">აირჩიე კურიერი</option>' + couriers.map(c => `<option value="${c.id}">${c.name} (${c.email})</option>`).join('');
+        if(!adminMap) initAdminMap(); else adminMap.invalidateSize();
+        if(document.getElementById('adminCouriersSection').classList.contains('active-section')) renderCouriersInfo();
+        if(document.getElementById('adminStatsSection').classList.contains('active-section')) renderAdminDailyStats();
+        if(document.getElementById('adminRequestsSection').classList.contains('active-section')) renderRequests();
+    }
+    function setAdminSection(sectionId) {
+        document.querySelectorAll('.admin-section').forEach(sec => sec.classList.remove('active-section'));
+        document.getElementById(sectionId).classList.add('active-section');
+        document.querySelectorAll('.admin-submenu button').forEach(btn => btn.classList.remove('active-sub'));
+        if(sectionId === 'adminMainSection') document.getElementById('adminMainBtn').classList.add('active-sub');
+        else if(sectionId === 'adminCouriersSection') document.getElementById('adminCouriersBtn').classList.add('active-sub');
+        else if(sectionId === 'adminStatsSection') document.getElementById('adminStatsBtn').classList.add('active-sub');
+        else if(sectionId === 'adminRequestsSection') document.getElementById('adminRequestsBtn').classList.add('active-sub');
+        if(sectionId === 'adminCouriersSection') renderCouriersInfo();
+        if(sectionId === 'adminStatsSection') renderAdminDailyStats();
+        if(sectionId === 'adminRequestsSection') renderRequests();
+        if(sectionId === 'adminMainSection' && adminMap) adminMap.invalidateSize();
+    }
+    function doLogin() {
+        const email = document.getElementById('loginEmail').value.trim();
+        const pass = document.getElementById('loginPass').value;
+        const emailError = document.getElementById('loginEmailError');
+        const generalError = document.getElementById('loginGeneralError');
+        if (!email) { emailError.style.display = 'block'; return; } else { emailError.style.display = 'none'; }
+        const user = users.find(u => (u.email === email) && u.password === pass && u.status === 'active');
+        if(user) { currentUser = user; persist(); renderAll(); }
+        else { generalError.style.display = 'block'; setTimeout(()=>{ generalError.style.display='none'; },2000); }
+    }
+    function doRegister() {
+        const name = document.getElementById('regName').value;
+        const email = document.getElementById('regEmail').value;
+        const phone = document.getElementById('regPhone').value;
+        const bank = document.getElementById('regBank').value;
+        const pass = document.getElementById('regPass').value;
+        const errorDiv = document.getElementById('registerError');
+        if(!name || !email || !pass) { errorDiv.innerText = "სახელი, მეილი და პაროლი სავალდებულოა"; errorDiv.style.display='block'; return; }
+        if(users.find(u=>u.email===email)) { errorDiv.innerText = "მეილი უკვე არსებობს"; errorDiv.style.display='block'; return; }
+        const newId = users.length+1;
+        users.push({ id: newId, name, email, phone, bank, password: pass, role: "pending", status: "pending" });
+        persist();
+        alert("რეგისტრაცია გაგზავნილია. ადმინი დაამტკიცებს.");
+        toggleForms(true);
+        document.getElementById('loginEmail').value = email;
+        document.getElementById('loginPass').value = '';
+    }
+    function logout() { currentUser = null; persist(); renderAll(); }
+    function toggleForms(showLogin) {
+        const loginDiv = document.getElementById('loginFormWrapper');
+        const registerDiv = document.getElementById('registerFormWrapper');
+        if(showLogin) { loginDiv.style.display = 'block'; registerDiv.style.display = 'none'; }
+        else { loginDiv.style.display = 'none'; registerDiv.style.display = 'block'; }
+        document.getElementById('loginEmailError').style.display = 'none';
+        document.getElementById('loginGeneralError').style.display = 'none';
+        document.getElementById('registerError').style.display = 'none';
+    }
+    function renderAll() {
+        const isAuth = currentUser !== null;
+        const isAdmin = isAuth && currentUser.role === 'admin';
+        const isCourier = isAuth && currentUser.role === 'courier';
+        const tabsBar = document.getElementById('tabsBar');
+        const loginTabBtn = document.querySelector('[data-tab="loginTab"]');
+        const courierTabBtn = document.querySelector('[data-tab="courierTab"]');
+        const adminTabBtn = document.querySelector('[data-tab="adminTab"]');
+        if(isAuth) {
+            tabsBar.classList.add('visible');
+            loginTabBtn.style.display = 'none';
+            courierTabBtn.style.display = isCourier ? 'inline-block' : 'none';
+            adminTabBtn.style.display = isAdmin ? 'inline-block' : 'none';
+            if(isCourier) switchTab('courierTab');
+            else if(isAdmin) switchTab('adminTab');
+            if(isCourier) { renderCourierProfile(); initCourierMap(); }
+            if(isAdmin) renderAdminPanel();
+        } else {
+            tabsBar.classList.remove('visible');
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById('loginTab').classList.add('active');
+            toggleForms(true);
+        }
+    }
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+        if(tabId === 'courierTab' && currentUser?.role === 'courier') {
+            setTimeout(() => { if(courierMap) courierMap.invalidateSize(); else initCourierMap(); renderCourierProfile(); }, 100);
+        }
+        if(tabId === 'adminTab' && currentUser?.role === 'admin') {
+            setTimeout(() => { if(!adminMap) initAdminMap(); else adminMap.invalidateSize(); renderAdminPanel(); setAdminSection('adminMainSection'); }, 100);
+        }
+    }
+    window.switchTab = switchTab;
+    window.setAdminSection = setAdminSection;
+    document.getElementById('doLoginBtn').onclick = doLogin;
+    document.getElementById('doRegisterBtn').onclick = doRegister;
+    document.getElementById('logoutBtn').onclick = logout;
+    document.getElementById('adminLogout').onclick = logout;
+    document.getElementById('createOrderBtn').onclick = createOrder;
+    document.getElementById('searchBtn').onclick = searchAddress;
+    document.getElementById('showRegisterLink').onclick = () => toggleForms(false);
+    document.getElementById('showLoginLink').onclick = () => toggleForms(true);
+    document.getElementById('adminMainBtn').onclick = () => setAdminSection('adminMainSection');
+    document.getElementById('adminCouriersBtn').onclick = () => setAdminSection('adminCouriersSection');
+    document.getElementById('adminStatsBtn').onclick = () => setAdminSection('adminStatsSection');
+    document.getElementById('adminRequestsBtn').onclick = () => setAdminSection('adminRequestsSection');
+    document.querySelectorAll('.tab-btn').forEach(btn => { btn.onclick = () => switchTab(btn.getAttribute('data-tab')); });
+    renderAll();
 </script>
-
 </body>
 </html>
