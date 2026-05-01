@@ -3,18 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>საკურიერო აპი | სრული ვერსია</title>
-    <!-- Leaflet + OpenStreetMap -->
+    <title>საკურიერო აპი | ფინალური ვერსია</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #f5f7fb; }
         #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
-        
-        /* ----- Modals ----- */
         .modal-overlay {
             position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(3px);
             display: flex; align-items: center; justify-content: center; z-index: 1000;
@@ -32,8 +28,6 @@
         .btn-secondary { background: #e9eef3; color: #2c3e44; }
         .register-link { font-size: 0.75rem; margin-top: 16px; color: #5e727e; cursor: pointer; border-bottom: 1px dashed #9baebd; display: inline-block; }
         .error-msg { color: #c95a4a; font-size: 0.7rem; margin-top: 8px; }
-        
-        /* Menu button top-right */
         .menu-btn {
             position: fixed; top: 20px; right: 20px; z-index: 500;
             background: white; width: 52px; height: 52px; border-radius: 30px;
@@ -56,8 +50,6 @@
             border: 1px solid #e6edf4; color: #1f3949;
         }
         .action-item:hover { background: #ecf3fa; }
-        
-        /* Search bar (add pin mode) */
         .search-bar-container {
             position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
             z-index: 600; width: 85%; max-width: 400px;
@@ -68,8 +60,6 @@
         .search-bar-container.hidden { display: none; }
         .search-bar-container input { flex: 1; border: none; padding: 12px 5px; background: transparent; outline: none; }
         .search-bar-container button { background: #2c3e44; border: none; border-radius: 60px; padding: 8px 18px; color: white; cursor: pointer; }
-        
-        /* Nearest parcel card */
         .nearest-card {
             position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
             background: #ffffffef; backdrop-filter: blur(16px); border-radius: 48px;
@@ -81,7 +71,6 @@
             background: #ffffffcc; backdrop-filter: blur(8px);
             padding: 6px 15px; border-radius: 60px; font-size: 0.7rem; z-index: 450;
         }
-        /* Calendar styles */
         .calendar-grid {
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
             margin: 15px 0; text-align: center;
@@ -129,7 +118,7 @@
 
 <!-- ADMIN PENDING REGISTRATIONS MODAL -->
 <div id="adminPendingModal" class="modal-overlay">
-    <div class="modal-card" style="max-width: 420px;">
+    <div class="modal-card">
         <h3><i class="fas fa-user-plus"></i> მოითხოვილი რეგისტრაციები</h3>
         <div id="pendingListContainer" style="max-height: 300px; overflow-y: auto; margin: 15px 0;"></div>
         <button class="btn-secondary btn" id="closePendingBtn">დახურვა</button>
@@ -148,7 +137,7 @@
     </div>
 </div>
 
-<!-- ADMIN: ADD PARCEL FOR COURIER MODAL (step1: select courier) -->
+<!-- ADMIN: ADD PARCEL FOR COURIER MODAL (step1) -->
 <div id="adminAddParcelStep1Modal" class="modal-overlay">
     <div class="modal-card">
         <h3>📦 ახალი ამანათი</h3>
@@ -180,7 +169,7 @@
     </div>
 </div>
 
-<!-- CALENDAR MODAL (for courier history & admin analytics) -->
+<!-- CALENDAR MODAL (history + earnings) -->
 <div id="calendarModal" class="modal-overlay">
     <div class="modal-card" style="max-width: 450px;">
         <h3 id="calendarModalTitle">📅 ისტორია</h3>
@@ -190,7 +179,7 @@
     </div>
 </div>
 
-<!-- TODAY STATS MODAL (for courier) -->
+<!-- TODAY STATS MODAL (courier) -->
 <div id="todayStatsModal" class="modal-overlay">
     <div class="modal-card">
         <h3><i class="fas fa-sun"></i> დღევანდელი სტატისტიკა (24 სთ)</h3>
@@ -208,7 +197,7 @@
     </div>
 </div>
 
-<!-- PIN INFO MODAL (for courier) -->
+<!-- PIN INFO MODAL (courier self-add) -->
 <div id="pinInfoModal" class="modal-overlay">
     <div class="modal-card">
         <h3>📍 მიმღების ინფო</h3>
@@ -302,9 +291,9 @@
     let isAddPinMode = false, pendingPinCoords = null, markersLayer = L.layerGroup();
     let currentPosition = { lat: 41.7151, lng: 44.8271 };
     let activeNearestPinId = null;
-    // for admin add parcel flow
     let adminSelectedCourier = null;
     let adminPendingCoords = null;
+    let adminMapClickHandler = null;
 
     function initMap() {
         map = L.map('map').setView([41.7151, 44.8271], 15);
@@ -363,7 +352,6 @@
         return true;
     }
 
-    // END DAY 
     function archiveAllPinsToHistory() {
         if (!currentUser || isAdminMode) return;
         let activePins = getPinsForUser(currentUser);
@@ -377,7 +365,7 @@
         showToast("✅ დღე დასრულდა! ყველა შეკვეთა გადავიდა ისტორიაში");
     }
 
-    // ---------- TODAY STATS (last 24h) ----------
+    // ---------- TODAY STATS (for courier) ----------
     function getLast24hStatsForUser(username) {
         let activePins = getPinsForUser(username);
         let completedActive = activePins.filter(p => p.status === 'delivered' || p.status === 'failed');
@@ -385,7 +373,6 @@
         let now = new Date();
         let dayAgo = new Date(now.getTime() - 24*3600000);
         let recentHistory = history.filter(item => new Date(item.archivedAt || item.createdAt) >= dayAgo);
-        
         let delivered = completedActive.filter(p=>p.status==='delivered').length + recentHistory.filter(h=>h.status==='delivered').length;
         let failed = completedActive.filter(p=>p.status==='failed').length + recentHistory.filter(h=>h.status==='failed').length;
         let totalEarned = delivered * 3.50;
@@ -403,7 +390,7 @@
         document.getElementById("todayStatsModal").classList.add("active");
     }
 
-    // ---------- CALENDAR LOGIC (unchanged but reusable) ----------
+    // ---------- CALENDAR with earnings per day ----------
     let currentCalendarDate = new Date();
     let currentCalendarTargetUser = null;
     
@@ -453,7 +440,8 @@
         });
         const deliveredCount = filtered.filter(i => i.status === 'delivered').length;
         const failedCount = filtered.filter(i => i.status === 'failed').length;
-        let html = `<div style="margin: 10px 0;">📅 ${dateStr}<br>✅ ჩაბარდა: ${deliveredCount} | ❌ ვერ: ${failedCount} | 📦 სულ: ${filtered.length}</div>`;
+        const totalEarned = deliveredCount * 3.50;
+        let html = `<div style="margin: 10px 0;">📅 ${dateStr}<br>✅ ჩაბარდა: ${deliveredCount} | ❌ ვერ: ${failedCount} | 📦 სულ: ${filtered.length}<br>💰 გამომუშავებული: ${totalEarned.toFixed(2)} ლარი</div>`;
         if (filtered.length === 0) html += `<div>📭 ამ დღეს არანაირი შეკვეთა</div>`;
         else {
             html += `<div class="history-list">`;
@@ -473,14 +461,14 @@
         if (!currentUser || isAdminMode) return;
         currentCalendarTargetUser = currentUser;
         currentCalendarDate = new Date();
-        document.getElementById("calendarModalTitle").innerHTML = "📅 ჩემი ისტორია";
+        document.getElementById("calendarModalTitle").innerHTML = "📅 ჩემი ისტორია + შემოსავალი";
         renderCalendar("calendarContainer", (dateStr) => {
             showUserHistoryForDate(currentUser, dateStr);
         });
         document.getElementById("calendarModal").classList.add("active");
     }
 
-    // Admin: show list of users (couriers)
+    // Admin analytics (list couriers)
     function openAdminAnalytics() {
         if (!isAdminMode) return;
         const users = getUsers().filter(u => u.username !== "admin");
@@ -502,7 +490,7 @@
         document.getElementById("adminUserSelectModal").classList.remove("active");
         currentCalendarTargetUser = username;
         currentCalendarDate = new Date();
-        document.getElementById("calendarModalTitle").innerHTML = `📊 ანალიტიკა: ${escapeHtml(username)}`;
+        document.getElementById("calendarModalTitle").innerHTML = `📊 ანალიტიკა: ${escapeHtml(username)} + შემოსავალი`;
         renderCalendar("calendarContainer", (dateStr) => {
             showUserHistoryForDate(username, dateStr);
         });
@@ -517,7 +505,7 @@
         document.getElementById("adminChangePwdModal").classList.add("active");
     }
     
-    // ---------- ADMIN: add parcel for courier (flow) ----------
+    // ---------- ADMIN: add parcel flow (fixed menu restoration) ----------
     function openAdminAddParcelStep1() {
         const users = getUsers().filter(u => u.username !== "admin");
         const container = document.getElementById("courierListForParcel");
@@ -540,20 +528,19 @@
         document.getElementById("adminAddParcelStep2Modal").classList.remove("active");
         // Activate map click mode for admin
         isAddPinMode = true;
-        setMenuButtonVisibility(false);
+        setMenuButtonVisibility(false); // hide menu button
         document.getElementById("modeToast").style.display = "flex";
         document.getElementById("modeToast").innerText = "📍 ადმინი: მონიშნე ადგილი რუკაზე";
-        const originalMapClick = map.off('click');
-        map.on('click', onAdminMapClick);
-    }
-    
-    function onAdminMapClick(e) {
-        if (!isAddPinMode || !adminSelectedCourier) return;
-        adminPendingCoords = { lat: e.latlng.lat, lng: e.latlng.lng };
-        map.off('click', onAdminMapClick);
-        isAddPinMode = false;
-        document.getElementById("modeToast").style.display = "none";
-        document.getElementById("adminAddParcelStep3Modal").classList.add("active");
+        if (adminMapClickHandler) map.off('click', adminMapClickHandler);
+        adminMapClickHandler = (e) => {
+            if (!isAddPinMode || !adminSelectedCourier) return;
+            adminPendingCoords = { lat: e.latlng.lat, lng: e.latlng.lng };
+            map.off('click', adminMapClickHandler);
+            isAddPinMode = false;
+            document.getElementById("modeToast").style.display = "none";
+            document.getElementById("adminAddParcelStep3Modal").classList.add("active");
+        };
+        map.on('click', adminMapClickHandler);
     }
     
     function finishAdminAddParcel() {
@@ -569,6 +556,12 @@
         document.getElementById("adminAddParcelStep3Modal").classList.remove("active");
         adminPendingCoords = null;
         adminSelectedCourier = null;
+        // restore menu button visibility (if not in admin mode menu open)
+        if (!actionPanel.classList.contains("show")) setMenuButtonVisibility(true);
+        // also ensure mode is off
+        isAddPinMode = false;
+        document.getElementById("modeToast").style.display = "none";
+        if (adminMapClickHandler) map.off('click', adminMapClickHandler);
     }
 
     // ---------- GPS & Nearest Parcel ----------
@@ -643,6 +636,7 @@
         }
     }
     function setAddPinMode(active) {
+        if (isAdminMode && active) return; // admin uses separate flow
         isAddPinMode = active;
         document.getElementById("modeToast").style.display = active ? "flex" : "none";
         document.getElementById("searchBar").classList.toggle("hidden", !active);
@@ -739,6 +733,8 @@
         setAddPinMode(false);
         window._firstMoved = false;
         if (!isAdminMode) updateNearestParcelCard(); else document.getElementById("nearestParcelCard").style.display = "none";
+        // ensure any leftover admin map handlers removed
+        if (adminMapClickHandler) map.off('click', adminMapClickHandler);
     }
 
     // Geocoding
@@ -778,7 +774,6 @@
         document.getElementById("confirmEndDayBtn").onclick = () => { archiveAllPinsToHistory(); document.getElementById("endDayConfirmModal").classList.remove("active"); };
         document.getElementById("cancelEndDayBtn").onclick = () => document.getElementById("endDayConfirmModal").classList.remove("active");
         
-        // Admin change password
         document.getElementById("doChangePwdBtn").onclick = () => {
             let selectedUser = document.getElementById("pwdUserSelect").value;
             let newPwd = document.getElementById("newPassword").value;
@@ -788,14 +783,12 @@
         };
         document.getElementById("cancelChangePwdBtn").onclick = () => document.getElementById("adminChangePwdModal").classList.remove("active");
         
-        // Admin add parcel
         document.getElementById("cancelAddParcelBtn").onclick = () => document.getElementById("adminAddParcelStep1Modal").classList.remove("active");
         document.getElementById("startMapSelectionBtn").onclick = () => openMapForAdminParcel();
         document.getElementById("cancelStep2Btn").onclick = () => document.getElementById("adminAddParcelStep2Modal").classList.remove("active");
         document.getElementById("saveAdminPinBtn").onclick = () => finishAdminAddParcel();
         document.getElementById("cancelStep3Btn").onclick = () => document.getElementById("adminAddParcelStep3Modal").classList.remove("active");
         
-        // Courier pin modal
         document.getElementById("savePinBtn").onclick = () => {
             let name = document.getElementById("pinFullName").value.trim(), phone = document.getElementById("pinPhone").value.trim();
             if (!name || !phone) { document.getElementById("pinInfoError").innerText = "შეიყვანეთ მონაცემები"; return; }
