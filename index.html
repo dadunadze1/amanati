@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>საკურიერო აპი | OSM Courier Final Fix</title>
+    <title>საკურიერო აპი | OSM Courier Final</title>
     <!-- Leaflet + OpenStreetMap -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,7 +13,8 @@
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #f5f7fb; }
         #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
-        /* Modals */
+        
+        /* ----- მოდალები (უცვლელი) ----- */
         .modal-overlay {
             position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(3px);
             display: flex; align-items: center; justify-content: center; z-index: 1000;
@@ -23,30 +24,128 @@
         .modal-card {
             background: white; width: 86%; max-width: 380px; border-radius: 32px;
             padding: 28px 22px; text-align: center; border: 1px solid #eef2f8;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.12);
         }
         .modal-card h3 { font-weight: 550; margin-bottom: 18px; color: #1e2f3a; }
-        .modal-card input { width: 100%; padding: 12px 16px; margin: 8px 0; border: 1px solid #d4dfea; border-radius: 48px; }
+        .modal-card input { width: 100%; padding: 12px 16px; margin: 8px 0; border: 1px solid #d4dfea; border-radius: 48px; outline: none; }
         .btn { width: 100%; background: #2c3e44; color: white; border: none; padding: 12px; border-radius: 48px; margin-top: 14px; cursor: pointer; }
         .btn-secondary { background: #e9eef3; color: #2c3e44; }
-        .register-link { font-size: 0.75rem; margin-top: 16px; color: #5e727e; cursor: pointer; border-bottom: 1px dashed #9baebd; }
+        .register-link { font-size: 0.75rem; margin-top: 16px; color: #5e727e; cursor: pointer; border-bottom: 1px dashed #9baebd; display: inline-block; }
         .error-msg { color: #c95a4a; font-size: 0.7rem; margin-top: 8px; }
-        /* Menu */
-        .menu-btn { position: fixed; bottom: 26px; left: 20px; z-index: 500; background: white; width: 56px; height: 56px; border-radius: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0,0,0,0.08); cursor: pointer; border: 1px solid #eef2f8; font-size: 28px; }
+        
+        /* ----- მენიუ (მარჯვენა ზედა) ----- */
+        .menu-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 500;
+            background: white;
+            width: 52px;
+            height: 52px;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: 0.2s;
+            border: 1px solid #eef2f8;
+            color: #2f4b5c;
+            font-size: 26px;
+        }
         .menu-btn.hidden { display: none; }
-        .action-panel { position: fixed; bottom: 96px; left: 20px; background: white; border-radius: 28px; padding: 10px 6px; min-width: 210px; box-shadow: 0 14px 28px rgba(0,0,0,0.08); z-index: 550; border: 1px solid #eef2f8; display: none; flex-direction: column; gap: 4px; }
+        .menu-btn:hover { background: #fafdff; transform: scale(0.96); }
+        
+        /* მენიუს პანელი (ჩამოსაშლელი, მარჯვნივ ზემოდან) */
+        .action-panel {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: white;
+            border-radius: 28px;
+            padding: 10px 6px;
+            min-width: 210px;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+            z-index: 550;
+            border: 1px solid #eef2f8;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+        }
         .action-panel.show { display: flex; }
-        .action-item { background: #fafdff; padding: 10px 18px; border-radius: 60px; margin: 3px 8px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 12px; border: 1px solid #e6edf4; }
-        .action-item:hover { background: #ecf3fa; }
-        .search-bar-container { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 600; width: 85%; max-width: 400px; background: rgba(255,255,255,0.96); backdrop-filter: blur(12px); border-radius: 60px; padding: 5px 12px 5px 20px; display: flex; border: 1px solid #e2eaf1; }
+        
+        .action-item {
+            background: #fafdff;
+            padding: 10px 18px;
+            border-radius: 60px;
+            margin: 3px 8px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid #e6edf4;
+            transition: 0.1s;
+            color: #1f3949;
+        }
+        .action-item:hover { background: #ecf3fa; border-color: #cbdae4; }
+        
+        /* ძიების ზოლი (პინის რეჟიმი) */
+        .search-bar-container {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 600;
+            width: 85%;
+            max-width: 400px;
+            background: rgba(255,255,255,0.96);
+            backdrop-filter: blur(12px);
+            border-radius: 60px;
+            padding: 5px 12px 5px 20px;
+            display: flex;
+            border: 1px solid #e2eaf1;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+        }
         .search-bar-container.hidden { display: none; }
         .search-bar-container input { flex: 1; border: none; padding: 12px 5px; background: transparent; outline: none; }
         .search-bar-container button { background: #2c3e44; border: none; border-radius: 60px; padding: 8px 18px; color: white; cursor: pointer; }
-        .nearest-card { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #ffffffef; backdrop-filter: blur(16px); border-radius: 48px; padding: 12px 20px; width: 86%; max-width: 380px; z-index: 550; border: 1px solid #eaf0f6; text-align: center; cursor: pointer; }
-        .badge-light { position: fixed; top: 18px; right: 16px; background: #ffffffcc; backdrop-filter: blur(8px); padding: 6px 15px; border-radius: 60px; font-size: 0.7rem; z-index: 450; }
+        
+        /* უახლოესი ამანათის ბარათი */
+        .nearest-card {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ffffffef;
+            backdrop-filter: blur(16px);
+            border-radius: 48px;
+            padding: 12px 20px;
+            width: 86%;
+            max-width: 380px;
+            z-index: 550;
+            border: 1px solid #eaf0f6;
+            text-align: center;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+        }
+        .badge-light {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #ffffffcc;
+            backdrop-filter: blur(8px);
+            padding: 6px 15px;
+            border-radius: 60px;
+            font-size: 0.7rem;
+            z-index: 450;
+            font-weight: 500;
+        }
         .history-list { max-height: 320px; overflow-y: auto; margin: 16px 0; text-align: left; }
         .history-item { background: #fafdff; border-radius: 20px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #8aa8bb; font-size: 0.8rem; }
         .pending-user { background: #fff3e0; margin: 8px 0; padding: 8px; border-radius: 28px; display: flex; justify-content: space-between; align-items: center; }
         .info-toast { position: fixed; bottom: 100px; right: 12px; background: #1e2f3ae6; color: white; padding: 6px 14px; border-radius: 60px; font-size: 0.7rem; z-index: 600; pointer-events: none; }
+        .history-count { background: #eef3f9; border-radius: 60px; padding: 8px; margin-bottom: 12px; font-size: 0.8rem; }
     </style>
 </head>
 <body>
@@ -65,7 +164,7 @@
     </div>
 </div>
 
-<!-- REGISTRATION MODAL (no code, but pending approval) -->
+<!-- REGISTRATION MODAL (pending admin) -->
 <div id="regModal" class="modal-overlay">
     <div class="modal-card">
         <h3>📋 რეგისტრაცია</h3>
@@ -105,7 +204,7 @@
         <h3>📜 ისტორია</h3>
         <div id="historyCountDisplay" class="history-count">📦 სულ შეკვეთები: 0</div>
         <div id="historyListContainer" class="history-list"></div>
-        <button class="btn-outline btn" id="closeHistoryBtn">დახურვა</button>
+        <button class="btn-secondary btn" id="closeHistoryBtn">დახურვა</button>
     </div>
 </div>
 
@@ -131,7 +230,7 @@
     </div>
 </div>
 
-<!-- UI elements -->
+<!-- UI components -->
 <div class="menu-btn" id="menuButton">☰</div>
 <div class="action-panel" id="actionPanel"></div>
 <div id="modeToast" class="badge-light" style="display: none;">📍 პინის რეჟიმი</div>
@@ -177,7 +276,6 @@
         saveUsers(users);
         pending.splice(idx, 1);
         savePending(pending);
-        // initialize empty pins & history for new user
         if (!getPinsForUser(userData.username)) savePinsForUser(userData.username, []);
         if (!getHistoryForUser(userData.username)) saveHistoryForUser(userData.username, []);
         return true;
@@ -274,7 +372,7 @@
         document.getElementById("totalCompleted").innerText = stats.delivered + stats.failed;
     }
 
-    // END DAY (WORKING)
+    // END DAY 
     function archiveAllPinsToHistory() {
         if (!currentUser || isAdminMode) return;
         let activePins = getPinsForUser(currentUser);
@@ -365,27 +463,44 @@
     }
     function stopLiveTracking() { if(watchId) navigator.geolocation.clearWatch(watchId); watchId=null; if(currentLocationMarker) map.removeLayer(currentLocationMarker); currentLocationMarker=null; }
 
-    // UI Helpers
-    function setMenuButtonVisibility(visible) { document.getElementById("menuButton").classList.toggle("hidden", !visible); }
+    // ----- UI helpers: Menu + AddPin mode visibility (updated) -----
+    const menuBtn = document.getElementById("menuButton");
+    const actionPanel = document.getElementById("actionPanel");
+    
+    function setMenuButtonVisibility(visible) {
+        if (visible) menuBtn.classList.remove("hidden");
+        else menuBtn.classList.add("hidden");
+    }
+    
+    // მენიუს გახსნა/დახურვა (აქვე იმალება ღილაკი და ბარათი)
     function toggleActionPanel() {
-        let panel = document.getElementById("actionPanel");
-        if (panel.classList.contains("show")) {
-            panel.classList.remove("show");
+        if (actionPanel.classList.contains("show")) {
+            actionPanel.classList.remove("show");
             setMenuButtonVisibility(true);
             if (!isAdminMode) updateNearestParcelCard();
         } else {
-            panel.classList.add("show");
+            actionPanel.classList.add("show");
             setMenuButtonVisibility(false);
             document.getElementById("nearestParcelCard").style.display = "none";
         }
     }
+    
+    // ძიების რეჟიმი (პინის დამატება) – ღილაკი ქრება, რეჟიმიდან გამოსვლისას ჩნდება
     function setAddPinMode(active) {
         isAddPinMode = active;
         document.getElementById("modeToast").style.display = active ? "flex" : "none";
         document.getElementById("searchBar").classList.toggle("hidden", !active);
-        if (active) document.getElementById("nearestParcelCard").style.display = "none";
-        else if (!isAdminMode) updateNearestParcelCard();
+        if (active) {
+            // ძიების რეჟიმში დავმალოთ მენიუს ღილაკი (თუ არ არის მენიუ ღია)
+            if (!actionPanel.classList.contains("show")) setMenuButtonVisibility(false);
+            document.getElementById("nearestParcelCard").style.display = "none";
+        } else {
+            // გამოსვლისას აღვადგინოთ ღილაკი, მაგრამ მხოლოდ იმ შემთხვევაში თუ მენიუ არ არის ღია
+            if (!actionPanel.classList.contains("show")) setMenuButtonVisibility(true);
+            if (!isAdminMode) updateNearestParcelCard();
+        }
     }
+    
     function showToast(msg) {
         let toast = document.createElement('div'); toast.className = 'info-toast'; toast.innerText = msg;
         document.body.appendChild(toast); setTimeout(() => toast.remove(), 2200);
@@ -400,7 +515,7 @@
             container.innerHTML = pending.map(p => `
                 <div class="pending-user">
                     <span><strong>${escapeHtml(p.username)}</strong><br><small>პაროლი: ${escapeHtml(p.password)}</small></span>
-                    <button class="btn-small approve-pending" data-user="${escapeHtml(p.username)}" style="background:#2c7a47; border:none; padding:6px 12px; border-radius:30px; color:white;">✅ დამტკიცება</button>
+                    <button class="approve-pending" data-user="${escapeHtml(p.username)}" style="background:#2c7a47; border:none; padding:6px 12px; border-radius:30px; color:white;">✅ დამტკიცება</button>
                 </div>
             `).join('');
             document.querySelectorAll('.approve-pending').forEach(btn => {
@@ -408,7 +523,7 @@
                     let username = btn.getAttribute('data-user');
                     if (approveRegistration(username)) {
                         showToast(`✅ ${username} დაემატა როგორც მომხმარებელი`);
-                        showAdminPendingModal(); // refresh
+                        showAdminPendingModal();
                     } else showToast("შეცდომა დამტკიცებისას");
                 });
             });
@@ -448,8 +563,7 @@
         markersLayer.clearLayers();
         setAddPinMode(false);
         setMenuButtonVisibility(false);
-        document.getElementById("menuButton").style.display = "none";
-        document.getElementById("actionPanel").classList.remove("show");
+        actionPanel.classList.remove("show");
         document.getElementById("nearestParcelCard").style.display = "none";
         map.setView([41.7151, 44.8271], 13);
         setTimeout(() => showLoginModal(), 100);
@@ -461,7 +575,6 @@
     function afterLoginSuccess(username, isAdmin) {
         currentUser = username; isAdminMode = isAdmin;
         hideAllModals();
-        document.getElementById("menuButton").style.display = "flex";
         setMenuButtonVisibility(true);
         buildMenu();
         if (!isAdminMode) { refreshAllPins(); startLiveTracking(); }
@@ -531,13 +644,15 @@
         });
         document.getElementById("nearestParcelCard").addEventListener("click", () => flyToNearestPin());
         document.addEventListener("click", (e) => {
-            let panel = document.getElementById("actionPanel"), btn = document.getElementById("menuButton");
-            if (panel.classList.contains("show") && !panel.contains(e.target) && !btn.contains(e.target)) {
-                panel.classList.remove("show"); setMenuButtonVisibility(true); if (!isAdminMode) updateNearestParcelCard();
+            if (actionPanel.classList.contains("show") && !actionPanel.contains(e.target) && !menuBtn.contains(e.target)) {
+                actionPanel.classList.remove("show");
+                setMenuButtonVisibility(true);
+                if (!isAdminMode) updateNearestParcelCard();
             }
         });
         map.on('click', (e) => { if (currentUser && !isAdminMode && isAddPinMode) { pendingPinCoords = { lat: e.latlng.lat, lng: e.latlng.lng }; document.getElementById("pinFullName").value = ""; document.getElementById("pinPhone").value = ""; document.getElementById("pinInfoModal").classList.add("active"); } });
-        document.getElementById("menuButton").style.display = "none";
+        // თავდაპირველად ღილაკი დამალულია (არავინ არ არის შესული)
+        setMenuButtonVisibility(false);
     };
 </script>
 </body>
