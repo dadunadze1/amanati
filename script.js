@@ -19,20 +19,20 @@ function usernameToEmail(username) {
 }
 
 // --------------------------------------------------------------
-//  Create default admin (if not exists)
+//  Create default admin (if not exists) with password 123456
 // --------------------------------------------------------------
 async function createDefaultAdmin() {
     const adminSnapshot = await db.collection("users").where("role", "==", "admin").get();
     if (adminSnapshot.empty) {
         try {
-            const userCred = await auth.createUserWithEmailAndPassword("admin@courier.local", "123");
+            const userCred = await auth.createUserWithEmailAndPassword("admin@courier.local", "123456");
             await db.collection("users").doc(userCred.user.uid).set({
                 username: "admin",
                 role: "admin",
                 approved: true,
                 createdAt: new Date().toISOString()
             });
-            console.log("Default admin created: admin@courier.local / 123");
+            console.log("Default admin created: admin@courier.local / 123456");
         } catch(e) { console.warn(e); }
     }
 }
@@ -42,10 +42,8 @@ async function createDefaultAdmin() {
 // --------------------------------------------------------------
 async function requestRegistration(username, password) {
     if (!username.trim() || !password.trim()) return { success: false, msg: "შეავსეთ ყველა ველი" };
-    // Check existing approved users
     const existingUser = await db.collection("users").where("username", "==", username).get();
     if (!existingUser.empty) return { success: false, msg: "მომხმარებელი უკვე არსებობს" };
-    // Check pending
     const pendingRef = await db.collection("pendingUsers").where("username", "==", username).get();
     if (!pendingRef.empty) return { success: false, msg: "უკვე გაგზავნილია დასამტკიცებლად" };
     await db.collection("pendingUsers").add({
