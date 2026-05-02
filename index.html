@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>საკურიერო აპი | ფინალური ვერსია</title>
+    <title>საკურიერო აპი | Firebase ვერსია</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -96,7 +96,7 @@
 <div id="loginModal" class="modal-overlay">
     <div class="modal-card">
         <h3><i class="fas fa-truck-fast"></i> შესვლა</h3>
-        <input type="text" id="loginUsername" placeholder="ლოგინი">
+        <input type="text" id="loginUsername" placeholder="ლოგინი (ან ელ.ფოსტა)">
         <input type="password" id="loginPassword" placeholder="პაროლი">
         <button class="btn" id="doLoginBtn">შესვლა</button>
         <div class="register-link" id="showRegLink">📝 რეგისტრაცია</div>
@@ -225,74 +225,194 @@
 </div>
 <div id="nearestParcelCard" class="nearest-card" style="display: none;"></div>
 
-<script>
-    // ---------- STORAGE ----------
-    const STORAGE_USERS = "courier_users";
-    const STORAGE_PENDING = "pending_registrations";
-    
-    function getUsers() { return JSON.parse(localStorage.getItem(STORAGE_USERS) || "[]"); }
-    function saveUsers(users) { localStorage.setItem(STORAGE_USERS, JSON.stringify(users)); }
-    function getPending() { return JSON.parse(localStorage.getItem(STORAGE_PENDING) || "[]"); }
-    function savePending(pending) { localStorage.setItem(STORAGE_PENDING, JSON.stringify(pending)); }
-    function getPinsForUser(username) { return JSON.parse(localStorage.getItem(`pins_${username}`) || "[]"); }
-    function savePinsForUser(username, pins) { localStorage.setItem(`pins_${username}`, JSON.stringify(pins)); }
-    function getHistoryForUser(username) { return JSON.parse(localStorage.getItem(`history_${username}`) || "[]"); }
-    function saveHistoryForUser(username, history) { localStorage.setItem(`history_${username}`, JSON.stringify(history)); }
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-    // ---------- AUTH & APPROVAL ----------
-    function requestRegistration(login, password) {
-        if (!login.trim() || !password.trim()) return { success: false, msg: "შეავსეთ ყველა ველი" };
-        let users = getUsers();
-        if (users.find(u => u.username === login)) return { success: false, msg: "მომხმარებელი უკვე არსებობს" };
-        let pending = getPending();
-        if (pending.find(p => p.username === login)) return { success: false, msg: "უკვე გაგზავნილია დასამტკიცებლად" };
-        pending.push({ username: login, password: password });
-        savePending(pending);
-        return { success: true, msg: "მოთხოვნა გაგზავნილია ადმინისთვის" };
-    }
+<script>
+    // ✅ Firebase Config - ჩასმულია თქვენი მონაცემებით
+    const firebaseConfig = {
+        apiKey: "AIzaSyA6gPn6Bg3ez7hkGgDrfHkkYNkOPBgXDO8",
+        authDomain: "fir-config-c2e7b.firebaseapp.com",
+        projectId: "fir-config-c2e7b",
+        storageBucket: "fir-config-c2e7b.firebasestorage.app",
+        messagingSenderId: "438781657853",
+        appId: "1:438781657853:web:9c626776c9f0952a3af494"
+    };
     
-    function approveRegistration(username) {
-        let pending = getPending();
-        let idx = pending.findIndex(p => p.username === username);
-        if (idx === -1) return false;
-        let userData = pending[idx];
-        let users = getUsers();
-        users.push({ username: userData.username, password: userData.password });
-        saveUsers(users);
-        pending.splice(idx, 1);
-        savePending(pending);
-        if (!getPinsForUser(userData.username)) savePinsForUser(userData.username, []);
-        if (!getHistoryForUser(userData.username)) saveHistoryForUser(userData.username, []);
-        return true;
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // ----------------------------------------------
+    //  FIREBASE STORAGE WRAPPERS (replaces localStorage)
+    // ----------------------------------------------
+
+    // Helper to convert username to email for auth
+    function usernameToEmail(username) {
+        return username.toLowerCase().replace(/[^a-z0-9]/g, '') + "@courier.local";
     }
-    
-    function authenticateUser(login, password) {
-        if (login === "admin" && password === "123") return "admin";
-        let users = getUsers();
-        if (users.find(u => u.username === login && u.password === password)) return "user";
+
+    // Get user ID from username
+    async function getUserIdByUsername(username) {
+        const q = await db.collection("users").where("username", "==", username).get();
+        if (!q.empty) return q.docs[0].id;
         return null;
     }
-    
-    function changeUserPassword(username, newPassword) {
-        let users = getUsers();
-        let user = users.find(u => u.username === username);
-        if (!user) return false;
-        user.password = newPassword;
-        saveUsers(users);
-        return true;
+
+    // Create default admin if none exists
+    async function createDefaultAdmin() {
+        const adminSnapshot = await db.collection("users").where("role", "==", "admin").get();
+        if (adminSnapshot.empty) {
+            try {
+                const userCred = await auth.createUserWithEmailAndPassword("admin@courier.local", "123");
+                await db.collection("users").doc(userCred.user.uid).set({
+                    username: "admin",
+                    role: "admin",
+                    approved: true,
+                    createdAt: new Date().toISOString()
+                });
+                console.log("Default admin created: admin@courier.local / 123");
+            } catch(e) { console.warn("Admin already exists or error", e); }
+        }
     }
 
-    // ---------- MAP ----------
-    let map, currentUser = null, isAdminMode = false, currentLocationMarker = null, watchId = null;
-    let isAddPinMode = false, pendingPinCoords = null, markersLayer = L.layerGroup();
+    // Request registration
+    async function requestRegistration(username, password) {
+        if (!username.trim() || !password.trim()) return { success: false, msg: "შეავსეთ ყველა ველი" };
+        const existingUser = await db.collection("users").where("username", "==", username).get();
+        if (!existingUser.empty) return { success: false, msg: "მომხმარებელი უკვე არსებობს" };
+        const pendingRef = await db.collection("pendingUsers").where("username", "==", username).get();
+        if (!pendingRef.empty) return { success: false, msg: "უკვე გაგზავნილია დასამტკიცებლად" };
+        await db.collection("pendingUsers").add({
+            username: username,
+            password: password,
+            requestedAt: new Date().toISOString()
+        });
+        return { success: true, msg: "მოთხოვნა გაგზავნილია ადმინისთვის" };
+    }
+
+    // Approve registration
+    async function approveRegistration(pendingId, username, password) {
+        try {
+            const email = usernameToEmail(username);
+            const userCred = await auth.createUserWithEmailAndPassword(email, password);
+            await db.collection("users").doc(userCred.user.uid).set({
+                username: username,
+                role: "courier",
+                approved: true,
+                createdAt: new Date().toISOString()
+            });
+            await db.collection("pendingUsers").doc(pendingId).delete();
+            return true;
+        } catch(e) {
+            console.error(e);
+            return false;
+        }
+    }
+
+    // Authenticate user
+    async function authenticateUser(login, password) {
+        if (login === "admin" || login === "admin@courier.local") {
+            try {
+                await auth.signInWithEmailAndPassword("admin@courier.local", password);
+                const userDoc = await db.collection("users").where("username", "==", "admin").get();
+                if (!userDoc.empty && userDoc.docs[0].data().role === "admin") return "admin";
+                else return null;
+            } catch(e) { return null; }
+        }
+        const email = usernameToEmail(login);
+        try {
+            await auth.signInWithEmailAndPassword(email, password);
+            const user = auth.currentUser;
+            const userDoc = await db.collection("users").doc(user.uid).get();
+            if (userDoc.exists && userDoc.data().approved === true && userDoc.data().role === "courier") {
+                return "user";
+            } else {
+                await auth.signOut();
+                return null;
+            }
+        } catch(e) {
+            return null;
+        }
+    }
+
+    // Change password for a courier
+    async function changeUserPassword(username, newPassword) {
+        const userId = await getUserIdByUsername(username);
+        if (!userId) return false;
+        const email = usernameToEmail(username);
+        try {
+            await auth.sendPasswordResetEmail(email);
+            showToast(`პაროლის აღსადგენი ლინკი გაეგზავნა ${email}-ზე`);
+            return true;
+        } catch(e) {
+            console.error(e);
+            return false;
+        }
+    }
+
+    // Pins and History functions with Firestore
+    async function getPinsForUser(uid) {
+        const snapshot = await db.collection("pins").where("userId", "==", uid).where("archived", "==", false).get();
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+    
+    async function addNewPinForUser(uid, lat, lng, fullName, phone) {
+        if (!fullName.trim() || !phone.trim()) return false;
+        await db.collection("pins").add({
+            userId: uid, lat, lng, fullName: fullName.trim(), phone: phone.trim(),
+            status: 'pending', createdAt: new Date().toISOString(), archived: false
+        });
+        return true;
+    }
+    
+    async function updatePinStatus(pinDocId, newStatus) {
+        await db.collection("pins").doc(pinDocId).update({ status: newStatus });
+    }
+    
+    async function archiveAllPinsToHistory(uid) {
+        const activePins = await db.collection("pins").where("userId", "==", uid).where("archived", "==", false).get();
+        if (activePins.empty) { showToast("არანაირი აქტიური შეკვეთა არ არის"); return; }
+        const now = new Date().toISOString();
+        for (let doc of activePins.docs) {
+            const pin = doc.data();
+            await db.collection("history").add({
+                userId: uid,
+                fullName: pin.fullName, phone: pin.phone, lat: pin.lat, lng: pin.lng,
+                status: pin.status, createdAt: pin.createdAt, archivedAt: now,
+                displayDate: new Date().toLocaleString('ka-GE')
+            });
+            await doc.ref.delete();
+        }
+        showToast("✅ დღე დასრულდა! ყველა შეკვეთა გადავიდა ისტორიაში");
+    }
+    
+    async function getLast24hStatsForUser(uid) {
+        const pinsSnapshot = await db.collection("pins").where("userId", "==", uid).where("archived", "==", false).get();
+        const activePins = pinsSnapshot.docs.map(d => d.data());
+        const completedActive = activePins.filter(p => p.status === 'delivered' || p.status === 'failed');
+        const historySnapshot = await db.collection("history").where("userId", "==", uid).get();
+        const allHistory = historySnapshot.docs.map(d => d.data());
+        const now = new Date();
+        const dayAgo = new Date(now.getTime() - 24*3600000);
+        const recentHistory = allHistory.filter(item => new Date(item.archivedAt || item.createdAt) >= dayAgo);
+        const delivered = completedActive.filter(p=>p.status==='delivered').length + recentHistory.filter(h=>h.status==='delivered').length;
+        const failed = completedActive.filter(p=>p.status==='failed').length + recentHistory.filter(h=>h.status==='failed').length;
+        const totalEarned = delivered * 3.50;
+        return { delivered, failed, totalEarned };
+    }
+
+    let currentUserId = null, currentUsername = null, isAdminMode = false;
+    let map, currentLocationMarker = null, watchId = null;
+    let isAddPinMode = false, pendingPinCoords = null;
+    let markersLayer = L.layerGroup();
+    let allCouriersPinsLayer = L.layerGroup();
     let currentPosition = { lat: 41.7151, lng: 44.8271 };
     let activeNearestPinId = null;
-    let adminSelectedCourier = null;
-    let adminPendingCoords = null;
     let adminMapClickHandler = null;
-    // For admin "all couriers pins" view
-    let allCouriersPinsLayer = L.layerGroup();
-    let showingAllCouriersPins = false;
+    let currentCalendarDate = new Date();
 
     function initMap() {
         map = L.map('map').setView([41.7151, 44.8271], 15);
@@ -303,315 +423,36 @@
         allCouriersPinsLayer.addTo(map);
     }
 
-    // Admin: show all active pins from all couriers (pending only)
-    function showAllCouriersPins() {
-        if (!isAdminMode) return;
-        allCouriersPinsLayer.clearLayers();
-        const users = getUsers().filter(u => u.username !== "admin");
-        let totalPins = 0;
-        users.forEach(user => {
-            const pins = getPinsForUser(user.username);
-            pins.forEach(pin => {
-                if (pin.status === 'pending') {
-                    totalPins++;
-                    let color = '#f39c12'; // orange for admin view
-                    let marker = L.circleMarker([pin.lat, pin.lng], { radius: 10, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.8 });
-                    let popupContent = `<strong>${escapeHtml(pin.fullName)}</strong><br>📞 ${escapeHtml(pin.phone)}<br>👤 კურიერი: ${escapeHtml(user.username)}<br>🏷️ სტატუსი: ${pin.status === 'pending' ? 'ლოდინი' : (pin.status === 'delivered' ? 'ჩაბარდა' : 'ვერ ჩაბარდა')}<br><em>ადმინი ვერ ცვლის სტატუსს</em>`;
-                    marker.bindPopup(popupContent);
-                    marker.addTo(allCouriersPinsLayer);
-                }
-            });
-        });
-        showToast(`რუკაზე გამოჩნდა ${totalPins} აქტიური შეკვეთა (ყველა კურიერის). პინები ავტომატურად გაქრება 04:00 საათზე.`);
-        showingAllCouriersPins = true;
-        // Schedule cleanup at 4 AM if needed (the cleanup function runs globally)
-    }
-
-    function clearAllCouriersPins() {
-        allCouriersPinsLayer.clearLayers();
-        showingAllCouriersPins = false;
-        if (isAdminMode) showToast("ყველა კურიერის პინები წაიშალა რუკიდან (04:00 განახლება)");
-    }
-
-    // Auto-cleanup at 04:00 AM every day
-    function scheduleDailyCleanup() {
-        const now = new Date();
-        const next4am = new Date(now);
-        next4am.setHours(4, 0, 0, 0);
-        if (now >= next4am) next4am.setDate(next4am.getDate() + 1);
-        const msUntil4am = next4am - now;
-        setTimeout(() => {
-            clearAllCouriersPins();
-            scheduleDailyCleanup(); // re-schedule for next day
-        }, msUntil4am);
-    }
-    scheduleDailyCleanup();
-
-    // Refresh user's own pins
-    function refreshAllPins() {
-        markersLayer.clearLayers();
-        if (!currentUser || isAdminMode) return;
-        let pins = getPinsForUser(currentUser);
-        pins.forEach(pin => {
-            let color = (pin.status === 'delivered' || pin.status === 'failed') ? '#e0694a' : '#7f8f9e';
-            let marker = L.circleMarker([pin.lat, pin.lng], { radius: 11, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.85 });
-            marker.bindPopup(getPopupContent(pin));
-            marker.pinData = pin;
-            marker.addTo(markersLayer);
-        });
-        updateNearestParcelCard();
-    }
-
-    function getPopupContent(pin) {
-        let namePhone = `<strong>${escapeHtml(pin.fullName)}</strong><br>📞 ${escapeHtml(pin.phone)}`;
-        if (pin.status === 'delivered') return `${namePhone}<br><span style="color:#2c7a47;">✅ ჩაბარდა</span>`;
-        if (pin.status === 'failed') return `${namePhone}<br><span style="color:#c25a41;">❌ ვერ ჩაბარდა</span>`;
-        return `${namePhone}<hr><div style="display:flex; gap:10px; justify-content:center;">
-            <button class="popup-btn" data-id="${pin.id}" data-status="delivered" style="background:#2c7a47; border:none; padding:5px 14px; border-radius:30px; color:white;">✅ ჩაბარდა</button>
-            <button class="popup-btn" data-id="${pin.id}" data-status="failed" style="background:#b13e2e; border:none; padding:5px 14px; border-radius:30px; color:white;">❌ ვერ ჩაბარდა</button>
-        </div>`;
-    }
-    function escapeHtml(str) { return String(str).replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
-
-    function updatePinStatus(pinId, newStatus) {
-        if (!currentUser || isAdminMode) return;
-        let pins = getPinsForUser(currentUser);
-        let pin = pins.find(p => p.id == pinId);
-        if (!pin || pin.status !== 'pending') return;
-        pin.status = newStatus;
-        savePinsForUser(currentUser, pins);
-        refreshAllPins();
-    }
-
-    function addNewPinForUser(username, lat, lng, fullName, phone) {
-        if (!fullName.trim() || !phone.trim()) return false;
-        let pins = getPinsForUser(username);
-        let newPin = {
-            id: Date.now() + Math.floor(Math.random() * 10000),
-            lat, lng, fullName: fullName.trim(), phone: phone.trim(),
-            status: 'pending', createdAt: new Date().toISOString()
-        };
-        pins.push(newPin);
-        savePinsForUser(username, pins);
-        if (username === currentUser && !isAdminMode) refreshAllPins();
-        return true;
-    }
-
-    function archiveAllPinsToHistory() {
-        if (!currentUser || isAdminMode) return;
-        let activePins = getPinsForUser(currentUser);
-        if (activePins.length === 0) { showToast("არანაირი აქტიური შეკვეთა არ არის"); return; }
-        let history = getHistoryForUser(currentUser);
-        let nowISO = new Date().toISOString();
-        let archived = activePins.map(pin => ({ ...pin, archivedAt: nowISO, displayDate: new Date().toLocaleString('ka-GE') }));
-        saveHistoryForUser(currentUser, [...history, ...archived]);
-        savePinsForUser(currentUser, []);
-        refreshAllPins();
-        showToast("✅ დღე დასრულდა! ყველა შეკვეთა გადავიდა ისტორიაში");
-    }
-
-    // TODAY STATS (24h)
-    function getLast24hStatsForUser(username) {
-        let activePins = getPinsForUser(username);
-        let completedActive = activePins.filter(p => p.status === 'delivered' || p.status === 'failed');
-        let history = getHistoryForUser(username);
-        let now = new Date();
-        let dayAgo = new Date(now.getTime() - 24*3600000);
-        let recentHistory = history.filter(item => new Date(item.archivedAt || item.createdAt) >= dayAgo);
-        let delivered = completedActive.filter(p=>p.status==='delivered').length + recentHistory.filter(h=>h.status==='delivered').length;
-        let failed = completedActive.filter(p=>p.status==='failed').length + recentHistory.filter(h=>h.status==='failed').length;
-        let totalEarned = delivered * 3.50;
-        return { delivered, failed, totalEarned };
-    }
-    
-    function showTodayStats() {
-        if (!currentUser || isAdminMode) return;
-        let stats = getLast24hStatsForUser(currentUser);
-        document.getElementById("todayStatsContent").innerHTML = `
-            <div>✅ ჩაბარდა: <strong>${stats.delivered}</strong></div>
-            <div>❌ ვერ ჩაბარდა: <strong>${stats.failed}</strong></div>
-            <div>💰 გამომუშავებული: <strong>${stats.totalEarned.toFixed(2)} ლარი</strong> (3.50 ლარი/ამანათი)</div>
-        `;
-        document.getElementById("todayStatsModal").classList.add("active");
-    }
-
-    // CALENDAR (shared)
-    let currentCalendarDate = new Date();
-    function renderCalendar(containerId, onDateSelect) {
-        const year = currentCalendarDate.getFullYear();
-        const month = currentCalendarDate.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const startDayOfWeek = firstDay.getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        let html = `<div class="calendar-nav">
-            <button class="btn-secondary" id="prevMonthBtn">◀</button>
-            <span>${year} წელი, ${month+1} თვე</span>
-            <button class="btn-secondary" id="nextMonthBtn">▶</button>
-        </div><div class="calendar-grid">`;
-        const weekdays = ['ორშ', 'სამ', 'ოთხ', 'ხუთ', 'პარ', 'შაბ', 'კვ'];
-        let offset = (startDayOfWeek === 0 ? 6 : startDayOfWeek - 1);
-        for (let i = 0; i < 7; i++) html += `<div style="font-weight:bold;">${weekdays[i]}</div>`;
-        for (let i = 0; i < offset; i++) html += `<div class="calendar-day empty"></div>`;
-        for (let d = 1; d <= daysInMonth; d++) {
-            html += `<div class="calendar-day" data-date="${year}-${month+1}-${d}">${d}</div>`;
-        }
-        html += `</div>`;
-        document.getElementById(containerId).innerHTML = html;
-        
-        document.getElementById("prevMonthBtn").onclick = () => {
-            currentCalendarDate = new Date(year, month-1, 1);
-            renderCalendar(containerId, onDateSelect);
-        };
-        document.getElementById("nextMonthBtn").onclick = () => {
-            currentCalendarDate = new Date(year, month+1, 1);
-            renderCalendar(containerId, onDateSelect);
-        };
-        document.querySelectorAll(`#${containerId} .calendar-day[data-date]`).forEach(el => {
-            el.addEventListener("click", () => {
-                const dateStr = el.getAttribute("data-date");
-                onDateSelect(dateStr);
-            });
-        });
-    }
-
-    function showUserHistoryForDate(username, dateStr) {
-        const history = getHistoryForUser(username);
-        const targetDateStr = new Date(dateStr).toISOString().split('T')[0];
-        const filtered = history.filter(item => {
-            const itemDate = new Date(item.archivedAt || item.createdAt);
-            return itemDate.toISOString().split('T')[0] === targetDateStr;
-        });
-        const deliveredCount = filtered.filter(i => i.status === 'delivered').length;
-        const failedCount = filtered.filter(i => i.status === 'failed').length;
-        const totalEarned = deliveredCount * 3.50;
-        let html = `<div style="margin: 10px 0;">📅 ${dateStr}<br>✅ ჩაბარდა: ${deliveredCount} | ❌ ვერ: ${failedCount} | 📦 სულ: ${filtered.length}<br>💰 გამომუშავებული: ${totalEarned.toFixed(2)} ლარი</div>`;
-        if (filtered.length === 0) html += `<div>📭 ამ დღეს არანაირი შეკვეთა</div>`;
-        else {
-            html += `<div class="history-list">`;
-            filtered.forEach(item => {
-                html += `<div class="history-item">
-                    <strong>${escapeHtml(item.fullName)}</strong><br>📞 ${escapeHtml(item.phone)}<br>
-                    🏷️ ${item.status === 'delivered' ? 'ჩაბარდა' : 'ვერ ჩაბარდა'}<br>
-                    ⏱️ ${new Date(item.archivedAt || item.createdAt).toLocaleString('ka-GE')}
-                </div>`;
-            });
-            html += `</div>`;
-        }
-        document.getElementById("calendarHistoryList").innerHTML = html;
-    }
-
-    function openCourierHistory() {
-        if (!currentUser || isAdminMode) return;
-        currentCalendarDate = new Date();
-        document.getElementById("calendarModalTitle").innerHTML = "📅 ჩემი ისტორია + შემოსავალი";
-        renderCalendar("calendarContainer", (dateStr) => {
-            showUserHistoryForDate(currentUser, dateStr);
-        });
-        document.getElementById("calendarModal").classList.add("active");
-    }
-
-    // Admin analytics (list couriers)
-    function openAdminAnalytics() {
-        if (!isAdminMode) return;
-        const users = getUsers().filter(u => u.username !== "admin");
-        const container = document.getElementById("userListContainer");
-        if (users.length === 0) container.innerHTML = "<div>📭 კურიერები არ არიან</div>";
-        else {
-            container.innerHTML = users.map(u => `<div class="user-list-item" data-user="${u.username}">👤 ${escapeHtml(u.username)}</div>`).join('');
-            document.querySelectorAll('.user-list-item').forEach(el => {
-                el.addEventListener('click', () => {
-                    const username = el.getAttribute('data-user');
-                    openAnalyticsForUser(username);
-                });
-            });
-        }
-        document.getElementById("adminUserSelectModal").classList.add("active");
-    }
-    
-    function openAnalyticsForUser(username) {
-        document.getElementById("adminUserSelectModal").classList.remove("active");
-        currentCalendarDate = new Date();
-        document.getElementById("calendarModalTitle").innerHTML = `📊 ანალიტიკა: ${escapeHtml(username)} + შემოსავალი`;
-        renderCalendar("calendarContainer", (dateStr) => {
-            showUserHistoryForDate(username, dateStr);
-        });
-        document.getElementById("calendarModal").classList.add("active");
-    }
-
-    // ADMIN: change password
-    function openAdminChangePwd() {
-        const users = getUsers().filter(u => u.username !== "admin");
-        const select = document.getElementById("pwdUserSelect");
-        select.innerHTML = '<option value="">აირჩიე კურიერი</option>' + users.map(u => `<option value="${u.username}">${escapeHtml(u.username)}</option>`).join('');
-        document.getElementById("adminChangePwdModal").classList.add("active");
-    }
-    
-    // ADMIN: add parcel flow (restores menu)
-    function openAdminAddParcelStep1() {
-        const users = getUsers().filter(u => u.username !== "admin");
-        const container = document.getElementById("courierListForParcel");
-        if (users.length === 0) container.innerHTML = "<div>📭 კურიერები არ არიან</div>";
-        else {
-            container.innerHTML = users.map(u => `<div class="courier-select-item" data-user="${u.username}">👤 ${escapeHtml(u.username)}</div>`).join('');
-            document.querySelectorAll('.courier-select-item').forEach(el => {
-                el.addEventListener('click', () => {
-                    adminSelectedCourier = el.getAttribute('data-user');
-                    document.getElementById("adminAddParcelStep1Modal").classList.remove("active");
-                    document.getElementById("selectedCourierName").innerText = `კურიერი: ${adminSelectedCourier}`;
-                    document.getElementById("adminAddParcelStep2Modal").classList.add("active");
-                });
-            });
-        }
-        document.getElementById("adminAddParcelStep1Modal").classList.add("active");
-    }
-    
-    function openMapForAdminParcel() {
-        document.getElementById("adminAddParcelStep2Modal").classList.remove("active");
-        isAddPinMode = true;
-        setMenuButtonVisibility(false);
-        document.getElementById("modeToast").style.display = "flex";
-        document.getElementById("modeToast").innerText = "📍 ადმინი: მონიშნე ადგილი რუკაზე";
-        if (adminMapClickHandler) map.off('click', adminMapClickHandler);
-        adminMapClickHandler = (e) => {
-            if (!isAddPinMode || !adminSelectedCourier) return;
-            adminPendingCoords = { lat: e.latlng.lat, lng: e.latlng.lng };
-            map.off('click', adminMapClickHandler);
-            isAddPinMode = false;
-            document.getElementById("modeToast").style.display = "none";
-            document.getElementById("adminAddParcelStep3Modal").classList.add("active");
-        };
-        map.on('click', adminMapClickHandler);
-    }
-    
-    function finishAdminAddParcel() {
-        let name = document.getElementById("adminPinFullName").value.trim();
-        let phone = document.getElementById("adminPinPhone").value.trim();
-        if (!name || !phone) { document.getElementById("adminPinError").innerText = "შეიყვანეთ მონაცემები"; return; }
-        if (adminPendingCoords && adminSelectedCourier) {
-            addNewPinForUser(adminSelectedCourier, adminPendingCoords.lat, adminPendingCoords.lng, name, phone);
-            showToast(`📦 ამანათი დაემატა კურიერ ${adminSelectedCourier}-ს`);
-        }
-        document.getElementById("adminPinFullName").value = "";
-        document.getElementById("adminPinPhone").value = "";
-        document.getElementById("adminAddParcelStep3Modal").classList.remove("active");
-        adminPendingCoords = null;
-        adminSelectedCourier = null;
-        if (!actionPanel.classList.contains("show")) setMenuButtonVisibility(true);
-        isAddPinMode = false;
-        document.getElementById("modeToast").style.display = "none";
-        if (adminMapClickHandler) map.off('click', adminMapClickHandler);
-    }
-
-    // GPS & Nearest Parcel
     function distance(lat1,lon1,lat2,lon2) {
         let R=6371e3; let φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180;
         let Δφ=(lat2-lat1)*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
         let a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
         return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
     }
-    function updateNearestParcelCard() {
-        if (!currentUser || isAdminMode) { document.getElementById("nearestParcelCard").style.display = "none"; return; }
-        let pins = getPinsForUser(currentUser);
+
+    async function refreshAllPins() {
+        if (!currentUserId || isAdminMode) return;
+        markersLayer.clearLayers();
+        const pins = await getPinsForUser(currentUserId);
+        pins.forEach(pin => {
+            let color = (pin.status === 'delivered' || pin.status === 'failed') ? '#e0694a' : '#7f8f9e';
+            let marker = L.circleMarker([pin.lat, pin.lng], { radius: 11, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.85 });
+            let namePhone = `<strong>${escapeHtml(pin.fullName)}</strong><br>📞 ${escapeHtml(pin.phone)}`;
+            if (pin.status === 'delivered') marker.bindPopup(`${namePhone}<br><span style="color:#2c7a47;">✅ ჩაბარდა</span>`);
+            else if (pin.status === 'failed') marker.bindPopup(`${namePhone}<br><span style="color:#c25a41;">❌ ვერ ჩაბარდა</span>`);
+            else marker.bindPopup(`${namePhone}<hr><div style="display:flex; gap:10px; justify-content:center;">
+                <button class="popup-btn" data-id="${pin.id}" data-status="delivered" style="background:#2c7a47; border:none; padding:5px 14px; border-radius:30px; color:white;">✅ ჩაბარდა</button>
+                <button class="popup-btn" data-id="${pin.id}" data-status="failed" style="background:#b13e2e; border:none; padding:5px 14px; border-radius:30px; color:white;">❌ ვერ ჩაბარდა</button>
+            </div>`);
+            marker.pinData = pin;
+            marker.addTo(markersLayer);
+        });
+        updateNearestParcelCard();
+    }
+
+    async function updateNearestParcelCard() {
+        if (!currentUserId || isAdminMode) { document.getElementById("nearestParcelCard").style.display = "none"; return; }
+        const pins = await getPinsForUser(currentUserId);
         let pending = pins.filter(p => p.status === 'pending');
         if (pending.length === 0 || !currentPosition) { document.getElementById("nearestParcelCard").style.display = "none"; return; }
         let nearest = null, minDist = Infinity;
@@ -630,17 +471,20 @@
             activeNearestPinId = nearest.id;
         } else document.getElementById("nearestParcelCard").style.display = "none";
     }
+
     function flyToNearestPin() {
-        if (!currentUser || isAdminMode) return;
-        let pins = getPinsForUser(currentUser);
-        let nearest = pins.find(p => p.id === activeNearestPinId && p.status === 'pending');
-        if (nearest) {
-            map.flyTo([nearest.lat, nearest.lng], 17, { duration: 1 });
-            setTimeout(() => {
-                markersLayer.eachLayer(layer => { if (layer.pinData && layer.pinData.id === nearest.id) layer.openPopup(); });
-            }, 400);
-        }
+        if (!currentUserId || isAdminMode) return;
+        getPinsForUser(currentUserId).then(pins => {
+            let nearest = pins.find(p => p.id === activeNearestPinId && p.status === 'pending');
+            if (nearest) {
+                map.flyTo([nearest.lat, nearest.lng], 17, { duration: 1 });
+                setTimeout(() => {
+                    markersLayer.eachLayer(layer => { if (layer.pinData && layer.pinData.id === nearest.id) layer.openPopup(); });
+                }, 400);
+            }
+        });
     }
+
     function startLiveTracking() {
         if (!navigator.geolocation) return;
         if (watchId) navigator.geolocation.clearWatch(watchId);
@@ -656,214 +500,61 @@
             }, err => console.warn(err), { enableHighAccuracy: true }
         );
     }
+
     function stopLiveTracking() { if(watchId) navigator.geolocation.clearWatch(watchId); watchId=null; if(currentLocationMarker) map.removeLayer(currentLocationMarker); currentLocationMarker=null; }
 
-    // UI Helpers
-    const menuBtn = document.getElementById("menuButton");
-    const actionPanel = document.getElementById("actionPanel");
-    function setMenuButtonVisibility(visible) { visible ? menuBtn.classList.remove("hidden") : menuBtn.classList.add("hidden"); }
-    function toggleActionPanel() {
-        if (actionPanel.classList.contains("show")) {
-            actionPanel.classList.remove("show");
-            setMenuButtonVisibility(true);
-            if (!isAdminMode) updateNearestParcelCard();
-        } else {
-            actionPanel.classList.add("show");
-            setMenuButtonVisibility(false);
-            document.getElementById("nearestParcelCard").style.display = "none";
-        }
-    }
-    function setAddPinMode(active) {
-        if (isAdminMode && active) return;
-        isAddPinMode = active;
-        document.getElementById("modeToast").style.display = active ? "flex" : "none";
-        document.getElementById("searchBar").classList.toggle("hidden", !active);
-        if (active) {
-            if (!actionPanel.classList.contains("show")) setMenuButtonVisibility(false);
-            document.getElementById("nearestParcelCard").style.display = "none";
-        } else {
-            if (!actionPanel.classList.contains("show")) setMenuButtonVisibility(true);
-            if (!isAdminMode) updateNearestParcelCard();
-        }
-    }
-    function showToast(msg) {
-        let toast = document.createElement('div'); toast.className = 'info-toast'; toast.innerText = msg;
-        document.body.appendChild(toast); setTimeout(() => toast.remove(), 2200);
-    }
-    function showAdminPendingModal() {
-        let pending = getPending();
-        let container = document.getElementById("pendingListContainer");
-        if (pending.length === 0) container.innerHTML = "<div style='padding:20px;'>📭 არ არის მოითხოვილი რეგისტრაციები</div>";
-        else {
-            container.innerHTML = pending.map(p => `
-                <div class="pending-user">
-                    <span><strong>${escapeHtml(p.username)}</strong><br><small>პაროლი: ${escapeHtml(p.password)}</small></span>
-                    <button class="approve-pending" data-user="${escapeHtml(p.username)}" style="background:#2c7a47; border:none; padding:6px 12px; border-radius:30px; color:white;">✅ დამტკიცება</button>
-                </div>
-            `).join('');
-            document.querySelectorAll('.approve-pending').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    let username = btn.getAttribute('data-user');
-                    if (approveRegistration(username)) { showToast(`✅ ${username} დაემატა`); showAdminPendingModal(); }
-                    else showToast("შეცდომა");
-                });
-            });
-        }
-        document.getElementById("adminPendingModal").classList.add("active");
-    }
-
-    // Build menu based on role
-    function buildMenu() {
-        if (isAdminMode) {
-            actionPanel.innerHTML = `
-                <div class="action-item" id="adminAllPinsAction"><i class="fas fa-globe"></i> ყველა კურიერის პინები</div>
-                <div class="action-item" id="adminCompleteRegAction"><i class="fas fa-user-check"></i> რეგისტრაციის დასრულება</div>
-                <div class="action-item" id="adminChangePwdAction"><i class="fas fa-key"></i> კურიერის პაროლის შეცვლა</div>
-                <div class="action-item" id="adminAddParcelAction"><i class="fas fa-plus-circle"></i> ახალი ამანათის დამატება</div>
-                <div class="action-item" id="adminAnalyticsAction"><i class="fas fa-chart-line"></i> ანალიტიკა</div>
-                <div class="action-item" id="logoutAction"><i class="fas fa-sign-out-alt"></i> გამოსვლა</div>
-            `;
-            document.getElementById("adminAllPinsAction").onclick = () => { showAllCouriersPins(); toggleActionPanel(); };
-            document.getElementById("adminCompleteRegAction").onclick = () => showAdminPendingModal();
-            document.getElementById("adminChangePwdAction").onclick = () => openAdminChangePwd();
-            document.getElementById("adminAddParcelAction").onclick = () => openAdminAddParcelStep1();
-            document.getElementById("adminAnalyticsAction").onclick = () => openAdminAnalytics();
-            document.getElementById("logoutAction").onclick = () => logout();
-        } else {
-            actionPanel.innerHTML = `
-                <div class="action-item" id="findAddressAction"><i class="fas fa-location-dot"></i> მისამართის პოვნა</div>
-                <div class="action-item" id="todayStatsAction"><i class="fas fa-sun"></i> დღეს</div>
-                <div class="action-item" id="historyAction"><i class="fas fa-archive"></i> ისტორია</div>
-                <div class="action-item" id="endDayAction"><i class="fas fa-calendar-day"></i> დღის დასრულება</div>
-                <div class="action-item" id="logoutAction"><i class="fas fa-sign-out-alt"></i> გამოსვლა</div>
-            `;
-            document.getElementById("findAddressAction").onclick = () => { setAddPinMode(true); toggleActionPanel(); };
-            document.getElementById("todayStatsAction").onclick = () => { showTodayStats(); toggleActionPanel(); };
-            document.getElementById("historyAction").onclick = () => { openCourierHistory(); toggleActionPanel(); };
-            document.getElementById("endDayAction").onclick = () => { document.getElementById("endDayConfirmModal").classList.add("active"); toggleActionPanel(); };
-            document.getElementById("logoutAction").onclick = () => logout();
-        }
-    }
-
-    function logout() {
-        stopLiveTracking();
-        currentUser = null; isAdminMode = false;
-        markersLayer.clearLayers();
+    async function showAllCouriersPins() {
+        if (!isAdminMode) return;
         allCouriersPinsLayer.clearLayers();
-        setAddPinMode(false);
-        setMenuButtonVisibility(false);
-        actionPanel.classList.remove("show");
-        document.getElementById("nearestParcelCard").style.display = "none";
-        map.setView([41.7151, 44.8271], 13);
-        setTimeout(() => showLoginModal(), 100);
-    }
-
-    function showLoginModal() { document.getElementById("loginModal").classList.add("active"); document.getElementById("regModal").classList.remove("active"); document.getElementById("loginError").innerText = ""; }
-    function hideAllModals() { 
-        let ids = ["loginModal","regModal","adminPendingModal","adminChangePwdModal","adminAddParcelStep1Modal","adminAddParcelStep2Modal","adminAddParcelStep3Modal","calendarModal","todayStatsModal","adminUserSelectModal","pinInfoModal","endDayConfirmModal"];
-        ids.forEach(id => document.getElementById(id)?.classList.remove("active"));
-    }
-    
-    function afterLoginSuccess(username, isAdmin) {
-        currentUser = username; isAdminMode = isAdmin;
-        hideAllModals();
-        setMenuButtonVisibility(true);
-        buildMenu();
-        if (!isAdminMode) { refreshAllPins(); startLiveTracking(); }
-        else { markersLayer.clearLayers(); allCouriersPinsLayer.clearLayers(); if (watchId) navigator.geolocation.clearWatch(watchId); }
-        setAddPinMode(false);
-        window._firstMoved = false;
-        if (!isAdminMode) updateNearestParcelCard(); else document.getElementById("nearestParcelCard").style.display = "none";
-        if (adminMapClickHandler) map.off('click', adminMapClickHandler);
-    }
-
-    // Geocoding
-    function searchAddress(query, callback) {
-        if (!query.trim()) return;
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
-            .then(res=>res.json()).then(data=>{
-                if(data && data.length) callback({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
-                else callback(null);
-            }).catch(()=>callback(null));
-    }
-
-    // EVENT LISTENERS
-    window.onload = () => {
-        initMap();
-        setTimeout(() => { if(!currentUser) showLoginModal(); }, 500);
-        document.getElementById("doLoginBtn").onclick = () => {
-            let user = document.getElementById("loginUsername").value, pass = document.getElementById("loginPassword").value;
-            let auth = authenticateUser(user, pass);
-            if (auth === "admin") afterLoginSuccess("admin", true);
-            else if (auth === "user") afterLoginSuccess(user, false);
-            else document.getElementById("loginError").innerText = "ლოგინი ან პაროლი არასწორია";
-        };
-        document.getElementById("showRegLink").onclick = () => { document.getElementById("loginModal").classList.remove("active"); document.getElementById("regModal").classList.add("active"); };
-        document.getElementById("backToLoginLink").onclick = () => { document.getElementById("regModal").classList.remove("active"); showLoginModal(); };
-        document.getElementById("doRegBtn").onclick = () => {
-            let user = document.getElementById("regUsername").value, pass = document.getElementById("regPassword").value;
-            let res = requestRegistration(user, pass);
-            if (res.success) { alert(res.msg); document.getElementById("regModal").classList.remove("active"); showLoginModal(); }
-            else document.getElementById("regError").innerText = res.msg;
-        };
-        document.getElementById("menuButton").onclick = (e) => { e.stopPropagation(); toggleActionPanel(); };
-        document.getElementById("closePendingBtn").onclick = () => document.getElementById("adminPendingModal").classList.remove("active");
-        document.getElementById("closeCalendarBtn").onclick = () => document.getElementById("calendarModal").classList.remove("active");
-        document.getElementById("closeUserSelectBtn").onclick = () => document.getElementById("adminUserSelectModal").classList.remove("active");
-        document.getElementById("closeTodayStatsBtn").onclick = () => document.getElementById("todayStatsModal").classList.remove("active");
-        document.getElementById("confirmEndDayBtn").onclick = () => { archiveAllPinsToHistory(); document.getElementById("endDayConfirmModal").classList.remove("active"); };
-        document.getElementById("cancelEndDayBtn").onclick = () => document.getElementById("endDayConfirmModal").classList.remove("active");
-        
-        document.getElementById("doChangePwdBtn").onclick = () => {
-            let selectedUser = document.getElementById("pwdUserSelect").value;
-            let newPwd = document.getElementById("newPassword").value;
-            if (!selectedUser || !newPwd) { document.getElementById("pwdError").innerText = "აირჩიე მომხმარებელი და შეიყვანე ახალი პაროლი"; return; }
-            if (changeUserPassword(selectedUser, newPwd)) { showToast(`პაროლი შეიცვალა ${selectedUser}-სთვის`); document.getElementById("adminChangePwdModal").classList.remove("active"); }
-            else showToast("შეცდომა");
-        };
-        document.getElementById("cancelChangePwdBtn").onclick = () => document.getElementById("adminChangePwdModal").classList.remove("active");
-        
-        document.getElementById("cancelAddParcelBtn").onclick = () => document.getElementById("adminAddParcelStep1Modal").classList.remove("active");
-        document.getElementById("startMapSelectionBtn").onclick = () => openMapForAdminParcel();
-        document.getElementById("cancelStep2Btn").onclick = () => document.getElementById("adminAddParcelStep2Modal").classList.remove("active");
-        document.getElementById("saveAdminPinBtn").onclick = () => finishAdminAddParcel();
-        document.getElementById("cancelStep3Btn").onclick = () => document.getElementById("adminAddParcelStep3Modal").classList.remove("active");
-        
-        document.getElementById("savePinBtn").onclick = () => {
-            let name = document.getElementById("pinFullName").value.trim(), phone = document.getElementById("pinPhone").value.trim();
-            if (!name || !phone) { document.getElementById("pinInfoError").innerText = "შეიყვანეთ მონაცემები"; return; }
-            if (pendingPinCoords) { addNewPinForUser(currentUser, pendingPinCoords.lat, pendingPinCoords.lng, name, phone); pendingPinCoords = null; }
-            document.getElementById("pinInfoModal").classList.remove("active");
-            setAddPinMode(false);
-        };
-        document.getElementById("cancelPinBtn").onclick = () => { document.getElementById("pinInfoModal").classList.remove("active"); pendingPinCoords = null; setAddPinMode(false); };
-        
-        document.getElementById("searchAddressBtn").onclick = () => {
-            let query = document.getElementById("addressInput").value.trim();
-            if (!query) return;
-            searchAddress(query, (coords) => {
-                if (coords) { map.setView([coords.lat, coords.lng], 18); pendingPinCoords = coords; document.getElementById("pinFullName").value = ""; document.getElementById("pinPhone").value = ""; document.getElementById("pinInfoModal").classList.add("active"); }
-                else showToast("მისამართი ვერ მოიძებნა");
+        const usersSnap = await db.collection("users").where("role", "==", "courier").get();
+        let totalPins = 0;
+        for (let userDoc of usersSnap.docs) {
+            const uid = userDoc.id;
+            const pins = await db.collection("pins").where("userId", "==", uid).where("archived", "==", false).get();
+            pins.forEach(pinDoc => {
+                const pin = pinDoc.data();
+                if (pin.status === 'pending') {
+                    totalPins++;
+                    let marker = L.circleMarker([pin.lat, pin.lng], { radius: 10, fillColor: '#f39c12', color: '#fff', weight: 2, fillOpacity: 0.8 });
+                    marker.bindPopup(`<strong>${escapeHtml(pin.fullName)}</strong><br>📞 ${escapeHtml(pin.phone)}<br>👤 კურიერი: ${escapeHtml(userDoc.data().username)}`);
+                    marker.addTo(allCouriersPinsLayer);
+                }
             });
-        };
-        document.getElementById("addressInput").addEventListener("keypress", (e) => { if(e.key === "Enter") document.getElementById("searchAddressBtn").click(); });
-        document.addEventListener("click", (e) => {
-            if (e.target.classList && e.target.classList.contains('popup-btn')) {
-                let id = parseInt(e.target.getAttribute('data-id')), status = e.target.getAttribute('data-status');
-                updatePinStatus(id, status);
-            }
-        });
-        document.getElementById("nearestParcelCard").addEventListener("click", () => flyToNearestPin());
-        document.addEventListener("click", (e) => {
-            if (actionPanel.classList.contains("show") && !actionPanel.contains(e.target) && !menuBtn.contains(e.target)) {
-                actionPanel.classList.remove("show");
-                setMenuButtonVisibility(true);
-                if (!isAdminMode) updateNearestParcelCard();
-            }
-        });
-        map.on('click', (e) => { if (currentUser && !isAdminMode && isAddPinMode) { pendingPinCoords = { lat: e.latlng.lat, lng: e.latlng.lng }; document.getElementById("pinFullName").value = ""; document.getElementById("pinPhone").value = ""; document.getElementById("pinInfoModal").classList.add("active"); } });
+        }
+        showToast(`რუკაზე გამოჩნდა ${totalPins} აქტიური შეკვეთა`);
+    }
+
+    function clearAllCouriersPins() {
+        allCouriersPinsLayer.clearLayers();
+    }
+
+    let adminSelectedCourierUid = null;
+    async function openAdminAddParcelStep1() {
+        const usersSnap = await db.collection("users").where("role", "==", "courier").get();
+        const container = document.getElementById("courierListForParcel");
+        if (usersSnap.empty) container.innerHTML = "<div>📭 კურიერები არ არიან</div>";
+        else {
+            container.innerHTML = "";
+            usersSnap.forEach(doc => {
+                const data = doc.data();
+                const div = document.createElement("div");
+                div.className = "courier-select-item";
+                div.setAttribute("data-uid", doc.id);
+                div.innerHTML = `👤 ${escapeHtml(data.username)}`;
+                div.onclick = () => {
+                    adminSelectedCourierUid = doc.id;
+                    document.getElementById("adminAddParcelStep1Modal").classList.remove("active");
+                    document.getElementById("selectedCourierName").innerText = `კურიერი: ${data.username}`;
+                    document.getElementById("adminAddParcelStep2Modal").classList.add("active");
+                };
+                container.appendChild(div);
+            });
+        }
+        document.getElementById("adminAddParcelStep1Modal").classList.add("active");
+    }
+
+    let adminPendingCoords = null;
+    function openMapForAdminParcel() {
+        document.getElementById("adminAddParcelStep2Modal").classList.remove("active");
+        isAddPinMode = true;
         setMenuButtonVisibility(false);
-    };
-</script>
-</body>
-</html>
