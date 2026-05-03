@@ -1,7 +1,6 @@
 const IMAGE_PATH = "assets/images/";
 
 const symbols = ["npc1.png", "npc2.png", "npc3.png", "npc4.png", "car.png"];
-
 const WILD = "car.png";
 const COIN = "coin.png";
 
@@ -20,6 +19,13 @@ let totalPaid = Number(localStorage.getItem("slotTotalPaid")) || 0;
 
 let playMode = 1;
 let spinning = false;
+
+const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContextClass();
+
+document.body.addEventListener("click", () => {
+  if(audioCtx.state === "suspended") audioCtx.resume();
+}, { once:true });
 
 const spinBtn = document.getElementById("spinBtn");
 const balanceBox = document.getElementById("balance");
@@ -85,10 +91,8 @@ function setMode(mode){
   if(spinning) return;
 
   playMode = mode;
-
   document.getElementById("oneLineBtn").classList.toggle("active", mode === 1);
   document.getElementById("threeLineBtn").classList.toggle("active", mode === 3);
-
   clearLines();
 }
 
@@ -131,6 +135,8 @@ function getWeightedWinner(){
 
 function spin(){
   if(spinning) return;
+
+  if(audioCtx.state === "suspended") audioCtx.resume();
 
   bet = Number(betInput.value) || 1;
   if(bet < 1) bet = 1;
@@ -350,22 +356,21 @@ function resetGame(){
 }
 
 function playTone(freq, duration, type="square", volume=.06){
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AudioContext();
+  if(audioCtx.state === "suspended") audioCtx.resume();
 
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
 
   osc.type = type;
   osc.frequency.value = freq;
   gain.gain.value = volume;
 
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(audioCtx.destination);
 
   osc.start();
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-  osc.stop(ctx.currentTime + duration);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.stop(audioCtx.currentTime + duration);
 }
 
 function playSpinSound(){
@@ -384,13 +389,13 @@ function playWinSound(){
 }
 
 function playCoinRainSound(){
-  for(let i = 0; i < 22; i++){
+  for(let i = 0; i < 12; i++){
     setTimeout(() => {
-      playTone(650 + Math.random() * 650, .05, "square", .045);
-    }, i * 45);
+      playTone(650 + Math.random() * 650, .05, "square", .035);
+    }, i * 65);
   }
 }
 
 function playLoseSound(){
-  playTone(120,.18,"sawtooth",.05);
+  playTone(120,.18,"sawtooth",.04);
 }
