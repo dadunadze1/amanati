@@ -3,18 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>80s Pixel Slot</title>
+<title>1980 Pixel Slot</title>
 
 <style>
-*{
-  box-sizing:border-box;
-}
+*{ box-sizing:border-box; }
 
 body{
   margin:0;
-  background:#050008;
-  font-family:monospace;
+  background:#020008;
   color:white;
+  font-family:monospace;
   overflow:hidden;
 }
 
@@ -22,143 +20,158 @@ body{
   width:100vw;
   height:100vh;
   background:
-    linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.65)),
+    linear-gradient(rgba(0,0,0,.15), rgba(0,0,0,.7)),
     url("bg.png") center/cover no-repeat;
   display:flex;
-  flex-direction:column;
   justify-content:center;
   align-items:center;
+  gap:28px;
   position:relative;
 }
 
 .title{
-  font-size:34px;
-  color:#ff3bd5;
-  text-shadow:
-    0 0 8px #ff00cc,
-    0 0 18px #ff00cc,
-    0 0 30px #00ffff;
-  margin-bottom:28px;
-  letter-spacing:3px;
+  position:absolute;
+  top:42px;
+  font-size:36px;
+  letter-spacing:4px;
+  color:#ff43dc;
+  text-shadow:0 0 10px #ff00cc,0 0 25px #00ffff;
 }
 
 .slot-machine{
-  padding:28px;
+  padding:26px;
   border:5px solid #ff00cc;
-  background:rgba(5,5,15,.88);
-  box-shadow:
-    0 0 18px #ff00cc,
-    inset 0 0 25px #00ffff;
-  border-radius:18px;
+  border-radius:22px;
+  background:rgba(5,5,18,.88);
+  box-shadow:0 0 22px #ff00cc, inset 0 0 30px #00ffff;
 }
 
-.slot-container{
-  display:flex;
-  gap:18px;
+.grid{
+  display:grid;
+  grid-template-columns:repeat(3,130px);
+  grid-template-rows:repeat(3,130px);
+  gap:12px;
+  position:relative;
 }
 
-.slot{
-  width:145px;
-  height:145px;
-  border:4px solid #00ffff;
+.cell{
+  width:130px;
+  height:130px;
+  border:3px solid #00ffff;
   background:#080812;
-  box-shadow:
-    0 0 18px #00ffff,
-    inset 0 0 20px #ff00cc;
   overflow:hidden;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  box-shadow:0 0 14px #00ffff, inset 0 0 18px #ff00cc;
 }
 
-.slot img{
+.cell img{
   width:100%;
   height:100%;
   object-fit:cover;
   image-rendering:pixelated;
 }
 
+.middle-line{
+  position:absolute;
+  left:-10px;
+  right:-10px;
+  top:50%;
+  height:140px;
+  transform:translateY(-50%);
+  border:4px solid #fff;
+  box-shadow:0 0 18px #fff,0 0 32px #ff00cc;
+  pointer-events:none;
+  border-radius:12px;
+}
+
 .spinning img{
-  animation:spinBlur .12s linear infinite;
+  animation:spinAnim .09s linear infinite;
 }
 
-@keyframes spinBlur{
-  0%{ transform:translateY(-40px) scale(1.08); filter:blur(1px) brightness(1.5); }
-  50%{ transform:translateY(40px) scale(1.08); filter:blur(2px) brightness(2); }
-  100%{ transform:translateY(-40px) scale(1.08); filter:blur(1px) brightness(1.5); }
+@keyframes spinAnim{
+  0%{ transform:translateY(-55px) scale(1.1); filter:blur(1px) brightness(1.7); }
+  50%{ transform:translateY(55px) scale(1.1); filter:blur(2px) brightness(2.2); }
+  100%{ transform:translateY(-55px) scale(1.1); filter:blur(1px) brightness(1.7); }
 }
 
-button{
-  margin-top:24px;
-  padding:16px 44px;
+#spinBtn{
+  display:block;
+  margin:24px auto 0;
+  padding:16px 70px;
   border:none;
-  border-radius:10px;
+  border-radius:14px;
   background:#00ffff;
-  color:#050008;
-  font-size:22px;
+  color:#070012;
+  font-size:24px;
   font-weight:bold;
   cursor:pointer;
-  box-shadow:
-    0 0 12px #00ffff,
-    0 0 28px #00ffff;
+  box-shadow:0 0 18px #00ffff,0 0 38px #00ffff;
 }
 
-button:active{
-  transform:scale(.96);
-}
-
-button:disabled{
+#spinBtn:disabled{
   opacity:.5;
   cursor:not-allowed;
 }
 
-#score,
-#highScore,
-#message{
-  margin-top:14px;
-  font-size:22px;
-  text-shadow:0 0 12px #00ffff;
+.score-panel{
+  width:240px;
+  padding:24px;
+  border:4px solid #00ffff;
+  border-radius:22px;
+  background:rgba(5,5,18,.9);
+  box-shadow:0 0 22px #00ffff, inset 0 0 25px #ff00cc;
+}
+
+.score-panel h2{
+  margin:0 0 22px;
+  color:#ff43dc;
+  text-align:center;
+  text-shadow:0 0 12px #ff00cc;
+}
+
+.score-box{
+  margin-bottom:18px;
+  padding:14px;
+  border:2px solid #ff00cc;
+  border-radius:12px;
+  background:rgba(0,0,0,.45);
+  box-shadow:inset 0 0 12px #ff00cc;
+}
+
+.label{
+  font-size:14px;
+  color:#00ffff;
+}
+
+.value{
+  font-size:28px;
+  margin-top:6px;
 }
 
 #message{
-  color:#ff3bd5;
-  min-height:28px;
-  text-shadow:
-    0 0 10px #ff00cc,
-    0 0 20px #ff00cc;
+  min-height:34px;
+  font-size:20px;
+  color:#ff43dc;
+  text-align:center;
+  text-shadow:0 0 12px #ff00cc;
 }
 
 .winFlash{
-  animation:winFlash .65s ease-in-out 3;
+  animation:winFlash .55s ease-in-out 3;
 }
 
 @keyframes winFlash{
-  0%{
-    box-shadow:
-      0 0 18px #ff00cc,
-      inset 0 0 25px #00ffff;
-  }
   50%{
-    box-shadow:
-      0 0 45px #fff,
-      0 0 80px #ff00cc,
-      0 0 120px #00ffff,
-      inset 0 0 45px #fff;
     transform:scale(1.03);
-  }
-  100%{
-    box-shadow:
-      0 0 18px #ff00cc,
-      inset 0 0 25px #00ffff;
+    box-shadow:0 0 50px #fff,0 0 90px #ff00cc,inset 0 0 45px #00ffff;
   }
 }
 
 .screenFlash{
   position:absolute;
   inset:0;
-  pointer-events:none;
   background:rgba(255,0,220,.22);
   opacity:0;
+  pointer-events:none;
 }
 
 .screenFlash.active{
@@ -166,16 +179,27 @@ button:disabled{
 }
 
 @keyframes screenFlash{
-  0%{ opacity:0; }
   35%{ opacity:1; }
   100%{ opacity:0; }
 }
 
-@media(max-width:600px){
-  .title{ font-size:24px; }
-  .slot-machine{ padding:18px; }
-  .slot{ width:95px; height:95px; }
-  button{ font-size:18px; }
+@media(max-width:850px){
+  body{ overflow:auto; }
+  #game{
+    min-height:100vh;
+    height:auto;
+    flex-direction:column;
+    gap:14px;
+    padding:90px 0 25px;
+  }
+  .title{ top:20px; font-size:24px; }
+  .grid{
+    grid-template-columns:repeat(3,90px);
+    grid-template-rows:repeat(3,90px);
+  }
+  .cell{ width:90px; height:90px; }
+  .middle-line{ height:98px; }
+  .score-panel{ width:300px; padding:14px; }
 }
 </style>
 </head>
@@ -188,47 +212,61 @@ button:disabled{
   <div class="title">1980 PIXEL SLOT</div>
 
   <div class="slot-machine" id="machine">
-    <div class="slot-container">
-      <div class="slot" id="slot1"><img id="s1" src="npc1.png"></div>
-      <div class="slot" id="slot2"><img id="s2" src="npc2.png"></div>
-      <div class="slot" id="slot3"><img id="s3" src="npc3.png"></div>
+    <div class="grid">
+      <div class="middle-line"></div>
+
+      <div class="cell"><img id="c0" src="npc1.png"></div>
+      <div class="cell"><img id="c1" src="npc2.png"></div>
+      <div class="cell"><img id="c2" src="npc3.png"></div>
+
+      <div class="cell"><img id="c3" src="npc1.png"></div>
+      <div class="cell"><img id="c4" src="npc1.png"></div>
+      <div class="cell"><img id="c5" src="npc1.png"></div>
+
+      <div class="cell"><img id="c6" src="npc4.png"></div>
+      <div class="cell"><img id="c7" src="npc2.png"></div>
+      <div class="cell"><img id="c8" src="npc3.png"></div>
     </div>
 
     <button id="spinBtn" onclick="spin()">SPIN</button>
+  </div>
 
-    <div id="score">Score: 0</div>
-    <div id="highScore">High Score: 0</div>
-    <div id="message"></div>
+  <div class="score-panel">
+    <h2>SCORE PANEL</h2>
+
+    <div class="score-box">
+      <div class="label">CURRENT SCORE</div>
+      <div class="value" id="score">0</div>
+    </div>
+
+    <div class="score-box">
+      <div class="label">HIGH SCORE</div>
+      <div class="value" id="highScore">0</div>
+    </div>
+
+    <div id="message">READY</div>
   </div>
 </div>
 
 <script>
-const images = ["npc1.png", "npc2.png", "npc3.png", "npc4.png"];
+const images = ["npc1.png","npc2.png","npc3.png","npc4.png"];
 
 const points = {
-  "npc1.png": 100,
-  "npc2.png": 200,
-  "npc3.png": 300,
-  "npc4.png": 400
+  "npc1.png":100,
+  "npc2.png":200,
+  "npc3.png":300,
+  "npc4.png":400
 };
 
 let score = Number(localStorage.getItem("slotScore")) || 0;
 let highScore = Number(localStorage.getItem("slotHighScore")) || 0;
 let spinning = false;
 
-const s1 = document.getElementById("s1");
-const s2 = document.getElementById("s2");
-const s3 = document.getElementById("s3");
-
-const slot1 = document.getElementById("slot1");
-const slot2 = document.getElementById("slot2");
-const slot3 = document.getElementById("slot3");
-
+const spinBtn = document.getElementById("spinBtn");
 const scoreBox = document.getElementById("score");
 const highScoreBox = document.getElementById("highScore");
 const messageBox = document.getElementById("message");
 const machine = document.getElementById("machine");
-const spinBtn = document.getElementById("spinBtn");
 const screenFlash = document.getElementById("screenFlash");
 
 updateScore();
@@ -237,58 +275,90 @@ function randomImage(){
   return images[Math.floor(Math.random() * images.length)];
 }
 
+function getWeightedWinner(){
+  const pool = [
+    ...Array(80).fill("npc1.png"),
+    ...Array(60).fill("npc2.png"),
+    ...Array(50).fill("npc3.png"),
+    ...Array(10).fill("npc4.png")
+  ];
+
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function spin(){
   if(spinning) return;
 
   spinning = true;
   spinBtn.disabled = true;
-  messageBox.innerText = "";
-
+  messageBox.innerText = "SPINNING...";
   playSpinSound();
 
-  slot1.classList.add("spinning");
-  slot2.classList.add("spinning");
-  slot3.classList.add("spinning");
+  const cells = [];
 
-  const interval1 = setInterval(() => s1.src = randomImage(), 80);
-  const interval2 = setInterval(() => s2.src = randomImage(), 80);
-  const interval3 = setInterval(() => s3.src = randomImage(), 80);
+  for(let i=0;i<9;i++){
+    const img = document.getElementById("c"+i);
+    const cell = img.parentElement;
+    cell.classList.add("spinning");
+    cells.push({img, cell});
+  }
 
-  let r1 = randomImage();
-  let r2 = randomImage();
-  let r3 = randomImage();
+  const intervals = cells.map(item => {
+    return setInterval(() => {
+      item.img.src = randomImage();
+    }, 75);
+  });
 
-  setTimeout(() => {
-    clearInterval(interval1);
-    s1.src = r1;
-    slot1.classList.remove("spinning");
-    playTickSound();
-  }, 900);
+  const final = [];
 
-  setTimeout(() => {
-    clearInterval(interval2);
-    s2.src = r2;
-    slot2.classList.remove("spinning");
-    playTickSound();
-  }, 1250);
+  for(let i=0;i<9;i++){
+    final.push(randomImage());
+  }
 
-  setTimeout(() => {
-    clearInterval(interval3);
-    s3.src = r3;
-    slot3.classList.remove("spinning");
-    playTickSound();
+  const middleSlotsWinChance = {
+    "npc1.png": 0.80,
+    "npc2.png": 0.60,
+    "npc3.png": 0.50,
+    "npc4.png": 0.10
+  };
 
-    checkWin(r1, r2, r3);
+  const possibleWinner = getWeightedWinner();
 
-    spinning = false;
-    spinBtn.disabled = false;
-  }, 1600);
+  if(Math.random() < middleSlotsWinChance[possibleWinner]){
+    final[3] = possibleWinner;
+    final[4] = possibleWinner;
+    final[5] = possibleWinner;
+  }else{
+    final[3] = randomImage();
+    final[4] = randomImage();
+    final[5] = randomImage();
+
+    while(final[3] === final[4] && final[4] === final[5]){
+      final[5] = randomImage();
+    }
+  }
+
+  cells.forEach((item, i) => {
+    setTimeout(() => {
+      clearInterval(intervals[i]);
+      item.img.src = final[i];
+      item.cell.classList.remove("spinning");
+      playTickSound();
+
+      if(i === 8){
+        finishSpin(final);
+      }
+    }, 650 + i * 120);
+  });
 }
 
-function checkWin(r1, r2, r3){
-  if(r1 === r2 && r2 === r3){
-    const winPoints = points[r1];
+function finishSpin(final){
+  const mid1 = final[3];
+  const mid2 = final[4];
+  const mid3 = final[5];
 
+  if(mid1 === mid2 && mid2 === mid3){
+    const winPoints = points[mid1];
     score += winPoints;
 
     if(score > highScore){
@@ -297,21 +367,23 @@ function checkWin(r1, r2, r3){
     }
 
     localStorage.setItem("slotScore", score);
-
-    messageBox.innerText = "WIN +" + winPoints + " POINTS!";
+    messageBox.innerText = "MIDDLE LINE WIN +" + winPoints;
     updateScore();
     winEffect();
     playWinSound();
-  } else {
+  }else{
     messageBox.innerText = "NO WIN";
     localStorage.setItem("slotScore", score);
     updateScore();
   }
+
+  spinning = false;
+  spinBtn.disabled = false;
 }
 
 function updateScore(){
-  scoreBox.innerText = "Score: " + score;
-  highScoreBox.innerText = "High Score: " + highScore;
+  scoreBox.innerText = score;
+  highScoreBox.innerText = highScore;
 }
 
 function winEffect(){
@@ -325,43 +397,40 @@ function winEffect(){
   screenFlash.classList.add("active");
 }
 
-function playTone(freq, duration, type = "square", volume = 0.08){
+function playTone(freq, duration, type="square", volume=.06){
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const ctx = new AudioContext();
-
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
 
   osc.type = type;
   osc.frequency.value = freq;
-
   gain.gain.value = volume;
 
   osc.connect(gain);
   gain.connect(ctx.destination);
 
   osc.start();
-
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + duration);
   osc.stop(ctx.currentTime + duration);
 }
 
 function playSpinSound(){
-  playTone(180, .12, "square", .05);
-  setTimeout(() => playTone(240, .12, "square", .05), 120);
-  setTimeout(() => playTone(320, .12, "square", .05), 240);
-  setTimeout(() => playTone(420, .12, "square", .05), 360);
+  playTone(160,.1);
+  setTimeout(()=>playTone(230,.1),100);
+  setTimeout(()=>playTone(310,.1),200);
+  setTimeout(()=>playTone(430,.1),300);
 }
 
 function playTickSound(){
-  playTone(520, .07, "square", .06);
+  playTone(520,.06,"square",.05);
 }
 
 function playWinSound(){
-  playTone(520, .12, "square", .08);
-  setTimeout(() => playTone(680, .12, "square", .08), 130);
-  setTimeout(() => playTone(860, .16, "square", .08), 260);
-  setTimeout(() => playTone(1100, .22, "square", .08), 420);
+  playTone(520,.12);
+  setTimeout(()=>playTone(700,.12),130);
+  setTimeout(()=>playTone(900,.16),260);
+  setTimeout(()=>playTone(1150,.22),420);
 }
 </script>
 
