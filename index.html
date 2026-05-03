@@ -85,10 +85,7 @@ body{
   background:#fff;
   opacity:0;
   pointer-events:none;
-  box-shadow:
-    0 0 12px #fff,
-    0 0 25px #00ffff,
-    0 0 45px #ff00cc;
+  box-shadow:0 0 12px #fff,0 0 25px #00ffff,0 0 45px #ff00cc;
   z-index:5;
 }
 
@@ -123,8 +120,7 @@ body{
   justify-content:center;
 }
 
-.modeBtn,
-#spinBtn{
+.modeBtn,#spinBtn,.betBtn{
   border:none;
   border-radius:14px;
   font-weight:bold;
@@ -156,24 +152,29 @@ body{
   box-shadow:0 0 18px #00ffff,0 0 38px #00ffff;
 }
 
-.score-panel{
-  width:245px;
-  padding:24px;
+#spinBtn:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+.side-panel{
+  width:270px;
+  padding:22px;
   border:4px solid #00ffff;
   border-radius:22px;
   background:rgba(5,5,18,.92);
   box-shadow:0 0 22px #00ffff, inset 0 0 25px #ff00cc;
 }
 
-.score-panel h2{
-  margin:0 0 22px;
+.side-panel h2{
+  margin:0 0 18px;
   color:#ff43dc;
   text-align:center;
   text-shadow:0 0 12px #ff00cc;
 }
 
-.score-box{
-  margin-bottom:18px;
+.box{
+  margin-bottom:14px;
   padding:14px;
   border:2px solid #ff00cc;
   border-radius:12px;
@@ -181,8 +182,49 @@ body{
   box-shadow:inset 0 0 12px #ff00cc;
 }
 
-.label{font-size:14px;color:#00ffff}
-.value{font-size:28px;margin-top:6px}
+.label{
+  font-size:13px;
+  color:#00ffff;
+}
+
+.value{
+  font-size:27px;
+  margin-top:6px;
+}
+
+#betInput{
+  width:100%;
+  margin-top:8px;
+  padding:10px;
+  border-radius:10px;
+  border:2px solid #00ffff;
+  background:#070012;
+  color:#fff;
+  font-size:22px;
+  font-family:monospace;
+  outline:none;
+  box-shadow:0 0 12px #00ffff;
+}
+
+.bet-buttons{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+  margin-top:10px;
+}
+
+.betBtn{
+  padding:11px;
+  background:#1b1230;
+  color:#fff;
+  border:2px solid #00ffff;
+  box-shadow:0 0 12px #00ffff;
+}
+
+.betBtn.active{
+  background:#00ffff;
+  color:#070012;
+}
 
 #message{
   min-height:34px;
@@ -209,28 +251,44 @@ body{
   100%{opacity:0}
 }
 
-@media(max-width:850px){
+.fallingCoin{
+  position:fixed;
+  top:-80px;
+  width:48px;
+  height:48px;
+  object-fit:contain;
+  image-rendering:pixelated;
+  z-index:9999;
+  pointer-events:none;
+  animation:coinFall linear forwards;
+  filter:drop-shadow(0 0 10px gold);
+}
+
+@keyframes coinFall{
+  0%{
+    transform:translateY(-80px) rotate(0deg) scale(.8);
+    opacity:1;
+  }
+  100%{
+    transform:translateY(110vh) rotate(720deg) scale(1.2);
+    opacity:0;
+  }
+}
+
+@media(max-width:900px){
   body{overflow:auto}
   #game{
     height:auto;
     min-height:100vh;
     padding:90px 0 30px;
   }
-  .main-wrap{
-    flex-direction:column;
-  }
-  .title{
-    top:18px;
-    font-size:24px;
-  }
+  .main-wrap{flex-direction:column}
+  .title{top:18px;font-size:24px}
   .grid{
     grid-template-columns:repeat(3,90px);
     grid-template-rows:repeat(3,90px);
   }
-  .cell{
-    width:90px;
-    height:90px;
-  }
+  .cell{width:90px;height:90px}
   .line-top{top:36px}
   .line-mid{top:138px}
   .line-bot{top:240px}
@@ -257,11 +315,11 @@ body{
         <div class="cell"><img id="c2" src="npc3.png"></div>
 
         <div class="cell"><img id="c3" src="npc1.png"></div>
-        <div class="cell"><img id="c4" src="npc1.png"></div>
+        <div class="cell"><img id="c4" src="car.png"></div>
         <div class="cell"><img id="c5" src="npc1.png"></div>
 
         <div class="cell"><img id="c6" src="npc4.png"></div>
-        <div class="cell"><img id="c7" src="npc2.png"></div>
+        <div class="cell"><img id="c7" src="boss.png"></div>
         <div class="cell"><img id="c8" src="npc3.png"></div>
       </div>
 
@@ -273,21 +331,33 @@ body{
       <button id="spinBtn" onclick="spin()">SPIN</button>
     </div>
 
-    <div class="score-panel">
-      <h2>SCORE PANEL</h2>
+    <div class="side-panel">
+      <h2>ლარის პანელი</h2>
 
-      <div class="score-box">
-        <div class="label">CURRENT SCORE</div>
-        <div class="value" id="score">0</div>
+      <div class="box">
+        <div class="label">ბალანსი</div>
+        <div class="value" id="balance">1000₾</div>
       </div>
 
-      <div class="score-box">
-        <div class="label">HIGH SCORE</div>
-        <div class="value" id="highScore">0</div>
+      <div class="box">
+        <div class="label">მაქს ბალანსი</div>
+        <div class="value" id="maxBalance">1000₾</div>
       </div>
 
-      <div class="score-box">
-        <div class="label">PLAY MODE</div>
+      <div class="box">
+        <div class="label">BET / ფსონი</div>
+        <input id="betInput" type="number" min="1" value="10" oninput="customBet()">
+
+        <div class="bet-buttons">
+          <button class="betBtn active" id="bet10" onclick="setBet(10)">10₾</button>
+          <button class="betBtn" id="bet20" onclick="setBet(20)">20₾</button>
+          <button class="betBtn" id="bet30" onclick="setBet(30)">30₾</button>
+          <button class="betBtn" id="bet40" onclick="setBet(40)">40₾</button>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="label">თამაშის რეჟიმი</div>
         <div class="value" id="modeText">1 LINE</div>
       </div>
 
@@ -298,28 +368,47 @@ body{
 </div>
 
 <script>
-const images = ["npc1.png","npc2.png","npc3.png","npc4.png"];
+const images = [
+  "npc1.png",
+  "npc2.png",
+  "npc3.png",
+  "npc4.png",
+  "car.png",
+  "boss.png"
+];
 
-const points = {
+const WILD = "car.png";
+const BOSS = "boss.png";
+const COIN = "coin.png";
+
+const basePayout = {
   "npc1.png":100,
   "npc2.png":200,
   "npc3.png":300,
   "npc4.png":400
 };
 
-let score = Number(localStorage.getItem("slotScore")) || 0;
-let highScore = Number(localStorage.getItem("slotHighScore")) || 0;
+let balance = Number(localStorage.getItem("slotBalance"));
+if(!balance) balance = 1000;
+
+let maxBalance = Number(localStorage.getItem("slotMaxBalance"));
+if(!maxBalance) maxBalance = balance;
+
+let bet = Number(localStorage.getItem("slotBet")) || 10;
 let spinning = false;
 let playMode = 1;
 
 const spinBtn = document.getElementById("spinBtn");
-const scoreBox = document.getElementById("score");
-const highScoreBox = document.getElementById("highScore");
+const balanceBox = document.getElementById("balance");
+const maxBalanceBox = document.getElementById("maxBalance");
 const messageBox = document.getElementById("message");
 const screenFlash = document.getElementById("screenFlash");
 const modeText = document.getElementById("modeText");
+const betInput = document.getElementById("betInput");
 
-updateScore();
+betInput.value = bet;
+updateMoney();
+updateBetButtons();
 
 function setMode(mode){
   if(spinning) return;
@@ -331,6 +420,32 @@ function setMode(mode){
   document.getElementById("threeLineBtn").classList.toggle("active", mode === 3);
 
   clearLines();
+}
+
+function setBet(amount){
+  if(spinning) return;
+
+  bet = amount;
+  betInput.value = amount;
+  localStorage.setItem("slotBet", bet);
+  updateBetButtons();
+}
+
+function customBet(){
+  if(spinning) return;
+
+  bet = Number(betInput.value) || 1;
+  if(bet < 1) bet = 1;
+
+  localStorage.setItem("slotBet", bet);
+  updateBetButtons();
+}
+
+function updateBetButtons(){
+  [10,20,30,40].forEach(v=>{
+    const btn = document.getElementById("bet"+v);
+    if(btn) btn.classList.toggle("active", Number(betInput.value) === v);
+  });
 }
 
 function randomImage(){
@@ -349,6 +464,19 @@ function getWeightedWinner(){
 
 function spin(){
   if(spinning) return;
+
+  bet = Number(betInput.value) || 1;
+  if(bet < 1) bet = 1;
+
+  if(balance < bet){
+    messageBox.innerText = "არ გაქვს საკმარისი ₾";
+    playLoseSound();
+    return;
+  }
+
+  balance -= bet;
+  saveMoney();
+  updateMoney();
 
   spinning = true;
   spinBtn.disabled = true;
@@ -377,7 +505,7 @@ function spin(){
     final.push(randomImage());
   }
 
-  const middleSlotsWinChance = {
+  const winChance = {
     "npc1.png": 0.80,
     "npc2.png": 0.60,
     "npc3.png": 0.50,
@@ -386,20 +514,17 @@ function spin(){
 
   const winner = getWeightedWinner();
 
-  if(Math.random() < middleSlotsWinChance[winner]){
+  if(Math.random() < winChance[winner]){
     if(playMode === 1){
       final[3] = winner;
-      final[4] = winner;
+      final[4] = Math.random() < 0.35 ? WILD : winner;
       final[5] = winner;
     }else{
-      const lines = [
-        [0,1,2],
-        [3,4,5],
-        [6,7,8]
-      ];
-
+      const lines = [[0,1,2],[3,4,5],[6,7,8]];
       const selectedLine = lines[Math.floor(Math.random() * lines.length)];
-      selectedLine.forEach(i => final[i] = winner);
+      selectedLine.forEach((i, index) => {
+        final[i] = index === 1 && Math.random() < 0.35 ? WILD : winner;
+      });
     }
   }else{
     preventAccidentalWins(final);
@@ -425,7 +550,7 @@ function preventAccidentalWins(final){
     : [[0,1,2],[3,4,5],[6,7,8]];
 
   linesToCheck.forEach(line => {
-    while(final[line[0]] === final[line[1]] && final[line[1]] === final[line[2]]){
+    while(getLineWinSymbol(line.map(i => final[i])) || isBossBonus(line.map(i => final[i]))){
       final[line[2]] = randomImage();
     }
   });
@@ -433,59 +558,121 @@ function preventAccidentalWins(final){
 
 function finishSpin(final){
   const lines = playMode === 1
-    ? [{name:"middle", cells:[3,4,5], el:"lineMid"}]
+    ? [{cells:[3,4,5], el:"lineMid"}]
     : [
-        {name:"top", cells:[0,1,2], el:"lineTop"},
-        {name:"middle", cells:[3,4,5], el:"lineMid"},
-        {name:"bottom", cells:[6,7,8], el:"lineBot"}
+        {cells:[0,1,2], el:"lineTop"},
+        {cells:[3,4,5], el:"lineMid"},
+        {cells:[6,7,8], el:"lineBot"}
       ];
 
   let totalWin = 0;
   let winCount = 0;
+  let bonusTriggered = false;
 
   lines.forEach(line => {
-    const [a,b,c] = line.cells;
+    const symbols = line.cells.map(i => final[i]);
 
-    if(final[a] === final[b] && final[b] === final[c]){
-      const winPoints = points[final[a]];
-      totalWin += winPoints;
+    if(isBossBonus(symbols)){
+      bonusTriggered = true;
+      totalWin += Math.floor((500 * bet) / 10);
+      winCount++;
+      document.getElementById(line.el).classList.add("active");
+      return;
+    }
+
+    const winSymbol = getLineWinSymbol(symbols);
+
+    if(winSymbol){
+      const payout = Math.floor((basePayout[winSymbol] * bet) / 10);
+      totalWin += payout;
       winCount++;
       document.getElementById(line.el).classList.add("active");
     }
   });
 
   if(totalWin > 0){
-    score += totalWin;
+    balance += totalWin;
 
-    if(score > highScore){
-      highScore = score;
-      localStorage.setItem("slotHighScore", highScore);
+    if(balance > maxBalance){
+      maxBalance = balance;
     }
 
-    localStorage.setItem("slotScore", score);
-    messageBox.innerText = winCount + " LINE WIN +" + totalWin;
-    updateScore();
+    saveMoney();
+    updateMoney();
+
+    messageBox.innerText = bonusTriggered
+      ? "COIN BONUS +" + totalWin + "₾"
+      : winCount + " LINE WIN +" + totalWin + "₾";
+
     winEffect();
     playWinSound();
+
+    if(bonusTriggered){
+      coinRain();
+      playCoinRainSound();
+    }
   }else{
-    messageBox.innerText = "NO WIN";
-    localStorage.setItem("slotScore", score);
-    updateScore();
+    saveMoney();
+    updateMoney();
+    messageBox.innerText = "NO WIN -" + bet + "₾";
   }
 
   spinning = false;
   spinBtn.disabled = false;
 }
 
+function getLineWinSymbol(symbols){
+  const nonWild = symbols.filter(s => s !== WILD && s !== BOSS);
+
+  if(nonWild.length === 0){
+    return "npc4.png";
+  }
+
+  const first = nonWild[0];
+  const allSame = nonWild.every(s => s === first);
+
+  return allSame && basePayout[first] ? first : null;
+}
+
+function isBossBonus(symbols){
+  return symbols.includes(BOSS) &&
+         symbols.includes("npc3.png") &&
+         symbols.includes("npc4.png");
+}
+
+function coinRain(){
+  for(let i = 0; i < 50; i++){
+    const coin = document.createElement("img");
+    coin.src = COIN;
+    coin.className = "fallingCoin";
+
+    coin.style.left = Math.random() * 100 + "vw";
+    coin.style.animationDelay = Math.random() * 0.8 + "s";
+    coin.style.animationDuration = (1.8 + Math.random() * 1.6) + "s";
+
+    document.body.appendChild(coin);
+
+    setTimeout(() => {
+      coin.remove();
+    }, 4000);
+  }
+}
+
+function saveMoney(){
+  localStorage.setItem("slotBalance", balance);
+  localStorage.setItem("slotMaxBalance", maxBalance);
+  localStorage.setItem("slotBet", bet);
+}
+
+function updateMoney(){
+  balanceBox.innerText = balance + "₾";
+  maxBalanceBox.innerText = maxBalance + "₾";
+}
+
 function clearLines(){
   document.getElementById("lineTop").classList.remove("active");
   document.getElementById("lineMid").classList.remove("active");
   document.getElementById("lineBot").classList.remove("active");
-}
-
-function updateScore(){
-  scoreBox.innerText = score;
-  highScoreBox.innerText = highScore;
 }
 
 function winEffect(){
@@ -528,6 +715,18 @@ function playWinSound(){
   setTimeout(()=>playTone(700,.12),130);
   setTimeout(()=>playTone(900,.16),260);
   setTimeout(()=>playTone(1150,.22),420);
+}
+
+function playCoinRainSound(){
+  for(let i = 0; i < 18; i++){
+    setTimeout(() => {
+      playTone(700 + Math.random() * 500, .05, "square", .05);
+    }, i * 55);
+  }
+}
+
+function playLoseSound(){
+  playTone(120,.18,"sawtooth",.05);
 }
 </script>
 
