@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1980 Pixel Slot</title>
+
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+
+<body>
+
+<div id="game">
+
+  <h1>1980 PIXEL SLOT</h1>
+
+  <div id="slotBox">
+
+    <div id="winLine"></div>
+
+    <div id="grid">
+      <img class="cell" src="images/npc1.png">
+      <img class="cell" src="images/npc2.png">
+      <img class="cell" src="images/npc3.png">
+
+      <img class="cell" src="images/npc1.png">
+      <img class="cell" src="images/car.png">
+      <img class="cell" src="images/npc1.png">
+
+      <img class="cell" src="images/npc4.png">
+      <img class="cell" src="images/npc2.png">
+      <img class="cell" src="images/npc3.png">
+    </div>
+
+    <button id="spinBtn">SPIN</button>
+
+  </div>
+
+  <div id="panel">
+    <h2>ლარის პანელი</h2>
+
+    <div>
+      ბალანსი:
+      <span id="balance">1000 ₾</span>
+    </div>
+
+    <div id="bets">
+      <button class="bet" data-bet="10">10₾</button>
+      <button class="bet" data-bet="20">20₾</button>
+      <button class="bet" data-bet="30">30₾</button>
+      <button class="bet" data-bet="40">40₾</button>
+    </div>
+  </div>
+
+  <img id="boss" src="images/boss.png" style="display:none;">
+
+  <div id="coins"></div>
+
+</div>
+
+</body>
+</html>
