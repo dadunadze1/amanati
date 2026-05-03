@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>1980 Pixel Slot</title>
-
   <link rel="stylesheet" href="style.css">
   <script src="script.js" defer></script>
 </head>
@@ -12,51 +11,76 @@
 <body>
 
 <div id="game">
-
+  <div id="screenFlash"></div>
   <h1>1980 PIXEL SLOT</h1>
 
-  <div id="slotBox">
+  <img id="boss" src="assets/images/boss.png" alt="boss">
 
-    <div id="winLine"></div>
+  <div id="main">
 
-    <div id="grid">
-      <img class="cell" src="images/npc1.png">
-      <img class="cell" src="images/npc2.png">
-      <img class="cell" src="images/npc3.png">
+    <div id="slotMachine">
+      <div id="grid">
+        <div class="winLine lineTop" id="lineTop"></div>
+        <div class="winLine lineMid" id="lineMid"></div>
+        <div class="winLine lineBot" id="lineBot"></div>
 
-      <img class="cell" src="images/npc1.png">
-      <img class="cell" src="images/car.png">
-      <img class="cell" src="images/npc1.png">
+        <div class="cell"><div class="reel" id="r0"></div></div>
+        <div class="cell"><div class="reel" id="r1"></div></div>
+        <div class="cell"><div class="reel" id="r2"></div></div>
 
-      <img class="cell" src="images/npc4.png">
-      <img class="cell" src="images/npc2.png">
-      <img class="cell" src="images/npc3.png">
+        <div class="cell"><div class="reel" id="r3"></div></div>
+        <div class="cell"><div class="reel" id="r4"></div></div>
+        <div class="cell"><div class="reel" id="r5"></div></div>
+
+        <div class="cell"><div class="reel" id="r6"></div></div>
+        <div class="cell"><div class="reel" id="r7"></div></div>
+        <div class="cell"><div class="reel" id="r8"></div></div>
+      </div>
+
+      <div class="modeButtons">
+        <button class="modeBtn active" id="oneLineBtn" onclick="setMode(1)">1 LINE</button>
+        <button class="modeBtn" id="threeLineBtn" onclick="setMode(3)">3 LINES</button>
+      </div>
+
+      <button id="spinBtn" onclick="spin()">SPIN</button>
     </div>
 
-    <button id="spinBtn">SPIN</button>
+    <div id="panel">
+      <h2>ლარის პანელი</h2>
+
+      <div class="box">
+        <div class="label">ბალანსი</div>
+        <div class="value" id="balance">1000₾</div>
+      </div>
+
+      <div class="box">
+        <div class="label">მაქს ბალანსი</div>
+        <div class="value" id="maxBalance">1000₾</div>
+      </div>
+
+      <div class="box">
+        <div class="label">RTP</div>
+        <div class="value" id="rtp">0%</div>
+      </div>
+
+      <div class="box">
+        <div class="label">BET</div>
+        <input id="betInput" type="number" min="1" value="10" oninput="customBet()">
+
+        <div class="betButtons">
+          <button class="betBtn active" id="bet10" onclick="setBet(10)">10₾</button>
+          <button class="betBtn" id="bet20" onclick="setBet(20)">20₾</button>
+          <button class="betBtn" id="bet30" onclick="setBet(30)">30₾</button>
+          <button class="betBtn" id="bet40" onclick="setBet(40)">40₾</button>
+        </div>
+      </div>
+
+      <button id="resetBtn" onclick="resetGame()">RESET</button>
+
+      <div id="message">READY</div>
+    </div>
 
   </div>
-
-  <div id="panel">
-    <h2>ლარის პანელი</h2>
-
-    <div>
-      ბალანსი:
-      <span id="balance">1000 ₾</span>
-    </div>
-
-    <div id="bets">
-      <button class="bet" data-bet="10">10₾</button>
-      <button class="bet" data-bet="20">20₾</button>
-      <button class="bet" data-bet="30">30₾</button>
-      <button class="bet" data-bet="40">40₾</button>
-    </div>
-  </div>
-
-  <img id="boss" src="images/boss.png" style="display:none;">
-
-  <div id="coins"></div>
-
 </div>
 
 </body>
