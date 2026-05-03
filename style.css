@@ -1,6 +1,4 @@
-*{
-  box-sizing:border-box;
-}
+*{box-sizing:border-box}
 
 body{
   margin:0;
@@ -98,9 +96,9 @@ h1{
   animation:lineFlash .36s ease-in-out infinite alternate;
 }
 
-.lineTop{ top:56px; }
-.lineMid{ top:198px; }
-.lineBot{ top:340px; }
+.lineTop{top:56px}
+.lineMid{top:198px}
+.lineBot{top:340px}
 
 @keyframes lineFlash{
   from{transform:scaleX(.88);opacity:.45}
@@ -114,10 +112,7 @@ h1{
   justify-content:center;
 }
 
-.modeBtn,
-.betBtn,
-#spinBtn,
-#resetBtn{
+.modeBtn,.betBtn,#spinBtn,#resetBtn{
   border:none;
   border-radius:14px;
   font-weight:bold;
@@ -298,9 +293,7 @@ h1{
 }
 
 @media(max-width:900px){
-  body{
-    overflow:auto;
-  }
+  body{overflow:auto}
 
   #game{
     height:auto;
@@ -308,9 +301,7 @@ h1{
     padding:90px 0 30px;
   }
 
-  #main{
-    flex-direction:column;
-  }
+  #main{flex-direction:column}
 
   h1{
     top:18px;
