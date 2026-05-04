@@ -5,14 +5,14 @@ import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-
 
 // IMPORTANT:
 // Firebase Console -> Project settings -> General -> Your apps -> Web app config
-// აქ ჩასვი შენი რეალური Firebase config.
-export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID"
+// const firebaseConfig = {
+  apiKey: "AIzaSyBF421H4mkNB9Ve_uJ8Ph6z4LrbxzKlrC4",
+  authDomain: "amanatebi123-43963.firebaseapp.com",
+  projectId: "amanatebi123-43963",
+  storageBucket: "amanatebi123-43963.firebasestorage.app",
+  messagingSenderId: "882036563594",
+  appId: "1:882036563594:web:45cb83f81121eb7941d773"
+};
 };
 
 export const app = initializeApp(firebaseConfig);
