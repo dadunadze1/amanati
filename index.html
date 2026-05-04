@@ -19,48 +19,29 @@
 
     .card{
       width:330px;background:#111827;padding:22px;border-radius:18px;color:white;
-      box-shadow:0 20px 60px rgba(0,0,0,.45);
     }
-
-    .card h1{font-size:24px;margin:0 0 5px}
-    .card p{margin:0 0 15px;color:#cbd5e1}
 
     input,select,button{
-      width:100%;padding:12px;margin-top:8px;border-radius:10px;
-      border:1px solid #334155;font-size:14px;
+      width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid #334155;
     }
 
-    input,select{background:#0f172a;color:white}
-    button{border:0;background:#22c55e;color:#052e16;font-weight:bold;cursor:pointer}
-    .blue{background:#38bdf8;color:#082f49}
-    .red{background:#ef4444;color:white}
-    .dark{background:#1e293b;color:white}
+    button{background:#22c55e;font-weight:bold}
 
     #menuBtn{
-      position:fixed;top:15px;right:15px;z-index:3000;
-      width:auto;display:none;
+      position:fixed;top:15px;right:15px;z-index:3000;display:none;
     }
 
     #sidebar{
-      position:fixed;top:0;right:-330px;width:300px;height:100vh;
-      background:#111827;color:white;z-index:2500;padding:20px;
-      transition:.3s;overflow:auto;
+      position:fixed;top:0;right:-320px;width:300px;height:100%;
+      background:#111827;color:white;padding:20px;transition:.3s;
     }
 
     #sidebar.open{right:0}
 
     #panel{
-      position:fixed;left:20px;bottom:20px;width:380px;max-height:80vh;
-      overflow:auto;background:white;color:#111;z-index:2600;padding:16px;
-      border-radius:16px;display:none;box-shadow:0 20px 60px rgba(0,0,0,.35);
+      position:fixed;left:20px;bottom:20px;width:350px;
+      background:white;padding:15px;border-radius:12px;display:none;
     }
-
-    .courier-item,.order-item{
-      border:1px solid #ddd;padding:10px;border-radius:10px;
-      margin-bottom:8px;background:#f8fafc;
-    }
-
-    .small{font-size:13px;color:#475569}
   </style>
 </head>
 
@@ -70,376 +51,169 @@
 
 <section id="authBox">
   <div class="card">
-    <h1>🚚 Courier FLAGS PRO</h1>
-    <p>Admin / Courier login</p>
-
-    <input id="email" type="email" placeholder="Email">
+    <h2>Login</h2>
+    <input id="email" placeholder="Email">
     <input id="password" type="password" placeholder="Password">
-
     <button onclick="login()">შესვლა</button>
-    <button class="blue" onclick="registerCourier()">რეგისტრაცია კურიერად</button>
-
-    <p id="authMessage" class="small"></p>
+    <p id="authMessage"></p>
   </div>
 </section>
 
-<button id="menuBtn" class="dark" onclick="toggleMenu()">☰</button>
+<button id="menuBtn" onclick="toggleMenu()">☰</button>
 
-<aside id="sidebar">
-  <h2>მენიუ</h2>
-
-  <button onclick="openAdminPanel()">ადმინის პანელი</button>
-  <button onclick="openAddCourier()">➕ კურიერის დამატება</button>
-  <button onclick="loadCouriers()">📋 კურიერების სია</button>
-  <button onclick="loadOrders()">📦 შეკვეთების სია</button>
-  <button onclick="openAnalytics()">ანალიტიკა</button>
-  <button class="red" onclick="logout()">გასვლა</button>
-</aside>
+<div id="sidebar">
+  <button onclick="logout()">გასვლა</button>
+</div>
 
 <div id="panel"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import {
-    getAuth,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged
-  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-  import {
-    getFirestore,
-    doc,
-    getDoc,
-    setDoc,
-    addDoc,
-    collection,
-    getDocs,
-    serverTimestamp,
-    query,
-    orderBy
-  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  addDoc,
+  collection,
+  getDocs,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBF421H4mkNB9Ve_uJ8Ph6z4LrbxzKlrC4",
-    authDomain: "amanatebi123-43963.firebaseapp.com",
-    projectId: "amanatebi123-43963",
-    storageBucket: "amanatebi123-43963.firebasestorage.app",
-    messagingSenderId: "882036563594",
-    appId: "1:882036563594:web:c800b0f2bb6977a441d773"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyBF421H4mkNB9Ve_uJ8Ph6z4LrbxzKlrC4",
+  authDomain: "amanatebi123-43963.firebaseapp.com",
+  projectId: "amanatebi123-43963",
+  storageBucket: "amanatebi123-43963.firebasestorage.app",
+  messagingSenderId: "882036563594",
+  appId: "1:882036563594:web:c800b0f2bb6977a441d773"
+};
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-  let currentUserRole = null;
-  let selectedLatLng = null;
-  let orderMarker = null;
-  let orderMarkers = [];
+const map = L.map("map").setView([41.7151,44.8271],12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 
-  const map = L.map("map").setView([41.7151, 44.8271], 12);
+let selectedLatLng = null;
+let orderMarker = null;
+let orderMarkers = [];
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap"
-  }).addTo(map);
+function showApp(){
+  document.getElementById("authBox").style.display="none";
+  document.getElementById("menuBtn").style.display="block";
+}
 
-  window.toggleMenu = function(){
-    document.getElementById("sidebar").classList.toggle("open");
-  };
+function showLogin(){
+  document.getElementById("authBox").style.display="flex";
+}
 
-  window.showPanel = function(html){
-    const panel = document.getElementById("panel");
-    panel.innerHTML = html;
-    panel.style.display = "block";
-  };
+window.login = async function(){
+  const email = emailInput.value;
+  const password = passwordInput.value;
 
-  window.closePanel = function(){
-    document.getElementById("panel").style.display = "none";
-  };
+  try{
+    const cred = await signInWithEmailAndPassword(auth,email,password);
+    const snap = await getDoc(doc(db,"users",cred.user.uid));
 
-  function showApp(){
-    document.getElementById("authBox").style.display = "none";
-    document.getElementById("menuBtn").style.display = "block";
-  }
-
-  function showLogin(){
-    document.getElementById("authBox").style.display = "flex";
-    document.getElementById("menuBtn").style.display = "none";
-  }
-
-  async function checkRole(user){
-    const snap = await getDoc(doc(db, "users", user.uid));
-
-    if (!snap.exists()) {
-      alert("ეს user Firestore users-ში არ არსებობს");
-      showLogin();
-      return;
+    if(snap.exists()){
+      showApp();
+      loadOrderMarkers();
     }
+  }catch(e){
+    authMessage.textContent = e.message;
+  }
+};
 
-    const data = snap.data();
-    currentUserRole = data.role;
+window.logout = async function(){
+  await signOut(auth);
+  location.reload();
+};
+
+window.toggleMenu = function(){
+  sidebar.classList.toggle("open");
+};
+
+map.on("click", async function(e){
+  selectedLatLng = e.latlng;
+
+  if(orderMarker){
+    map.removeLayer(orderMarker);
+  }
+
+  orderMarker = L.marker(selectedLatLng).addTo(map);
+
+  const snap = await getDocs(collection(db,"couriers"));
+
+  let options="";
+  snap.forEach(d=>{
+    const c=d.data();
+    options+=`<option value="${d.id}|${c.name}">${c.name}</option>`;
+  });
+
+  panel.innerHTML=`
+    <input id="oName" placeholder="სახელი">
+    <input id="oPhone" placeholder="ტელეფონი">
+    <input id="oAddress" placeholder="მისამართი">
+    <select id="oCourier">${options}</select>
+    <button onclick="saveOrder()">შენახვა</button>
+  `;
+  panel.style.display="block";
+});
+
+window.saveOrder = async function(){
+  const [courierId,courierName]=oCourier.value.split("|");
+
+  await addDoc(collection(db,"orders"),{
+    clientName:oName.value,
+    clientPhone:oPhone.value,
+    address:oAddress.value,
+    courierId,
+    courierName,
+    status:"pending",
+    lat:selectedLatLng.lat,
+    lng:selectedLatLng.lng,
+    createdAt:serverTimestamp()
+  });
+
+  alert("დაემატა");
+  panel.style.display="none";
+  loadOrderMarkers();
+};
+
+async function loadOrderMarkers(){
+  orderMarkers.forEach(m=>map.removeLayer(m));
+  orderMarkers=[];
+
+  const snap = await getDocs(collection(db,"orders"));
+
+  snap.forEach(d=>{
+    const o=d.data();
+
+    const marker=L.marker([o.lat,o.lng]).addTo(map)
+      .bindPopup(o.clientName);
+
+    orderMarkers.push(marker);
+  });
+}
+
+onAuthStateChanged(auth,user=>{
+  if(user){
     showApp();
+    loadOrderMarkers();
+  }else{
+    showLogin();
   }
-
-  window.login = async function(){
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value.trim();
-
-    try{
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      await checkRole(cred.user);
-    }catch(e){
-      document.getElementById("authMessage").textContent = e.message;
-    }
-  };
-
-  window.registerCourier = async function(){
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value.trim();
-
-    try{
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-
-      await setDoc(doc(db, "users", cred.user.uid), {
-        email,
-        role: "courier",
-        createdAt: serverTimestamp()
-      });
-
-      alert("კურიერი დარეგისტრირდა ✅");
-      await checkRole(cred.user);
-    }catch(e){
-      document.getElementById("authMessage").textContent = e.message;
-    }
-  };
-
-  window.logout = async function(){
-    await signOut(auth);
-    location.reload();
-  };
-
-  window.openAdminPanel = function(){
-    if(currentUserRole !== "admin"){
-      alert("ეს ფუნქცია მხოლოდ ადმინისთვისაა");
-      return;
-    }
-
-    showPanel(`
-      <button onclick="closePanel()">× დახურვა</button>
-      <h2>ადმინის პანელი</h2>
-      <p>რუქაზე დააჭირე ნებისმიერ ადგილს შეკვეთის დასამატებლად.</p>
-    `);
-  };
-
-  window.openAddCourier = function(){
-    if(currentUserRole !== "admin"){
-      alert("მხოლოდ ადმინს შეუძლია კურიერის დამატება");
-      return;
-    }
-
-    showPanel(`
-      <button onclick="closePanel()">× დახურვა</button>
-      <h2>➕ კურიერის დამატება</h2>
-
-      <input id="cName" placeholder="სახელი და გვარი">
-      <input id="cPhone" placeholder="ტელეფონი">
-      <input id="cEmail" placeholder="Email">
-      <input id="cZone" placeholder="ზონა მაგალითად: vake">
-
-      <button onclick="saveCourier()">შენახვა</button>
-    `);
-  };
-
-  window.saveCourier = async function(){
-    const name = document.getElementById("cName").value.trim();
-    const phone = document.getElementById("cPhone").value.trim();
-    const email = document.getElementById("cEmail").value.trim();
-    const zone = document.getElementById("cZone").value.trim();
-
-    if(!name || !phone || !email || !zone){
-      alert("ყველა ველი შეავსე");
-      return;
-    }
-
-    await addDoc(collection(db, "couriers"), {
-      name,
-      phone,
-      email,
-      zone,
-      active: true,
-      createdAt: serverTimestamp()
-    });
-
-    alert("კურიერი დაემატა ✅");
-    loadCouriers();
-  };
-
-  window.loadCouriers = async function(){
-    if(currentUserRole !== "admin"){
-      alert("მხოლოდ ადმინს შეუძლია კურიერების ნახვა");
-      return;
-    }
-
-    const q = query(collection(db, "couriers"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-
-    let html = `
-      <button onclick="closePanel()">× დახურვა</button>
-      <h2>📋 კურიერების სია</h2>
-    `;
-
-    if(snap.empty){
-      html += `<p>კურიერები ჯერ არ არის დამატებული.</p>`;
-    }
-
-    snap.forEach(docItem => {
-      const c = docItem.data();
-      html += `
-        <div class="courier-item">
-          <b>${c.name || "-"}</b><br>
-          📞 ${c.phone || "-"}<br>
-          ✉️ ${c.email || "-"}<br>
-          📍 ზონა: ${c.zone || "-"}<br>
-          აქტიური: ${c.active ? "კი" : "არა"}
-        </div>
-      `;
-    });
-
-    showPanel(html);
-  };
-
-  map.on("click", async function(e){
-    if(currentUserRole !== "admin") return;
-
-    selectedLatLng = e.latlng;
-
-    if(orderMarker){
-      map.removeLayer(orderMarker);
-    }
-
-    orderMarker = L.marker(selectedLatLng).addTo(map);
-
-    const snap = await getDocs(collection(db, "couriers"));
-
-    let options = "";
-    snap.forEach(docItem => {
-      const c = docItem.data();
-      options += `<option value="${docItem.id}|${c.name}">${c.name} (${c.zone || "-"})</option>`;
-    });
-
-    showPanel(`
-      <button onclick="closePanel()">× დახურვა</button>
-      <h2>➕ შეკვეთის დამატება</h2>
-
-      <input id="oName" placeholder="კლიენტის სახელი">
-      <input id="oPhone" placeholder="კლიენტის ტელეფონი">
-      <input id="oAddress" placeholder="მისამართი">
-      <input id="oZone" placeholder="ზონა მაგალითად: vake">
-
-      <select id="oCourier">
-        <option value="">აირჩიე კურიერი</option>
-        ${options}
-      </select>
-
-      <button onclick="saveOrder()">შენახვა</button>
-    `);
-  });
-
-  window.saveOrder = async function(){
-    const clientName = document.getElementById("oName").value.trim();
-    const clientPhone = document.getElementById("oPhone").value.trim();
-    const address = document.getElementById("oAddress").value.trim();
-    const zone = document.getElementById("oZone").value.trim();
-    const courierVal = document.getElementById("oCourier").value;
-
-    if(!clientName || !clientPhone || !address || !zone || !courierVal){
-      alert("ყველა ველი შეავსე");
-      return;
-    }
-
-    const [courierId, courierName] = courierVal.split("|");
-
-    await addDoc(collection(db, "orders"), {
-      clientName,
-      clientPhone,
-      address,
-      zone,
-      courierId,
-      courierName,
-      status: "pending",
-      lat: selectedLatLng.lat,
-      lng: selectedLatLng.lng,
-      createdAt: serverTimestamp()
-    });
-
-    L.marker(selectedLatLng)
-      .addTo(map)
-      .bindPopup(`
-        <b>${clientName}</b><br>
-        ${address}<br>
-        კურიერი: ${courierName}<br>
-        სტატუსი: pending
-      `);
-
-    alert("შეკვეთა დაემატა ✅");
-    closePanel();
-  };
-
-  window.loadOrders = async function(){
-    if(currentUserRole !== "admin"){
-      alert("მხოლოდ ადმინს შეუძლია შეკვეთების ნახვა");
-      return;
-    }
-
-    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-
-    let html = `
-      <button onclick="closePanel()">× დახურვა</button>
-      <h2>📦 შეკვეთების სია</h2>
-    `;
-
-    if(snap.empty){
-      html += `<p>შეკვეთები ჯერ არ არის დამატებული.</p>`;
-    }
-
-    snap.forEach(docItem => {
-      const o = docItem.data();
-
-      html += `
-        <div class="order-item">
-          <b>${o.clientName || "-"}</b><br>
-          📞 ${o.clientPhone || "-"}<br>
-          📍 ${o.address || "-"}<br>
-          ზონა: ${o.zone || "-"}<br>
-          🚚 კურიერი: ${o.courierName || "-"}<br>
-          სტატუსი: ${o.status || "-"}
-        </div>
-      `;
-    });
-
-    showPanel(html);
-  };
-
-  window.openAnalytics = function(){
-    showPanel(`
-      <button onclick="closePanel()">× დახურვა</button>
-      <h2>ანალიტიკა</h2>
-      <p>შემდეგ ეტაპზე აქ დავამატებთ შეკვეთების რაოდენობას, კურიერის ეფექტიანობას და დღიურ სტატისტიკას.</p>
-    `);
-  };
-
-  onAuthStateChanged(auth, async (user) => {
-    if(user){
-      await checkRole(user);
-    }else{
-      showLogin();
-    }
-  });
+});
 </script>
 
 </body>
