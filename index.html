@@ -1,71 +1,83 @@
 <!DOCTYPE html>
 <html lang="ka">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta charset="UTF-8">
   <title>Courier FLAGS PRO</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <style>
+    body { margin:0; }
+    #map { height:100vh; }
+
+    #authBox {
+      position:fixed;
+      top:0; left:0;
+      width:100%; height:100%;
+      background:#111;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      z-index:9999;
+    }
+
+    .card {
+      background:#222;
+      padding:20px;
+      border-radius:10px;
+      color:white;
+      width:250px;
+    }
+
+    input, button {
+      width:100%;
+      margin-top:10px;
+      padding:8px;
+    }
+
+    #menuBtn {
+      position:absolute;
+      top:10px;
+      right:10px;
+      background:black;
+      color:white;
+      padding:10px;
+      cursor:pointer;
+      display:none;
+    }
+  </style>
 </head>
 
 <body>
 
-  <div id="map"></div>
+<div id="map"></div>
 
-  <section id="authBox" class="auth-screen">
-    <div class="auth-card">
-      <div class="auth-header">
-        <div class="auth-logo">🚚</div>
-        <div>
-          <h1>Courier FLAGS PRO</h1>
-          <p>Admin / Courier login</p>
-        </div>
-      </div>
+<div id="authBox">
+  <div class="card">
+    <h3>Login</h3>
+    <input id="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
 
-      <div class="auth-tabs">
-        <button type="button" onclick="login()">შესვლა</button>
-        <button type="button" onclick="register()">რეგისტრაცია</button>
-      </div>
-
-      <input id="email" type="email" placeholder="Email" autocomplete="email" />
-      <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
-
-      <button class="main-auth-btn" type="button" onclick="login()">შესვლა</button>
-
-      <p id="authMessage" class="auth-message"></p>
-
-      <div class="firebase-note">
-        სატესტო Firebase: შექმენი user Firebase Authentication-ში ან გამოიყენე რეგისტრაცია.
-      </div>
-    </div>
-  </section>
-
-  <button id="menuBtn" class="menu-btn hidden" onclick="toggleMenu()">☰</button>
-
-  <aside id="sidebar" class="sidebar">
-    <h2>მენიუ</h2>
-
-    <button onclick="showAdminPanel()">ადმინის პანელი</button>
-    <button onclick="showCourierPanel()">კურიერის პანელი</button>
-    <button onclick="openClients()">კლიენტების ბაზა</button>
-    <button onclick="openAnalytics()">ანალიტიკა</button>
-    <button onclick="openReports()">ანგარიშები</button>
-    <button onclick="logout()">გასვლა</button>
-  </aside>
-
-  <div id="panel" class="panel hidden">
-    <button class="close-panel" onclick="closePanel()">×</button>
-    <div id="panelContent"></div>
+    <button onclick="login()">შესვლა</button>
+    <button onclick="register()">რეგისტრაცია</button>
   </div>
+</div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div id="menuBtn">☰</div>
 
-  <script type="module">
-    import "./firebase.js";
-    import "./auth.js";
-    import "./app.js";
-  </script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // MAP
+  const map = L.map('map').setView([41.7151, 44.8271], 12);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+</script>
+
+<script type="module">
+  import "./firebase.js";
+  import "./auth.js";
+</script>
 
 </body>
 </html>
