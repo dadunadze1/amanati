@@ -1,129 +1,69 @@
 <!DOCTYPE html>
 <html lang="ka">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Courier FLAGS PRO</title>
 
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-  <style>
-    body { margin:0; font-family:Arial; overflow:hidden; background:#111; }
-    #map { height:100vh; width:100vw; }
-
-    /* LOGIN */
-    #authBox{
-      position:fixed;
-      top:0;left:0;
-      width:100vw;height:100vh;
-      background:#111;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      z-index:9999;
-    }
-
-    .authCard{
-      width:300px;
-      background:#1e1e1e;
-      padding:20px;
-      border-radius:10px;
-      color:white;
-    }
-
-    .authCard input{
-      width:100%;
-      padding:10px;
-      margin-bottom:10px;
-      border:none;
-      border-radius:6px;
-    }
-
-    .authCard button{
-      width:100%;
-      padding:10px;
-      background:#0ea5e9;
-      border:none;
-      color:white;
-      border-radius:6px;
-      cursor:pointer;
-    }
-
-    /* MENU */
-    #menuBtn{
-      position:absolute;
-      top:15px;
-      right:15px;
-      z-index:2000;
-      background:#111;
-      color:white;
-      padding:10px 14px;
-      border-radius:8px;
-      cursor:pointer;
-    }
-
-    #sidebar{
-      position:fixed;
-      top:0;
-      right:-320px;
-      width:300px;
-      height:100%;
-      background:#111;
-      color:white;
-      padding:15px;
-      transition:0.3s;
-      z-index:3000;
-      overflow:auto;
-    }
-
-    #sidebar.open{ right:0; }
-
-    button{
-      width:100%;
-      padding:8px;
-      margin-bottom:8px;
-      background:#222;
-      color:white;
-      border:none;
-      border-radius:6px;
-      cursor:pointer;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
 
-<!-- MAP -->
-<div id="map"></div>
+  <div id="map"></div>
 
-<!-- LOGIN -->
-<div id="authBox">
-  <div class="authCard">
-    <h3>Login</h3>
-    <input type="email" id="email" placeholder="Email">
-    <input type="password" id="password" placeholder="Password">
-    <button onclick="login()">შესვლა</button>
+  <section id="authBox" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">🚚</div>
+        <div>
+          <h1>Courier FLAGS PRO</h1>
+          <p>Admin / Courier login</p>
+        </div>
+      </div>
+
+      <div class="auth-tabs">
+        <button type="button" onclick="login()">შესვლა</button>
+        <button type="button" onclick="register()">რეგისტრაცია</button>
+      </div>
+
+      <input id="email" type="email" placeholder="Email" autocomplete="email" />
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+
+      <button class="main-auth-btn" type="button" onclick="login()">შესვლა</button>
+
+      <p id="authMessage" class="auth-message"></p>
+
+      <div class="firebase-note">
+        სატესტო Firebase: შექმენი user Firebase Authentication-ში ან გამოიყენე რეგისტრაცია.
+      </div>
+    </div>
+  </section>
+
+  <button id="menuBtn" class="menu-btn hidden" onclick="toggleMenu()">☰</button>
+
+  <aside id="sidebar" class="sidebar">
+    <h2>მენიუ</h2>
+
+    <button onclick="showAdminPanel()">ადმინის პანელი</button>
+    <button onclick="showCourierPanel()">კურიერის პანელი</button>
+    <button onclick="openClients()">კლიენტების ბაზა</button>
+    <button onclick="openAnalytics()">ანალიტიკა</button>
+    <button onclick="openReports()">ანგარიშები</button>
+    <button onclick="logout()">გასვლა</button>
+  </aside>
+
+  <div id="panel" class="panel hidden">
+    <button class="close-panel" onclick="closePanel()">×</button>
+    <div id="panelContent"></div>
   </div>
-</div>
 
-<!-- MENU -->
-<div id="menuBtn" onclick="toggleMenu()">☰</div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<div id="sidebar">
-  <h3>მენიუ</h3>
-
-  <button onclick="openClients()">კლიენტები</button>
-  <button onclick="openOrders()">შეკვეთები</button>
-  <button onclick="openAnalytics()">ანალიტიკა</button>
-  <button onclick="logout()">გასვლა</button>
-</div>
-
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<!-- მთავარი აპი -->
-<script type="module" src="app.js"></script>
+  <script type="module" src="firebase.js"></script>
+  <script type="module" src="auth.js"></script>
+  <script type="module" src="app.js"></script>
 
 </body>
 </html>
