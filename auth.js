@@ -1,39 +1,50 @@
-import { auth } from "./firebase.js";
+import { auth } from "./firebase.js?v=20";
+
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signOut
+  signOut,
+  onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// LOGIN
+const authBox = document.getElementById("authBox");
+const menuBtn = document.getElementById("menuBtn");
+const authMessage = document.getElementById("authMessage");
+
 window.login = async function () {
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value.trim();
 
   try {
     await signInWithEmailAndPassword(auth, email, password);
-    document.getElementById("authBox").style.display = "none";
-    alert("შესვლა წარმატებულია ✅");
-  } catch (e) {
-    alert(e.message);
+    authMessage.textContent = "";
+  } catch (error) {
+    authMessage.textContent = error.message;
   }
 };
 
-// REGISTER
 window.register = async function () {
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value.trim();
 
   try {
     await createUserWithEmailAndPassword(auth, email, password);
-    alert("რეგისტრაცია წარმატებულია");
-  } catch (e) {
-    alert(e.message);
+    authMessage.textContent = "რეგისტრაცია წარმატებულია ✅";
+  } catch (error) {
+    authMessage.textContent = error.message;
   }
 };
 
-// LOGOUT
 window.logout = async function () {
   await signOut(auth);
-  location.reload();
 };
+
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    authBox.style.display = "none";
+    menuBtn.style.display = "block";
+  } else {
+    authBox.style.display = "flex";
+    menuBtn.style.display = "none";
+  }
+});
