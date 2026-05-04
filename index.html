@@ -13,20 +13,12 @@
     #map{width:100vw;height:100vh}
 
     #authBox{
-      position:fixed;inset:0;
-      background:rgba(15,23,42,.88);
-      z-index:9999;
-      display:flex;
-      align-items:center;
-      justify-content:center;
+      position:fixed;inset:0;background:rgba(15,23,42,.88);
+      z-index:9999;display:flex;align-items:center;justify-content:center;
     }
 
     .card{
-      width:330px;
-      background:#111827;
-      padding:22px;
-      border-radius:18px;
-      color:white;
+      width:330px;background:#111827;padding:22px;border-radius:18px;color:white;
       box-shadow:0 20px 60px rgba(0,0,0,.45);
     }
 
@@ -34,78 +26,38 @@
     .card p{margin:0 0 15px;color:#cbd5e1}
 
     input,select,button{
-      width:100%;
-      padding:12px;
-      margin-top:8px;
-      border-radius:10px;
-      border:1px solid #334155;
-      font-size:14px;
+      width:100%;padding:12px;margin-top:8px;border-radius:10px;
+      border:1px solid #334155;font-size:14px;
     }
 
-    input,select{
-      background:#0f172a;
-      color:white;
-    }
-
-    button{
-      border:0;
-      background:#22c55e;
-      color:#052e16;
-      font-weight:bold;
-      cursor:pointer;
-    }
-
+    input,select{background:#0f172a;color:white}
+    button{border:0;background:#22c55e;color:#052e16;font-weight:bold;cursor:pointer}
     .blue{background:#38bdf8;color:#082f49}
     .red{background:#ef4444;color:white}
     .dark{background:#1e293b;color:white}
 
     #menuBtn{
-      position:fixed;
-      top:15px;
-      right:15px;
-      z-index:3000;
-      width:auto;
-      display:none;
+      position:fixed;top:15px;right:15px;z-index:3000;
+      width:auto;display:none;
     }
 
     #sidebar{
-      position:fixed;
-      top:0;
-      right:-330px;
-      width:300px;
-      height:100vh;
-      background:#111827;
-      color:white;
-      z-index:2500;
-      padding:20px;
-      transition:.3s;
-      overflow:auto;
+      position:fixed;top:0;right:-330px;width:300px;height:100vh;
+      background:#111827;color:white;z-index:2500;padding:20px;
+      transition:.3s;overflow:auto;
     }
 
     #sidebar.open{right:0}
 
     #panel{
-      position:fixed;
-      left:20px;
-      bottom:20px;
-      width:360px;
-      max-height:80vh;
-      overflow:auto;
-      background:white;
-      color:#111;
-      z-index:2600;
-      padding:16px;
-      border-radius:16px;
-      display:none;
-      box-shadow:0 20px 60px rgba(0,0,0,.35);
+      position:fixed;left:20px;bottom:20px;width:380px;max-height:80vh;
+      overflow:auto;background:white;color:#111;z-index:2600;padding:16px;
+      border-radius:16px;display:none;box-shadow:0 20px 60px rgba(0,0,0,.35);
     }
 
-    .courier-item{
-      border:1px solid #ddd;
-      padding:10px;
-      border-radius:10px;
-      margin-bottom:8px;
-      background:#f8fafc;
+    .courier-item,.order-item{
+      border:1px solid #ddd;padding:10px;border-radius:10px;
+      margin-bottom:8px;background:#f8fafc;
     }
 
     .small{font-size:13px;color:#475569}
@@ -139,6 +91,7 @@
   <button onclick="openAdminPanel()">ადმინის პანელი</button>
   <button onclick="openAddCourier()">➕ კურიერის დამატება</button>
   <button onclick="loadCouriers()">📋 კურიერების სია</button>
+  <button onclick="loadOrders()">📦 შეკვეთების სია</button>
   <button onclick="openAnalytics()">ანალიტიკა</button>
   <button class="red" onclick="logout()">გასვლა</button>
 </aside>
@@ -146,28 +99,6 @@
 <div id="panel"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<script>
-  const map = L.map("map").setView([41.7151, 44.8271], 12);
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap"
-  }).addTo(map);
-
-  window.toggleMenu = function(){
-    document.getElementById("sidebar").classList.toggle("open");
-  };
-
-  window.showPanel = function(html){
-    const panel = document.getElementById("panel");
-    panel.innerHTML = html;
-    panel.style.display = "block";
-  };
-
-  window.closePanel = function(){
-    document.getElementById("panel").style.display = "none";
-  };
-</script>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -206,6 +137,29 @@
   const db = getFirestore(app);
 
   let currentUserRole = null;
+  let selectedLatLng = null;
+  let orderMarker = null;
+  let orderMarkers = [];
+
+  const map = L.map("map").setView([41.7151, 44.8271], 12);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap"
+  }).addTo(map);
+
+  window.toggleMenu = function(){
+    document.getElementById("sidebar").classList.toggle("open");
+  };
+
+  window.showPanel = function(html){
+    const panel = document.getElementById("panel");
+    panel.innerHTML = html;
+    panel.style.display = "block";
+  };
+
+  window.closePanel = function(){
+    document.getElementById("panel").style.display = "none";
+  };
 
   function showApp(){
     document.getElementById("authBox").style.display = "none";
@@ -228,14 +182,7 @@
 
     const data = snap.data();
     currentUserRole = data.role;
-
     showApp();
-
-    if (data.role === "admin") {
-      console.log("ADMIN MODE");
-    } else {
-      console.log("COURIER MODE");
-    }
   }
 
   window.login = async function(){
@@ -284,7 +231,7 @@
     showPanel(`
       <button onclick="closePanel()">× დახურვა</button>
       <h2>ადმინის პანელი</h2>
-      <p>აქედან მართავ კურიერებს, შეკვეთებს და ანალიტიკას.</p>
+      <p>რუქაზე დააჭირე ნებისმიერ ადგილს შეკვეთის დასამატებლად.</p>
     `);
   };
 
@@ -358,6 +305,119 @@
           ✉️ ${c.email || "-"}<br>
           📍 ზონა: ${c.zone || "-"}<br>
           აქტიური: ${c.active ? "კი" : "არა"}
+        </div>
+      `;
+    });
+
+    showPanel(html);
+  };
+
+  map.on("click", async function(e){
+    if(currentUserRole !== "admin") return;
+
+    selectedLatLng = e.latlng;
+
+    if(orderMarker){
+      map.removeLayer(orderMarker);
+    }
+
+    orderMarker = L.marker(selectedLatLng).addTo(map);
+
+    const snap = await getDocs(collection(db, "couriers"));
+
+    let options = "";
+    snap.forEach(docItem => {
+      const c = docItem.data();
+      options += `<option value="${docItem.id}|${c.name}">${c.name} (${c.zone || "-"})</option>`;
+    });
+
+    showPanel(`
+      <button onclick="closePanel()">× დახურვა</button>
+      <h2>➕ შეკვეთის დამატება</h2>
+
+      <input id="oName" placeholder="კლიენტის სახელი">
+      <input id="oPhone" placeholder="კლიენტის ტელეფონი">
+      <input id="oAddress" placeholder="მისამართი">
+      <input id="oZone" placeholder="ზონა მაგალითად: vake">
+
+      <select id="oCourier">
+        <option value="">აირჩიე კურიერი</option>
+        ${options}
+      </select>
+
+      <button onclick="saveOrder()">შენახვა</button>
+    `);
+  });
+
+  window.saveOrder = async function(){
+    const clientName = document.getElementById("oName").value.trim();
+    const clientPhone = document.getElementById("oPhone").value.trim();
+    const address = document.getElementById("oAddress").value.trim();
+    const zone = document.getElementById("oZone").value.trim();
+    const courierVal = document.getElementById("oCourier").value;
+
+    if(!clientName || !clientPhone || !address || !zone || !courierVal){
+      alert("ყველა ველი შეავსე");
+      return;
+    }
+
+    const [courierId, courierName] = courierVal.split("|");
+
+    await addDoc(collection(db, "orders"), {
+      clientName,
+      clientPhone,
+      address,
+      zone,
+      courierId,
+      courierName,
+      status: "pending",
+      lat: selectedLatLng.lat,
+      lng: selectedLatLng.lng,
+      createdAt: serverTimestamp()
+    });
+
+    L.marker(selectedLatLng)
+      .addTo(map)
+      .bindPopup(`
+        <b>${clientName}</b><br>
+        ${address}<br>
+        კურიერი: ${courierName}<br>
+        სტატუსი: pending
+      `);
+
+    alert("შეკვეთა დაემატა ✅");
+    closePanel();
+  };
+
+  window.loadOrders = async function(){
+    if(currentUserRole !== "admin"){
+      alert("მხოლოდ ადმინს შეუძლია შეკვეთების ნახვა");
+      return;
+    }
+
+    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+
+    let html = `
+      <button onclick="closePanel()">× დახურვა</button>
+      <h2>📦 შეკვეთების სია</h2>
+    `;
+
+    if(snap.empty){
+      html += `<p>შეკვეთები ჯერ არ არის დამატებული.</p>`;
+    }
+
+    snap.forEach(docItem => {
+      const o = docItem.data();
+
+      html += `
+        <div class="order-item">
+          <b>${o.clientName || "-"}</b><br>
+          📞 ${o.clientPhone || "-"}<br>
+          📍 ${o.address || "-"}<br>
+          ზონა: ${o.zone || "-"}<br>
+          🚚 კურიერი: ${o.courierName || "-"}<br>
+          სტატუსი: ${o.status || "-"}
         </div>
       `;
     });
