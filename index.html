@@ -1,97 +1,129 @@
 <!DOCTYPE html>
 <html lang="ka">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Courier FLAGS PRO</title>
 
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css" />
+
+  <style>
+    body { margin:0; font-family:Arial; overflow:hidden; background:#111; }
+    #map { height:100vh; width:100vw; }
+
+    /* LOGIN */
+    #authBox{
+      position:fixed;
+      top:0;left:0;
+      width:100vw;height:100vh;
+      background:#111;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      z-index:9999;
+    }
+
+    .authCard{
+      width:300px;
+      background:#1e1e1e;
+      padding:20px;
+      border-radius:10px;
+      color:white;
+    }
+
+    .authCard input{
+      width:100%;
+      padding:10px;
+      margin-bottom:10px;
+      border:none;
+      border-radius:6px;
+    }
+
+    .authCard button{
+      width:100%;
+      padding:10px;
+      background:#0ea5e9;
+      border:none;
+      color:white;
+      border-radius:6px;
+      cursor:pointer;
+    }
+
+    /* MENU */
+    #menuBtn{
+      position:absolute;
+      top:15px;
+      right:15px;
+      z-index:2000;
+      background:#111;
+      color:white;
+      padding:10px 14px;
+      border-radius:8px;
+      cursor:pointer;
+    }
+
+    #sidebar{
+      position:fixed;
+      top:0;
+      right:-320px;
+      width:300px;
+      height:100%;
+      background:#111;
+      color:white;
+      padding:15px;
+      transition:0.3s;
+      z-index:3000;
+      overflow:auto;
+    }
+
+    #sidebar.open{ right:0; }
+
+    button{
+      width:100%;
+      padding:8px;
+      margin-bottom:8px;
+      background:#222;
+      color:white;
+      border:none;
+      border-radius:6px;
+      cursor:pointer;
+    }
+  </style>
 </head>
+
 <body>
-  <div id="map"></div>
 
-  <section id="authScreen" class="auth-screen">
-    <div class="auth-card">
-      <div class="brand">
-        <div class="brand-icon">🚚</div>
-        <div>
-          <h1>Courier FLAGS PRO</h1>
-          <p>Admin / Courier login</p>
-        </div>
-      </div>
+<!-- MAP -->
+<div id="map"></div>
 
-      <div class="auth-tabs">
-        <button id="loginTab" class="active">შესვლა</button>
-        <button id="registerTab">რეგისტრაცია</button>
-      </div>
+<!-- LOGIN -->
+<div id="authBox">
+  <div class="authCard">
+    <h3>Login</h3>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">შესვლა</button>
+  </div>
+</div>
 
-      <input id="emailInput" type="email" placeholder="Email" autocomplete="email" />
-      <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" />
+<!-- MENU -->
+<div id="menuBtn" onclick="toggleMenu()">☰</div>
 
-      <select id="roleInput" class="hidden">
-        <option value="courier">კურიერი</option>
-        <option value="staff">პერსონალი</option>
-        <option value="admin">ადმინი</option>
-      </select>
+<div id="sidebar">
+  <h3>მენიუ</h3>
 
-      <input id="nameInput" class="hidden" type="text" placeholder="სახელი და გვარი" />
-      <input id="phoneInput" class="hidden" type="text" placeholder="ტელეფონი" />
+  <button onclick="openClients()">კლიენტები</button>
+  <button onclick="openOrders()">შეკვეთები</button>
+  <button onclick="openAnalytics()">ანალიტიკა</button>
+  <button onclick="logout()">გასვლა</button>
+</div>
 
-      <button id="authActionBtn" class="primary-btn">შესვლა</button>
-      <p id="authMessage" class="message"></p>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-      <div class="demo-box">
-        <b>სატესტო Firebase:</b>
-        <span>შეავსე <code>firebase.js</code>-ში შენი Firebase config.</span>
-      </div>
-    </div>
-  </section>
+<!-- მთავარი აპი -->
+<script type="module" src="app.js"></script>
 
-  <button id="menuBtn" class="menu-btn hidden">☰</button>
-
-  <aside id="sidebar" class="sidebar">
-    <div class="sidebar-head">
-      <div>
-        <h2 id="panelTitle">პანელი</h2>
-        <p id="userInfo">Loading...</p>
-      </div>
-      <button id="closeMenuBtn" class="icon-btn">×</button>
-    </div>
-
-    <div id="adminPanel" class="panel hidden">
-      <button data-module="analytics">ეფექტიანობის ანალიზი</button>
-      <button data-module="clients">კლიენტების ბაზა</button>
-      <button data-module="interactions">კლიენტთან ურთიერთობის ისტორია</button>
-      <button data-module="staffPerformance">პერსონალის ეფექტიანობის მონიტორინგი</button>
-      <button data-module="gps">GPS კონტროლი</button>
-      <button data-module="autoReplies">პასუხების ავტომატიზაცია</button>
-      <button data-module="schedules">დაგეგმვის ავტომატიზაცია</button>
-      <button data-module="payroll">ანაზღაურების ავტომატური გამოთვლა</button>
-      <button data-module="documents">დოკუმენტების ავტომატური შექმნა</button>
-      <button data-module="reports">ანალიტიკა და ანგარიშები</button>
-      <button data-module="knowledgeBase">ცოდნის ბაზა</button>
-      <button data-module="accounting">ბუღალტრული აღრიცხვა</button>
-      <button data-module="equipment">აღჭურვილობის მონაცემების მართვა</button>
-    </div>
-
-    <div id="courierPanel" class="panel hidden">
-      <button data-courier-action="myOrders">ჩემი შეკვეთები</button>
-      <button data-courier-action="startGps">GPS ჩართვა</button>
-      <button data-courier-action="stopGps">GPS გამორთვა</button>
-      <button data-courier-action="history">შესრულებული შეკვეთები</button>
-      <button data-courier-action="salary">ჩემი ანაზღაურება</button>
-    </div>
-
-    <div id="moduleView" class="module-view">
-      <h3>მოდული</h3>
-      <p>აირჩიე ფუნქცია მენიუდან.</p>
-    </div>
-
-    <button id="logoutBtn" class="danger-btn">გასვლა</button>
-  </aside>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="app.js"></script>
 </body>
 </html>
