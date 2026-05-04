@@ -1,50 +1,47 @@
-import { auth } from "./firebase.js?v=20";
+import { auth, db } from "./firebase.js";
+import { signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// 👉 ეს აგვარებს initAuth error-ს
+export function initAuth() {
+  console.log("Auth initialized");
+}
 
-const authBox = document.getElementById("authBox");
-const menuBtn = document.getElementById("menuBtn");
-const authMessage = document.getElementById("authMessage");
-
+// 👉 ეს აგვარებს login is not defined error-ს
 window.login = async function () {
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value.trim();
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
 
   try {
-    await signInWithEmailAndPassword(auth, email, password);
-    authMessage.textContent = "";
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // 🔍 ვამოწმებთ Firestore-ში არის თუ არა admin
+    const userRef = doc(db, "users", user.uid);
+    const docSnap = await getDoc(userRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+
+      if (data.role === "admin") {
+        alert("Admin login წარმატებულია 🔥");
+      } else {
+        alert("User login წარმატებულია");
+      }
+    } else {
+      alert("User არ მოიძებნა Firestore-ში");
+    }
+
   } catch (error) {
-    authMessage.textContent = error.message;
+    alert("Login error: " + error.message);
   }
 };
 
-window.register = async function () {
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value.trim();
-
-  try {
-    await createUserWithEmailAndPassword(auth, email, password);
-    authMessage.textContent = "რეგისტრაცია წარმატებულია ✅";
-  } catch (error) {
-    authMessage.textContent = error.message;
-  }
-};
-
-window.logout = async function () {
-  await signOut(auth);
-};
-
+// 👉 ეს ავტომატურად ამოწმებს login-ს
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    authBox.style.display = "none";
-    menuBtn.style.display = "block";
+    console.log("Logged in:", user.email);
   } else {
-    authBox.style.display = "flex";
-    menuBtn.style.display = "none";
+    console.log("Logged out");
   }
 });
