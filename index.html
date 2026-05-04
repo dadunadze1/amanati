@@ -61,9 +61,11 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <script type="module" src="firebase.js"></script>
-  <script type="module" src="auth.js"></script>
-  <script type="module" src="app.js"></script>
+  <script type="module">
+    import "./firebase.js";
+    import "./auth.js";
+    import "./app.js";
+  </script>
 
 </body>
 </html>
