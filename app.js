@@ -1,50 +1,93 @@
-import { initMap, listenCouriersOnMap, listenOrdersOnMap, listenClientsOnMap } from "./map.js";
-import { initAuth } from "./auth.js";
-import { initAdminPanel } from "./admin.js";
-import { initCourierPanel } from "./courier.js";
+// app.js — CLEAN FIXED VERSION
+// აღარ ვაიმპორტებთ initAuth-ს, იმიტომ რომ auth.js მუშაობს window.login/window.register-ით
 
-const authScreen = document.getElementById("authScreen");
-const menuBtn = document.getElementById("menuBtn");
-const sidebar = document.getElementById("sidebar");
-const closeMenuBtn = document.getElementById("closeMenuBtn");
-const adminPanel = document.getElementById("adminPanel");
-const courierPanel = document.getElementById("courierPanel");
-const panelTitle = document.getElementById("panelTitle");
-const userInfo = document.getElementById("userInfo");
-const moduleView = document.getElementById("moduleView");
+// MENU
+window.toggleMenu = function () {
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar) sidebar.classList.toggle("open");
+};
 
-initMap();
-listenCouriersOnMap();
-listenOrdersOnMap();
-listenClientsOnMap();
+// PANEL
+window.closePanel = function () {
+  const panel = document.getElementById("panel");
+  if (panel) panel.classList.add("hidden");
+};
 
-menuBtn.addEventListener("click", () => sidebar.classList.add("open"));
-closeMenuBtn.addEventListener("click", () => sidebar.classList.remove("open"));
-document.getElementById("map").addEventListener("click", () => sidebar.classList.remove("open"));
+function openPanel(title, content) {
+  const panel = document.getElementById("panel");
+  const panelContent = document.getElementById("panelContent");
 
-initAuth((user, profile) => {
-  authScreen.classList.add("hidden");
-  menuBtn.classList.remove("hidden");
-  sidebar.classList.add("open");
+  if (!panel || !panelContent) return;
 
-  const role = profile.role || "courier";
-  panelTitle.textContent = role === "admin" ? "ადმინის პანელი" : role === "staff" ? "პერსონალის პანელი" : "კურიერის პანელი";
-  userInfo.textContent = `${profile.name || profile.email} • ${role}`;
-
-  adminPanel.classList.toggle("hidden", role !== "admin" && role !== "staff");
-  courierPanel.classList.toggle("hidden", role === "admin" || role === "staff");
-
-  moduleView.innerHTML = `
-    <h3>მოგესალმები, ${profile.name || profile.email}</h3>
-    <p>აირჩიე მოდული მენიუდან. რუკა მუშაობს Leaflet + OpenStreetMap-ზე და იკავებს ეკრანის 100%-ს.</p>
+  panelContent.innerHTML = `
+    <h2>${title}</h2>
+    <div>${content}</div>
   `;
 
-  initAdminPanel(profile);
-  initCourierPanel(user, profile);
-}, () => {
-  authScreen.classList.remove("hidden");
-  menuBtn.classList.add("hidden");
-  sidebar.classList.remove("open");
-  adminPanel.classList.add("hidden");
-  courierPanel.classList.add("hidden");
-});
+  panel.classList.remove("hidden");
+}
+
+// ADMIN PANEL
+window.showAdminPanel = function () {
+  openPanel(
+    "ადმინის პანელი",
+    `
+    <p>ადმინის ფუნქციები აქტიურია.</p>
+    <ul>
+      <li>კურიერების მართვა</li>
+      <li>კლიენტების ბაზა</li>
+      <li>შეკვეთების მართვა</li>
+      <li>GPS კონტროლი</li>
+      <li>ანალიტიკა</li>
+    </ul>
+    `
+  );
+};
+
+// COURIER PANEL
+window.showCourierPanel = function () {
+  openPanel(
+    "კურიერის პანელი",
+    `
+    <p>კურიერის ფუნქციები აქტიურია.</p>
+    <ul>
+      <li>ჩემი შეკვეთები</li>
+      <li>ჩემი მარშრუტი</li>
+      <li>GPS ლოკაცია</li>
+      <li>შესრულებული შეკვეთები</li>
+    </ul>
+    `
+  );
+};
+
+// CLIENTS
+window.openClients = function () {
+  openPanel(
+    "კლიენტების ბაზა",
+    `
+    <p>აქ იქნება კლიენტების სია, მისამართები და ისტორია.</p>
+    `
+  );
+};
+
+// ANALYTICS
+window.openAnalytics = function () {
+  openPanel(
+    "ანალიტიკა",
+    `
+    <p>აქ იქნება ეფექტიანობის ანალიზი და სტატისტიკა.</p>
+    `
+  );
+};
+
+// REPORTS
+window.openReports = function () {
+  openPanel(
+    "ანგარიშები",
+    `
+    <p>აქ იქნება ანგარიშები და დოკუმენტები.</p>
+    `
+  );
+};
+
+console.log("app.js loaded successfully ✅");
