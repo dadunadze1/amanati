@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Courier FLAGS PRO</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="map"></div>
+
+  <section id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand">
+        <div class="brand-icon">🚚</div>
+        <div>
+          <h1>Courier FLAGS PRO</h1>
+          <p>Admin / Courier login</p>
+        </div>
+      </div>
+
+      <div class="auth-tabs">
+        <button id="loginTab" class="active">შესვლა</button>
+        <button id="registerTab">რეგისტრაცია</button>
+      </div>
+
+      <input id="emailInput" type="email" placeholder="Email" autocomplete="email" />
+      <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" />
+
+      <select id="roleInput" class="hidden">
+        <option value="courier">კურიერი</option>
+        <option value="staff">პერსონალი</option>
+        <option value="admin">ადმინი</option>
+      </select>
+
+      <input id="nameInput" class="hidden" type="text" placeholder="სახელი და გვარი" />
+      <input id="phoneInput" class="hidden" type="text" placeholder="ტელეფონი" />
+
+      <button id="authActionBtn" class="primary-btn">შესვლა</button>
+      <p id="authMessage" class="message"></p>
+
+      <div class="demo-box">
+        <b>სატესტო Firebase:</b>
+        <span>შეავსე <code>firebase.js</code>-ში შენი Firebase config.</span>
+      </div>
+    </div>
+  </section>
+
+  <button id="menuBtn" class="menu-btn hidden">☰</button>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-head">
+      <div>
+        <h2 id="panelTitle">პანელი</h2>
+        <p id="userInfo">Loading...</p>
+      </div>
+      <button id="closeMenuBtn" class="icon-btn">×</button>
+    </div>
+
+    <div id="adminPanel" class="panel hidden">
+      <button data-module="analytics">ეფექტიანობის ანალიზი</button>
+      <button data-module="clients">კლიენტების ბაზა</button>
+      <button data-module="interactions">კლიენტთან ურთიერთობის ისტორია</button>
+      <button data-module="staffPerformance">პერსონალის ეფექტიანობის მონიტორინგი</button>
+      <button data-module="gps">GPS კონტროლი</button>
+      <button data-module="autoReplies">პასუხების ავტომატიზაცია</button>
+      <button data-module="schedules">დაგეგმვის ავტომატიზაცია</button>
+      <button data-module="payroll">ანაზღაურების ავტომატური გამოთვლა</button>
+      <button data-module="documents">დოკუმენტების ავტომატური შექმნა</button>
+      <button data-module="reports">ანალიტიკა და ანგარიშები</button>
+      <button data-module="knowledgeBase">ცოდნის ბაზა</button>
+      <button data-module="accounting">ბუღალტრული აღრიცხვა</button>
+      <button data-module="equipment">აღჭურვილობის მონაცემების მართვა</button>
+    </div>
+
+    <div id="courierPanel" class="panel hidden">
+      <button data-courier-action="myOrders">ჩემი შეკვეთები</button>
+      <button data-courier-action="startGps">GPS ჩართვა</button>
+      <button data-courier-action="stopGps">GPS გამორთვა</button>
+      <button data-courier-action="history">შესრულებული შეკვეთები</button>
+      <button data-courier-action="salary">ჩემი ანაზღაურება</button>
+    </div>
+
+    <div id="moduleView" class="module-view">
+      <h3>მოდული</h3>
+      <p>აირჩიე ფუნქცია მენიუდან.</p>
+    </div>
+
+    <button id="logoutBtn" class="danger-btn">გასვლა</button>
+  </aside>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
