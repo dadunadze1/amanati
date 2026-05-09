@@ -411,6 +411,15 @@ async function logout() {
     els.bottomNav.hidden = true;
     els.bottomNav.textContent = "";
   }
+  if (els.menuButton) {
+    els.menuButton.hidden = true;
+    els.menuButton.setAttribute("aria-expanded", "false");
+  }
+  if (els.actionPanel) {
+    els.actionPanel.hidden = true;
+    els.actionPanel.textContent = "";
+    els.actionPanel.classList.remove("show");
+  }
   if (els.courierDashboard) {
     els.courierDashboard.hidden = true;
     els.courierDashboard.textContent = "";

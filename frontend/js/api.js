@@ -1,6 +1,7 @@
 "use strict";
 
 const STATIC_DEPLOY_STORAGE_KEY = "deliveryStaticBootstrap:v1";
+const STATIC_SESSION_STORAGE_KEY = "deliveryStaticSession:v1";
 
 function isStaticDeploy() {
   return window.IS_STATIC_DEPLOY === true || window.location.hostname.includes("github.io");
@@ -118,6 +119,22 @@ function createStaticToken(user) {
   return `static:${user.username}:${Date.now()}`;
 }
 
+function saveStaticSession(user) {
+  const session = { token: createStaticToken(user), user: publicStaticUser(user), savedAt: new Date().toISOString() };
+  saveData(STATIC_SESSION_STORAGE_KEY, session);
+  return session;
+}
+
+function loadStaticSessionPayload() {
+  const session = loadData(STATIC_SESSION_STORAGE_KEY);
+  if (!session?.user?.username) return null;
+  return { token: session.token || createStaticToken(session.user), user: session.user, staticMode: true };
+}
+
+function clearStaticSession() {
+  clearData(STATIC_SESSION_STORAGE_KEY);
+}
+
 async function staticApi(path, options = {}) {
   const store = await loadStaticBootstrap();
   const method = options.method || "GET";
@@ -135,36 +152,43 @@ async function staticApi(path, options = {}) {
 
   if (method === "POST" && apiPath === "/api/login") {
     const requestedUsername = body.username || store.settings.defaultUser || store.users.find((user) => user.role === "admin")?.username || store.users[0]?.username;
-    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(requestedUsername)) || store.users[0];
+    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(requestedUsername));
     if (!user) throw new Error(STRINGS.invalidLogin);
-    return { token: createStaticToken(user), user: publicStaticUser(user), staticMode: true };
+    return { ...saveStaticSession(user), staticMode: true };
   }
 
   if (method === "POST" && apiPath === "/api/setup-admin") {
     const username = String(body.username || "admin").trim();
-    const user = { id: `user-${Date.now()}`, username, role: "admin", status: "active", createdAt: new Date().toISOString() };
+    const user = { id: `user-${Date.now()}`, username, password: body.password || "", role: "admin", status: "active", createdAt: new Date().toISOString() };
     store.users.push(user);
     store.settings.defaultUser = username;
     saveStaticBootstrap();
-    return { token: createStaticToken(user), user: publicStaticUser(user), staticMode: true };
+    return { ...saveStaticSession(user), staticMode: true };
   }
 
   if (method === "POST" && apiPath === "/api/register") {
-    store.pending.push({
-      id: `pending-${Date.now()}`,
+    const existing = store.users.find((user) => normalizeUsername(user.username) === normalizeUsername(body.username));
+    if (existing) throw new Error("მომხმარებელი უკვე არსებობს.");
+    const user = {
+      id: `user-${Date.now()}`,
       username: body.username,
+      password: body.password || "",
       firstName: body.firstName || "",
       lastName: body.lastName || "",
       phone: body.phone || "",
       role: "courier",
-      status: "pending",
-      requestedAt: new Date().toISOString(),
-    });
+      status: "active",
+      createdAt: new Date().toISOString(),
+    };
+    store.users.push(user);
     saveStaticBootstrap();
-    return { ok: true };
+    return { ok: true, user: publicStaticUser(user) };
   }
 
-  if (method === "POST" && apiPath === "/api/logout") return { ok: true };
+  if (method === "POST" && apiPath === "/api/logout") {
+    clearStaticSession();
+    return { ok: true };
+  }
 
   if (method === "GET" && apiPath === "/api/users") return { users: store.users.map(publicStaticUser) };
 
@@ -211,6 +235,7 @@ async function staticApi(path, options = {}) {
     const user = {
       id: `user-${Date.now()}`,
       username: body.username,
+      password: body.password || "",
       role: body.role || "courier",
       status: "active",
       firstName: body.firstName || "",

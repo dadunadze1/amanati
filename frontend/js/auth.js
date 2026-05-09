@@ -7,11 +7,13 @@ async function initializeAuth() {
     const bootstrap = await api("/api/bootstrap");
     if (bootstrap.staticMode) {
       console.warn("Static mode enabled");
-      const payload = await api("/api/login", {
-        method: "POST",
-        body: { username: bootstrap.defaultUser },
-      });
-      completeLogin(payload);
+      const session = loadStaticSessionPayload();
+      hideModal(els.setupModal);
+      if (session) {
+        completeLogin(session);
+        return;
+      }
+      showModal(bootstrap.hasAdmin ? els.authModal : els.setupModal);
       return;
     }
     hideModal(els.setupModal);
@@ -20,8 +22,13 @@ async function initializeAuth() {
   } catch (error) {
     if (isStaticDeploy()) {
       console.warn("Static mode enabled", error);
-      const payload = await api("/api/login", { method: "POST", body: {} });
-      completeLogin(payload);
+      const session = loadStaticSessionPayload();
+      hideModal(els.setupModal);
+      if (session) {
+        completeLogin(session);
+        return;
+      }
+      showModal(els.authModal);
       return;
     }
     setMessage(els.loginError, error.message || STRINGS.serverFailed, true);
@@ -64,6 +71,7 @@ function completeLogin(payload) {
   state.authToken = payload.token;
   state.currentUser = payload.user.username;
   state.isAdmin = payload.user.role === "admin";
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open");
   hideModal(els.setupModal);
   hideModal(els.authModal);
   hideModal(els.registerModal);
@@ -90,7 +98,10 @@ async function handleRegistration(event) {
   try {
     await api("/api/register", { method: "POST", body: { username, firstName, lastName, phone, password } });
     els.registerForm.reset();
-    setMessage(els.regError, STRINGS.pendingSent, false);
+    setMessage(els.regError, isStaticDeploy() ? "რეგისტრაცია დასრულდა. შეგიძლიათ შეხვიდეთ." : STRINGS.pendingSent, false);
+    if (isStaticDeploy()) {
+      window.setTimeout(() => switchModal("login"), 700);
+    }
   } catch (error) {
     setMessage(els.regError, error.message, true);
   }

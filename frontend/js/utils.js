@@ -136,6 +136,15 @@ function userProfileFields(user = {}) {
   `;
 }
 
+function readUserProfileFields() {
+  return {
+    firstName: document.getElementById("userFirstName")?.value.trim() || "",
+    lastName: document.getElementById("userLastName")?.value.trim() || "",
+    phone: document.getElementById("userPhone")?.value.trim() || "",
+    bankDetails: document.getElementById("userBankDetails")?.value.trim() || "",
+  };
+}
+
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({

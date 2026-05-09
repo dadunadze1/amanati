@@ -199,7 +199,7 @@ async function saveParcel() {
   const selectedCourierUsername = state.isAdmin ? (document.getElementById("parcelCourier")?.value || "") : state.selectedCourier;
   let courierUsername = selectedCourierUsername;
   if (!fullName || !phone || !state.pendingCoords || (!state.isAdmin && !courierUsername)) return;
-  if (!address || isCoordinateLabel(address)) return showToast(STRINGS.addressRequired);
+  if (!address || (isCoordinateLabel(address) && !(typeof isStaticDeploy === "function" && isStaticDeploy()))) return showToast(STRINGS.addressRequired);
   if (!Number.isFinite(paymentAmount) || paymentAmount < 0) return showToast("შეიყვანეთ სწორი თანხა.");
   state.pendingAddress = address;
   const autoAssignment = state.isAdmin && !courierUsername
