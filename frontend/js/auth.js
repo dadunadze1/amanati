@@ -5,10 +5,25 @@
 async function initializeAuth() {
   try {
     const bootstrap = await api("/api/bootstrap");
+    if (bootstrap.staticMode) {
+      console.warn("Static mode enabled");
+      const payload = await api("/api/login", {
+        method: "POST",
+        body: { username: bootstrap.defaultUser },
+      });
+      completeLogin(payload);
+      return;
+    }
     hideModal(els.setupModal);
     hideModal(els.authModal);
     showModal(bootstrap.hasAdmin ? els.authModal : els.setupModal);
   } catch (error) {
+    if (isStaticDeploy()) {
+      console.warn("Static mode enabled", error);
+      const payload = await api("/api/login", { method: "POST", body: {} });
+      completeLogin(payload);
+      return;
+    }
     setMessage(els.loginError, error.message || STRINGS.serverFailed, true);
   }
 }

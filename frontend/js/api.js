@@ -1,8 +1,335 @@
-﻿"use strict";
+"use strict";
 
+const STATIC_DEPLOY_STORAGE_KEY = "deliveryStaticBootstrap:v1";
 
+function isStaticDeploy() {
+  return window.IS_STATIC_DEPLOY === true || window.location.hostname.includes("github.io");
+}
+
+async function loadStaticBootstrap() {
+  if (loadStaticBootstrap.cache) return loadStaticBootstrap.cache;
+
+  let fallback = {
+    users: [],
+    pending: [],
+    parcels: [],
+    history: [],
+    zones: [],
+    settings: {},
+  };
+
+  try {
+    const response = await fetch("./data/bootstrap.json", { cache: "no-store" });
+    if (response.ok) fallback = { ...fallback, ...(await response.json()) };
+  } catch (error) {
+    console.warn("Static bootstrap data unavailable", error);
+  }
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(STATIC_DEPLOY_STORAGE_KEY) || "null");
+    if (stored && typeof stored === "object") fallback = { ...fallback, ...stored };
+  } catch {
+    localStorage.removeItem(STATIC_DEPLOY_STORAGE_KEY);
+  }
+
+  loadStaticBootstrap.cache = normalizeStaticStore(fallback);
+  saveStaticBootstrap();
+  return loadStaticBootstrap.cache;
+}
+
+function normalizeStaticStore(store) {
+  return {
+    users: Array.isArray(store.users) ? store.users : [],
+    pending: Array.isArray(store.pending) ? store.pending : [],
+    parcels: Array.isArray(store.parcels) ? store.parcels : [],
+    history: Array.isArray(store.history) ? store.history : [],
+    zones: Array.isArray(store.zones) ? store.zones : [],
+    settings: store.settings && typeof store.settings === "object" ? store.settings : {},
+  };
+}
+
+function saveStaticBootstrap() {
+  if (!loadStaticBootstrap.cache) return;
+  localStorage.setItem(STATIC_DEPLOY_STORAGE_KEY, JSON.stringify(loadStaticBootstrap.cache));
+}
+
+function publicStaticUser(user) {
+  return {
+    id: user.id || user.username,
+    username: user.username,
+    role: user.role || "courier",
+    status: user.status || "active",
+    firstName: user.firstName || "",
+    lastName: user.lastName || "",
+    phone: user.phone || "",
+    bankDetails: user.bankDetails || "",
+    zoneId: user.zoneId || "",
+    zoneName: user.zoneName || "",
+    createdAt: user.createdAt || "",
+    requestedAt: user.requestedAt || "",
+    approvedAt: user.approvedAt || "",
+  };
+}
+
+function publicStaticParcel(store, parcel) {
+  const courier = store.users.find((user) => normalizeUsername(user.username) === normalizeUsername(parcel.courierUsername));
+  return {
+    ...parcel,
+    paymentAmount: Number(parcel.paymentAmount || parcel.cashAmount || 0),
+    cashAmount: Number(parcel.cashAmount || parcel.paymentAmount || 0),
+    status: parcel.status || "pending",
+    courier: courier ? publicStaticUser(courier) : null,
+  };
+}
+
+function parseStaticBody(options) {
+  return options.body && typeof options.body === "object" ? options.body : {};
+}
+
+function createStaticToken(user) {
+  return `static:${user.username}:${Date.now()}`;
+}
+
+async function staticApi(path, options = {}) {
+  const store = await loadStaticBootstrap();
+  const method = options.method || "GET";
+  const url = new URL(path, window.location.href);
+  const apiPath = url.pathname.replace(/^\/amanati/, "");
+  const body = parseStaticBody(options);
+
+  if (method === "GET" && apiPath === "/api/bootstrap") {
+    return {
+      hasAdmin: store.users.some((user) => user.role === "admin" && user.status === "active"),
+      staticMode: true,
+      defaultUser: store.settings.defaultUser || store.users.find((user) => user.role === "admin")?.username || store.users[0]?.username || "",
+    };
+  }
+
+  if (method === "POST" && apiPath === "/api/login") {
+    const requestedUsername = body.username || store.settings.defaultUser || store.users.find((user) => user.role === "admin")?.username || store.users[0]?.username;
+    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(requestedUsername)) || store.users[0];
+    if (!user) throw new Error(STRINGS.invalidLogin);
+    return { token: createStaticToken(user), user: publicStaticUser(user), staticMode: true };
+  }
+
+  if (method === "POST" && apiPath === "/api/setup-admin") {
+    const username = String(body.username || "admin").trim();
+    const user = { id: `user-${Date.now()}`, username, role: "admin", status: "active", createdAt: new Date().toISOString() };
+    store.users.push(user);
+    store.settings.defaultUser = username;
+    saveStaticBootstrap();
+    return { token: createStaticToken(user), user: publicStaticUser(user), staticMode: true };
+  }
+
+  if (method === "POST" && apiPath === "/api/register") {
+    store.pending.push({
+      id: `pending-${Date.now()}`,
+      username: body.username,
+      firstName: body.firstName || "",
+      lastName: body.lastName || "",
+      phone: body.phone || "",
+      role: "courier",
+      status: "pending",
+      requestedAt: new Date().toISOString(),
+    });
+    saveStaticBootstrap();
+    return { ok: true };
+  }
+
+  if (method === "POST" && apiPath === "/api/logout") return { ok: true };
+
+  if (method === "GET" && apiPath === "/api/users") return { users: store.users.map(publicStaticUser) };
+
+  if (method === "GET" && apiPath === "/api/couriers") {
+    return { couriers: store.users.filter((user) => user.role === "courier" && user.status === "active").map(publicStaticUser) };
+  }
+
+  if (method === "GET" && apiPath === "/api/pending") return { pending: store.pending.map(publicStaticUser) };
+
+  if (method === "GET" && apiPath === "/api/zones") return { zones: store.zones };
+
+  if (method === "GET" && apiPath === "/api/parcels") {
+    const courier = url.searchParams.get("courier") || "";
+    return {
+      parcels: store.parcels
+        .filter((parcel) => !parcel.archivedAt && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier)))
+        .map((parcel) => publicStaticParcel(store, parcel)),
+    };
+  }
+
+  if (method === "GET" && apiPath === "/api/history") {
+    const courier = url.searchParams.get("courier") || "";
+    return {
+      history: [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)]
+        .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
+        .map((parcel) => publicStaticParcel(store, parcel)),
+    };
+  }
+
+  if (method === "GET" && apiPath === "/api/parcels/search") {
+    const query = String(url.searchParams.get("q") || "").toLowerCase();
+    const records = [...store.parcels, ...store.history];
+    return {
+      parcels: records
+        .filter((parcel) => !query || [parcel.fullName, parcel.phone, parcel.address, parcel.courierUsername, parcel.status].some((value) => String(value || "").toLowerCase().includes(query)))
+        .map((parcel) => publicStaticParcel(store, parcel)),
+    };
+  }
+
+  if (method === "GET" && apiPath === "/api/geocode/search") return [];
+  if (method === "GET" && apiPath === "/api/geocode/reverse") return {};
+
+  if (method === "POST" && apiPath === "/api/users") {
+    const user = {
+      id: `user-${Date.now()}`,
+      username: body.username,
+      role: body.role || "courier",
+      status: "active",
+      firstName: body.firstName || "",
+      lastName: body.lastName || "",
+      phone: body.phone || "",
+      bankDetails: body.bankDetails || "",
+      zoneId: body.zoneId || "",
+      zoneName: body.zoneName || "",
+      createdAt: new Date().toISOString(),
+    };
+    store.users.push(user);
+    saveStaticBootstrap();
+    return { user: publicStaticUser(user) };
+  }
+
+  const pendingMatch = apiPath.match(/^\/api\/pending\/([^/]+)$/);
+  if (pendingMatch && method === "POST") {
+    const username = decodeURIComponent(pendingMatch[1]);
+    const pending = store.pending.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
+    if (pending) {
+      store.pending = store.pending.filter((item) => normalizeUsername(item.username) !== normalizeUsername(username));
+      store.users.push({ ...pending, role: "courier", status: "active", approvedAt: new Date().toISOString() });
+      saveStaticBootstrap();
+    }
+    return { ok: true };
+  }
+  if (pendingMatch && method === "DELETE") {
+    const username = decodeURIComponent(pendingMatch[1]);
+    store.pending = store.pending.filter((item) => normalizeUsername(item.username) !== normalizeUsername(username));
+    saveStaticBootstrap();
+    return { ok: true };
+  }
+
+  const userMatch = apiPath.match(/^\/api\/users\/([^/]+)$/);
+  if (userMatch && method === "PUT") {
+    const username = decodeURIComponent(userMatch[1]);
+    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
+    if (user) Object.assign(user, body);
+    saveStaticBootstrap();
+    return { user: user ? publicStaticUser(user) : null };
+  }
+  if (userMatch && method === "DELETE") {
+    const username = decodeURIComponent(userMatch[1]);
+    store.users = store.users.filter((item) => normalizeUsername(item.username) !== normalizeUsername(username));
+    saveStaticBootstrap();
+    return { ok: true };
+  }
+
+  const zoneMatch = apiPath.match(/^\/api\/users\/([^/]+)\/zone$/);
+  if (zoneMatch && method === "PUT") {
+    const username = decodeURIComponent(zoneMatch[1]);
+    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
+    if (user) Object.assign(user, { zoneId: body.zoneId || "", zoneName: body.zoneName || "" });
+    saveStaticBootstrap();
+    return { user: user ? publicStaticUser(user) : null };
+  }
+
+  if (apiPath.match(/^\/api\/couriers\/([^/]+)\/password$/) && method === "PUT") return { ok: true };
+
+  if (method === "POST" && apiPath === "/api/parcels") {
+    const now = new Date().toISOString();
+    const parcel = {
+      id: `parcel-${Date.now()}`,
+      courierUsername: body.courierUsername || "",
+      lat: Number(body.lat),
+      lng: Number(body.lng),
+      address: body.address || "",
+      fullName: body.fullName || "",
+      phone: body.phone || "",
+      paymentAmount: Number(body.paymentAmount || body.payment || 0),
+      cashAmount: Number(body.paymentAmount || body.payment || 0),
+      zoneId: body.zoneId || "",
+      zoneName: body.zoneName || "",
+      autoAssigned: Boolean(body.autoAssigned),
+      status: "pending",
+      createdAt: now,
+      assignedAt: body.courierUsername ? now : "",
+    };
+    store.parcels.push(parcel);
+    saveStaticBootstrap();
+    return { parcel: publicStaticParcel(store, parcel) };
+  }
+
+  if (method === "PATCH" && apiPath === "/api/parcels/assign") {
+    const parcelIds = Array.isArray(body.parcelIds) ? body.parcelIds : [];
+    store.parcels.forEach((parcel) => {
+      if (parcelIds.includes(parcel.id)) {
+        parcel.courierUsername = body.courierUsername || "";
+        parcel.assignedAt = new Date().toISOString();
+        parcel.autoAssigned = false;
+      }
+    });
+    saveStaticBootstrap();
+    return { assigned: parcelIds.length };
+  }
+
+  const statusMatch = apiPath.match(/^\/api\/parcels\/([^/]+)\/status$/);
+  if (statusMatch && method === "PATCH") {
+    const parcel = store.parcels.find((item) => item.id === decodeURIComponent(statusMatch[1]));
+    if (!parcel) return { ok: false };
+    const now = new Date().toISOString();
+    parcel.status = body.status || parcel.status;
+    parcel.updatedAt = now;
+    if (parcel.status === "delivered") {
+      parcel.completedAt = body.completedAt || now;
+      parcel.deliveredAt = body.deliveredAt || parcel.completedAt;
+      parcel.failedAt = "";
+      parcel.deliveryTotalPrice = CONFIG.deliveryTotalPrice;
+      parcel.courierPay = CONFIG.courierDeliveryPay;
+      parcel.adminProfit = CONFIG.adminDeliveryProfit;
+    }
+    if (parcel.status === "failed") {
+      parcel.completedAt = body.completedAt || now;
+      parcel.failedAt = body.failedAt || parcel.completedAt;
+      parcel.deliveredAt = "";
+      parcel.failureReason = body.failureReason || "";
+    }
+    if (parcel.status === "pending") {
+      parcel.completedAt = "";
+      parcel.deliveredAt = "";
+      parcel.failedAt = "";
+      parcel.failureReason = "";
+    }
+    saveStaticBootstrap();
+    return { parcel: publicStaticParcel(store, parcel) };
+  }
+
+  if (method === "POST" && apiPath === "/api/parcels/archive") {
+    const parcelIds = Array.isArray(body.parcelIds) ? new Set(body.parcelIds) : null;
+    let archived = 0;
+    store.parcels.forEach((parcel) => {
+      if (parcel.status === "delivered" && (!parcelIds || parcelIds.has(parcel.id))) {
+        parcel.archivedAt = new Date().toISOString();
+        archived += 1;
+      }
+    });
+    saveStaticBootstrap();
+    return { archived };
+  }
+
+  console.warn("Static API fallback returned empty response for", method, apiPath);
+  return {};
+}
 
 async function api(path, options = {}) {
+  if (isStaticDeploy() && path.startsWith("/api/")) return staticApi(path, options);
+
   const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (state.authToken) headers.Authorization = `Bearer ${state.authToken}`;
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
@@ -22,38 +349,31 @@ async function api(path, options = {}) {
   return payload;
 }
 
-
 async function getCouriers() {
   return applyLocalZoneAssignments((await api("/api/couriers")).couriers);
 }
-
 
 async function getUsers() {
   return applyLocalZoneAssignments((await api("/api/users")).users);
 }
 
-
 async function getPending() {
   return (await api("/api/pending")).pending;
 }
-
 
 async function getPins(username) {
   const query = username ? `?courier=${encodeURIComponent(username)}` : "";
   return (await api(`/api/parcels${query}`)).parcels;
 }
 
-
 async function getHistory(username) {
   const query = username ? `?courier=${encodeURIComponent(username)}` : "";
   return (await api(`/api/history${query}`)).history;
 }
 
-
 async function searchParcels(query) {
   return (await api(`/api/parcels/search?q=${encodeURIComponent(query || "")}`)).parcels;
 }
-
 
 async function getZones() {
   if (!CONFIG.useZonesApi) return normalizeZones([]);

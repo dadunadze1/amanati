@@ -455,6 +455,7 @@ function buildGoogleMapsRouteUrl(origin, destination) {
 
 
 async function fetchOsmJson(path, params) {
+  if (typeof isStaticDeploy === "function" && isStaticDeploy()) return null;
   const proxyPath = path === "/search" || path === "/reverse" ? `/api/geocode${path}` : "";
   const headers = {
     Accept: "application/json",

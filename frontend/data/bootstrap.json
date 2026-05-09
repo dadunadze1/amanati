@@ -1,0 +1,103 @@
+{
+  "settings": {
+    "defaultUser": "admin"
+  },
+  "users": [
+    {
+      "id": "static-admin",
+      "username": "admin",
+      "role": "admin",
+      "status": "active",
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "phone": "",
+      "createdAt": "2026-05-10T00:00:00.000Z"
+    },
+    {
+      "id": "static-courier-1",
+      "username": "courier1",
+      "role": "courier",
+      "status": "active",
+      "firstName": "Demo",
+      "lastName": "Courier",
+      "phone": "+995555000001",
+      "zoneId": "center",
+      "zoneName": "ცენტრალური ზონა",
+      "createdAt": "2026-05-10T00:00:00.000Z"
+    },
+    {
+      "id": "static-courier-2",
+      "username": "courier2",
+      "role": "courier",
+      "status": "active",
+      "firstName": "Backup",
+      "lastName": "Courier",
+      "phone": "+995555000002",
+      "zoneId": "dighomi",
+      "zoneName": "დიღმის ზონა",
+      "createdAt": "2026-05-10T00:00:00.000Z"
+    }
+  ],
+  "pending": [],
+  "parcels": [
+    {
+      "id": "static-parcel-1",
+      "courierUsername": "courier1",
+      "lat": 41.7151,
+      "lng": 44.8271,
+      "address": "რუსთაველის გამზირი 12, თბილისი",
+      "fullName": "Demo Client",
+      "phone": "+995555111111",
+      "paymentAmount": 25,
+      "cashAmount": 25,
+      "zoneId": "center",
+      "zoneName": "ცენტრალური ზონა",
+      "autoAssigned": false,
+      "status": "pending",
+      "assignedAt": "2026-05-10T00:00:00.000Z",
+      "createdAt": "2026-05-10T00:00:00.000Z"
+    },
+    {
+      "id": "static-parcel-2",
+      "courierUsername": "courier2",
+      "lat": 41.779,
+      "lng": 44.756,
+      "address": "დიდი დიღომი, მირიან მეფის 25",
+      "fullName": "Static Customer",
+      "phone": "+995555222222",
+      "paymentAmount": 18,
+      "cashAmount": 18,
+      "zoneId": "dighomi",
+      "zoneName": "დიღმის ზონა",
+      "autoAssigned": false,
+      "status": "pending",
+      "assignedAt": "2026-05-10T00:00:00.000Z",
+      "createdAt": "2026-05-10T00:00:00.000Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "static-history-1",
+      "courierUsername": "courier1",
+      "lat": 41.705,
+      "lng": 44.79,
+      "address": "ვაკე, ჭავჭავაძის 30",
+      "fullName": "Delivered Demo",
+      "phone": "+995555333333",
+      "paymentAmount": 30,
+      "cashAmount": 30,
+      "deliveryTotalPrice": 6,
+      "courierPay": 3.5,
+      "adminProfit": 2.5,
+      "zoneId": "center",
+      "zoneName": "ცენტრალური ზონა",
+      "status": "delivered",
+      "assignedAt": "2026-05-09T09:00:00.000Z",
+      "createdAt": "2026-05-09T09:00:00.000Z",
+      "completedAt": "2026-05-09T11:30:00.000Z",
+      "deliveredAt": "2026-05-09T11:30:00.000Z",
+      "archivedAt": "2026-05-09T23:00:00.000Z"
+    }
+  ],
+  "zones": []
+}
