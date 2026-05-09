@@ -38,6 +38,7 @@
       "createdAt": "2026-05-10T00:00:00.000Z"
     }
   ],
+  "couriers": [],
   "pending": [],
   "parcels": [
     {
@@ -99,5 +100,9 @@
       "archivedAt": "2026-05-09T23:00:00.000Z"
     }
   ],
-  "zones": []
+  "zones": [],
+  "financeData": {
+    "cashAdjustments": [],
+    "payAdjustments": []
+  }
 }

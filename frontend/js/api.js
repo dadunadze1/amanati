@@ -15,6 +15,7 @@ async function loadStaticBootstrap() {
     parcels: [],
     history: [],
     zones: [],
+    financeData: {},
     settings: {},
   };
 
@@ -26,31 +27,58 @@ async function loadStaticBootstrap() {
   }
 
   try {
-    const stored = JSON.parse(localStorage.getItem(STATIC_DEPLOY_STORAGE_KEY) || "null");
+    const stored = loadData(STATIC_DEPLOY_STORAGE_KEY);
     if (stored && typeof stored === "object") fallback = { ...fallback, ...stored };
   } catch {
-    localStorage.removeItem(STATIC_DEPLOY_STORAGE_KEY);
+    clearData(STATIC_DEPLOY_STORAGE_KEY);
   }
 
   loadStaticBootstrap.cache = normalizeStaticStore(fallback);
+  hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
   saveStaticBootstrap();
   return loadStaticBootstrap.cache;
 }
 
 function normalizeStaticStore(store) {
+  const users = Array.isArray(store.users) ? store.users : [];
+  const extraCouriers = (Array.isArray(store.couriers) ? store.couriers : [])
+    .filter((courier) => !users.some((user) => normalizeUsername(user.username) === normalizeUsername(courier.username)))
+    .map((courier) => ({ ...courier, role: "courier", status: courier.status || "active" }));
+  const mergedUsers = [...users, ...extraCouriers];
   return {
-    users: Array.isArray(store.users) ? store.users : [],
+    users: mergedUsers,
+    couriers: mergedUsers.filter((user) => user.role === "courier"),
     pending: Array.isArray(store.pending) ? store.pending : [],
     parcels: Array.isArray(store.parcels) ? store.parcels : [],
     history: Array.isArray(store.history) ? store.history : [],
     zones: Array.isArray(store.zones) ? store.zones : [],
+    financeData: store.financeData && typeof store.financeData === "object" ? store.financeData : {},
     settings: store.settings && typeof store.settings === "object" ? store.settings : {},
   };
 }
 
 function saveStaticBootstrap() {
   if (!loadStaticBootstrap.cache) return;
-  localStorage.setItem(STATIC_DEPLOY_STORAGE_KEY, JSON.stringify(loadStaticBootstrap.cache));
+  saveData(STATIC_DEPLOY_STORAGE_KEY, loadStaticBootstrap.cache);
+}
+
+function hydrateStaticFinanceStorage(financeData = {}) {
+  if (loadData(CONFIG.cashAdjustmentsStorageKey) === null && Array.isArray(financeData.cashAdjustments)) {
+    saveData(CONFIG.cashAdjustmentsStorageKey, financeData.cashAdjustments);
+  }
+  if (loadData(CONFIG.payAdjustmentsStorageKey) === null && Array.isArray(financeData.payAdjustments)) {
+    saveData(CONFIG.payAdjustmentsStorageKey, financeData.payAdjustments);
+  }
+}
+
+function getStaticFinanceData() {
+  return loadStaticBootstrap.cache?.financeData || {};
+}
+
+function saveStaticFinanceData(financeData) {
+  if (!loadStaticBootstrap.cache) return;
+  loadStaticBootstrap.cache.financeData = financeData && typeof financeData === "object" ? financeData : {};
+  saveStaticBootstrap();
 }
 
 function publicStaticUser(user) {

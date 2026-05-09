@@ -147,7 +147,9 @@ function normalizeZoneText(value) {
 
 function readLocalZoneAssignments() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(CONFIG.zoneAssignmentsStorageKey) || "{}");
+    const parsed = typeof loadData === "function"
+      ? loadData(CONFIG.zoneAssignmentsStorageKey) || {}
+      : JSON.parse(localStorage.getItem(CONFIG.zoneAssignmentsStorageKey) || "{}");
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
@@ -156,7 +158,8 @@ function readLocalZoneAssignments() {
 
 
 function writeLocalZoneAssignments(assignments) {
-  localStorage.setItem(CONFIG.zoneAssignmentsStorageKey, JSON.stringify(assignments || {}));
+  if (typeof saveData === "function") saveData(CONFIG.zoneAssignmentsStorageKey, assignments || {});
+  else localStorage.setItem(CONFIG.zoneAssignmentsStorageKey, JSON.stringify(assignments || {}));
 }
 
 

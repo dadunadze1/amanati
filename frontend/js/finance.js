@@ -189,7 +189,9 @@ function calculateFinanceSummary(data = {}, filters = {}) {
 
 function readCashAdjustments() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(CONFIG.cashAdjustmentsStorageKey) || "[]");
+    const parsed = typeof loadData === "function"
+      ? loadData(CONFIG.cashAdjustmentsStorageKey) || []
+      : JSON.parse(localStorage.getItem(CONFIG.cashAdjustmentsStorageKey) || "[]");
     return normalizeFinanceAdjustmentList(Array.isArray(parsed) ? parsed : [], "cash");
   } catch {
     return [];
@@ -198,7 +200,12 @@ function readCashAdjustments() {
 
 
 function writeCashAdjustments(adjustments) {
-  localStorage.setItem(CONFIG.cashAdjustmentsStorageKey, JSON.stringify(normalizeFinanceAdjustmentList(adjustments, "cash")));
+  const normalized = normalizeFinanceAdjustmentList(adjustments, "cash");
+  if (typeof saveData === "function") saveData(CONFIG.cashAdjustmentsStorageKey, normalized);
+  else localStorage.setItem(CONFIG.cashAdjustmentsStorageKey, JSON.stringify(normalized));
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    saveStaticFinanceData({ ...getStaticFinanceData(), cashAdjustments: normalized });
+  }
 }
 
 
@@ -239,7 +246,9 @@ async function getAllFinanceRecords() {
 
 function readPayAdjustments() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(CONFIG.payAdjustmentsStorageKey) || "[]");
+    const parsed = typeof loadData === "function"
+      ? loadData(CONFIG.payAdjustmentsStorageKey) || []
+      : JSON.parse(localStorage.getItem(CONFIG.payAdjustmentsStorageKey) || "[]");
     return normalizeFinanceAdjustmentList(Array.isArray(parsed) ? parsed : [], "pay");
   } catch {
     return [];
@@ -248,7 +257,12 @@ function readPayAdjustments() {
 
 
 function writePayAdjustments(adjustments) {
-  localStorage.setItem(CONFIG.payAdjustmentsStorageKey, JSON.stringify(normalizeFinanceAdjustmentList(adjustments, "pay")));
+  const normalized = normalizeFinanceAdjustmentList(adjustments, "pay");
+  if (typeof saveData === "function") saveData(CONFIG.payAdjustmentsStorageKey, normalized);
+  else localStorage.setItem(CONFIG.payAdjustmentsStorageKey, JSON.stringify(normalized));
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    saveStaticFinanceData({ ...getStaticFinanceData(), payAdjustments: normalized });
+  }
 }
 
 
