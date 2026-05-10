@@ -2,6 +2,14 @@
 
 
 
+const GEOCODE_MIN_QUERY_LENGTH = 3;
+const GEOCODE_RATE_LIMIT_MS = 1000;
+const GEOCODE_BUSY_MESSAGE = "ძალიან ბევრი ძებნაა, სცადე რამდენიმე წამში";
+const geocodeSearchCache = new Map();
+let lastGeocodeRequestAt = 0;
+let geocodeRateLimitQueue = Promise.resolve();
+
+
 async function initializeMap() {
   state.markers = [];
 
@@ -467,6 +475,29 @@ function buildNominatimSearchUrl(params) {
 }
 
 
+function createGeocodeBusyError(message = GEOCODE_BUSY_MESSAGE) {
+  const error = new Error(message);
+  error.code = "GEOCODE_BUSY";
+  return error;
+}
+
+
+function getGeocodeSearchCacheKey(queryParts) {
+  return normalizeAddressToken(queryParts?.original || "");
+}
+
+
+async function waitForGeocodeRateLimit() {
+  geocodeRateLimitQueue = geocodeRateLimitQueue.then(async () => {
+    const now = Date.now();
+    const waitMs = Math.max(0, GEOCODE_RATE_LIMIT_MS - (now - lastGeocodeRequestAt));
+    if (waitMs) await wait(waitMs);
+    lastGeocodeRequestAt = Date.now();
+  });
+  return geocodeRateLimitQueue;
+}
+
+
 function buildGoogleMapsRouteUrl(origin, destination) {
   return buildUrl("https://www.google.com/maps/dir/", {
     api: 1,
@@ -477,19 +508,37 @@ function buildGoogleMapsRouteUrl(origin, destination) {
 }
 
 
-async function fetchOsmJson(path, params) {
-  const requestUrl = path === "/search"
-    ? buildNominatimSearchUrl(params)
-    : path === "/reverse"
-      ? buildUrl("https://nominatim.openstreetmap.org/reverse", params)
-      : null;
+async function fetchOsmJson(path, params, options = {}) {
+  const useBackendProxy = typeof isStaticDeploy !== "function" || !isStaticDeploy();
+  if (!useBackendProxy && path === "/search") return null;
+  const requestUrl = useBackendProxy && (path === "/search" || path === "/reverse")
+    ? buildApiUrl(`/api/geocode${path}`, params)
+    : path === "/search"
+      ? buildNominatimSearchUrl(params)
+      : path === "/reverse"
+        ? buildUrl("https://nominatim.openstreetmap.org/reverse", params)
+        : null;
   if (!requestUrl) return null;
+  await waitForGeocodeRateLimit();
   console.log("[geocode] osm url", requestUrl.toString());
+  const headers = {
+    Accept: "application/json",
+    ...(useBackendProxy && state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}),
+  };
   const response = await fetch(requestUrl, {
-    headers: { Accept: "application/json" },
-  }).catch(() => null);
+    headers,
+    signal: options.signal,
+  }).catch((error) => {
+    if (error?.name === "AbortError") throw error;
+    throw createGeocodeBusyError();
+  });
   console.log("[geocode] osm response status", response?.status || 0);
-  if (!response || !response.ok) return null;
+  if (!response) return null;
+  if (response.status === 429) throw createGeocodeBusyError();
+  if (!response.ok) {
+    if (useBackendProxy) return null;
+    throw createGeocodeBusyError();
+  }
   const data = await response.json();
   return data;
 }
@@ -632,10 +681,13 @@ async function geocodeAddress(query) {
 }
 
 
-async function searchAddress(query) {
+async function searchAddress(query, options = {}) {
   const queryParts = parseAddressQuery(query);
   console.log("[geocode] search query", queryParts.original);
   if (!CONFIG.useExternalAddressSearch) return [];
+  if (queryParts.original.length < GEOCODE_MIN_QUERY_LENGTH) return [];
+  const cacheKey = getGeocodeSearchCacheKey(queryParts);
+  if (geocodeSearchCache.has(cacheKey)) return geocodeSearchCache.get(cacheKey);
 
   const searchParamsList = [
     ...buildAddressSearchParams(queryParts),
@@ -650,7 +702,8 @@ async function searchAddress(query) {
     ] : []),
   ];
   const results = [];
-  for (const params of searchParamsList) {
+  const requestParamsList = searchParamsList.slice(0, queryParts.houseNumber ? 2 : 1);
+  for (const params of requestParamsList) {
     const batch = await fetchOsmJson("/search", {
       format: "jsonv2",
       ...params,
@@ -660,7 +713,7 @@ async function searchAddress(query) {
       viewbox: getTbilisiViewbox(),
       bounded: 1,
       "accept-language": "ka",
-    });
+    }, { signal: options.signal });
     const normalizedBatch = normalizeOsmSearchResults(batch || [], queryParts);
     results.push(...normalizedBatch);
     if (queryParts.houseNumber) {
@@ -671,9 +724,11 @@ async function searchAddress(query) {
   }
   const acceptedResults = results.filter((result) => result.acceptedForTbilisi);
   const ranked = rankAddressResults(dedupeAddressResults(acceptedResults), queryParts);
+  const finalResults = ranked.length ? ranked : searchLocalAddressFallback(queryParts);
+  geocodeSearchCache.set(cacheKey, finalResults);
   console.log("[geocode] search response count", results.length);
-  console.log("[geocode] search accepted count", ranked.length);
-  return ranked;
+  console.log("[geocode] search accepted count", finalResults.length);
+  return finalResults;
 }
 
 
@@ -734,16 +789,46 @@ function searchLocalAddressFallback(queryParts) {
 
   const knownStreets = [
     {
+      tokens: ["ვაჟა ფშაველა", "ვაჟა-ფშაველა", "ვაჟ", "vazha pshavela", "vaja pshavela"],
+      base: { lat: 41.72582, lng: 44.74224 },
+      step: { lat: -0.00001, lng: 0.000035 },
+      address: "ვაჟა-ფშაველას გამზირი",
+      area: "საბურთალო",
+    },
+    {
+      tokens: ["ბარნოვი", "ბარნოვის", "barnovi"],
+      base: { lat: 41.70442, lng: 44.7852 },
+      step: { lat: 0.000012, lng: -0.00003 },
+      address: "ბარნოვის ქუჩა",
+      area: "ვაკე",
+    },
+    {
+      tokens: ["საბურთალო", "saburtalo"],
+      base: { lat: 41.72525, lng: 44.7426 },
+      step: { lat: 0, lng: 0 },
+      address: "საბურთალო",
+      area: "თბილისი",
+    },
+    {
+      tokens: ["მაკდონალდსი", "mcdonalds", "mc donald", "macdonald"],
+      base: { lat: 41.72547, lng: 44.74323 },
+      step: { lat: 0, lng: 0 },
+      address: "მაკდონალდსი, ვაჟა-ფშაველას გამზირი",
+      area: "საბურთალო",
+    },
+    {
       tokens: ["ირაკლი აბაშიძის", "აბაშიძის", "irakli abashidze", "abashidze"],
       base: { lat: 41.70717, lng: 44.77018 },
       step: { lat: 0.000015, lng: -0.000035 },
       address: "ირაკლი აბაშიძის ქუჩა",
+      area: "ვაკე",
     },
     {
       tokens: ["საირმის", "საირმე", "sairme"],
       base: { lat: 41.7190, lng: 44.7500 },
       step: { lat: 0.000010, lng: 0.000020 },
       address: "საირმის ქუჩა",
+      area: "საბურთალო",
     },
   ];
 
@@ -761,7 +846,9 @@ function searchLocalAddressFallback(queryParts) {
     lat: coords.lat,
     lng: coords.lng,
     address,
-    displayName: `${address}, თბილისი`,
+    displayName: `${address}, ${street.area || "თბილისი"}`,
+    suburb: street.area || "",
+    city: "თბილისი",
     warning: "გამოყენებულია ლოკალური approximate ძებნა.",
   }];
 }

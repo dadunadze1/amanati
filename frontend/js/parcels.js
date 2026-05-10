@@ -4,7 +4,7 @@
 
 const RECENT_ADDRESSES_STORAGE_KEY = "deliveryRecentAddresses:v1";
 const FAVORITE_ADDRESSES_STORAGE_KEY = "deliveryFavoriteAddresses:v1";
-const ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS = 300;
+const ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS = 900;
 let refreshPinsPromise = null;
 let refreshPinsQueued = false;
 
@@ -307,9 +307,12 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
   const input = document.getElementById(inputId);
   const dropdown = document.getElementById(dropdownId);
   if (!input || !dropdown) return;
+  if (input.dataset.addressAutocompleteBound === "true") return;
+  input.dataset.addressAutocompleteBound = "true";
 
   let debounceTimer = null;
   let documentClickHandler = null;
+  let activeSearchController = null;
   let requestId = 0;
   let suggestions = [];
   let activeIndex = -1;
@@ -340,8 +343,8 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
     ensureDocumentClickHandler();
     dropdown.classList.toggle("is-loading", stateClass === "loading");
 
-    if (stateClass === "loading") {
-      dropdown.innerHTML = `<div class="address-autocomplete-state">იძებნება</div>`;
+    if (stateClass === "loading" || stateClass === "busy") {
+      dropdown.innerHTML = `<div class="address-autocomplete-state">${stateClass === "busy" ? escapeHtml(GEOCODE_BUSY_MESSAGE) : "იძებნება"}</div>`;
       return;
     }
 
@@ -373,32 +376,66 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
   const updateSuggestions = async () => {
     const query = cleanAddressInput(input.value);
     const currentRequestId = ++requestId;
+    const minLength = typeof GEOCODE_MIN_QUERY_LENGTH === "number" ? GEOCODE_MIN_QUERY_LENGTH : 3;
     if (!query) {
       const groups = buildStoredAddressSuggestionGroups("");
       if (groups.some((group) => group.items.length)) render(groups);
       else closeDropdown();
       return;
     }
+    if (query.length < minLength) {
+      const groups = buildStoredAddressSuggestionGroups(query);
+      if (groups.some((group) => group.items.length)) render(groups);
+      else closeDropdown();
+      return;
+    }
 
     render([{ label: "", items: [] }], "loading");
+    activeSearchController?.abort();
+    activeSearchController = new AbortController();
     try {
       const [storedGroups, remoteResults] = await Promise.all([
         Promise.resolve(buildStoredAddressSuggestionGroups(query)),
-        searchAddress(query),
+        searchAddress(query, { signal: activeSearchController.signal }),
       ]);
       if (currentRequestId !== requestId) return;
       const remoteItems = remoteResults.map((item) => ({ ...item, source: "search" }));
       const groups = mergeAutocompleteGroups(storedGroups, [{ label: "ძიების შედეგები", items: remoteItems }]);
       activeIndex = groups.some((group) => group.items.length) ? 0 : -1;
       render(groups);
-    } catch {
+    } catch (error) {
       if (currentRequestId !== requestId) return;
-      render(buildStoredAddressSuggestionGroups(query));
+      if (error?.name === "AbortError") return;
+      const localFallback = searchLocalAddressFallback(parseAddressQuery(query)).map((item) => ({
+        ...item,
+        warning: error?.code === "GEOCODE_BUSY" ? GEOCODE_BUSY_MESSAGE : item.warning,
+      }));
+      const storedGroups = mergeAutocompleteGroups(
+        buildStoredAddressSuggestionGroups(query),
+        [{ label: "ლოკალური შედეგები", items: localFallback }],
+      );
+      setAddressAutocompleteMessage(input, error?.code === "GEOCODE_BUSY" ? GEOCODE_BUSY_MESSAGE : "");
+      if (storedGroups.some((group) => group.items.length)) {
+        render(storedGroups);
+      } else {
+        render([{ label: "", items: [] }], error?.code === "GEOCODE_BUSY" ? "busy" : "");
+      }
     }
   };
 
   input.addEventListener("input", () => {
     window.clearTimeout(debounceTimer);
+    requestId += 1;
+    activeSearchController?.abort();
+    activeSearchController = null;
+    const query = cleanAddressInput(input.value);
+    const minLength = typeof GEOCODE_MIN_QUERY_LENGTH === "number" ? GEOCODE_MIN_QUERY_LENGTH : 3;
+    if (query.length < minLength) {
+      const groups = buildStoredAddressSuggestionGroups(query);
+      if (groups.some((group) => group.items.length)) render(groups);
+      else closeDropdown();
+      return;
+    }
     render([{ label: "", items: [] }], "loading");
     debounceTimer = window.setTimeout(updateSuggestions, ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS);
   });
@@ -451,6 +488,13 @@ function getRenderedAutocompleteGroups(dropdown, suggestions) {
   const labels = [...dropdown.querySelectorAll(".address-autocomplete-label")].map((item) => item.textContent);
   if (!labels.length) return [{ label: "შედეგები", items: suggestions }];
   return [{ label: "შედეგები", items: suggestions }];
+}
+
+
+function setAddressAutocompleteMessage(input, message) {
+  const form = input?.closest("form");
+  const messageElement = form?.querySelector(".form-message");
+  if (messageElement) messageElement.textContent = message || "";
 }
 
 
@@ -571,6 +615,11 @@ async function handleAddressSearch(event, username) {
   const message = document.getElementById("addressSearchMessage");
   const resultsElement = document.getElementById("addressSearchResults");
   if (!query) return;
+  const minLength = typeof GEOCODE_MIN_QUERY_LENGTH === "number" ? GEOCODE_MIN_QUERY_LENGTH : 3;
+  if (cleanAddressInput(query).length < minLength) {
+    if (message) message.textContent = "შეიყვანეთ მინიმუმ 3 სიმბოლო.";
+    return;
+  }
 
   try {
     if (message) message.textContent = STRINGS.addressLoading;
@@ -586,8 +635,15 @@ async function handleAddressSearch(event, username) {
     if (message) message.textContent = results[0].warning || "";
     renderAddressSearchResults(results, username);
     await selectAddressSearchResult(results[0], username, 0);
-  } catch {
-    if (message) message.textContent = "მისამართის ძებნა ვერ მოხერხდა.";
+  } catch (error) {
+    const localFallback = searchLocalAddressFallback(parseAddressQuery(query));
+    if (localFallback.length) {
+      if (message) message.textContent = error?.code === "GEOCODE_BUSY" ? GEOCODE_BUSY_MESSAGE : "";
+      renderAddressSearchResults(localFallback, username);
+      await selectAddressSearchResult(localFallback[0], username, 0);
+      return;
+    }
+    if (message) message.textContent = error?.code === "GEOCODE_BUSY" ? GEOCODE_BUSY_MESSAGE : "მისამართის ძებნა ვერ მოხერხდა.";
   }
 }
 
