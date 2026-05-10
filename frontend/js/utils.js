@@ -205,7 +205,7 @@ function formatMonthYear(date) {
 
 
 function getPaymentAmount(parcel) {
-  const value = [parcel?.paymentAmount, parcel?.payment, parcel?.amount, parcel?.price, parcel?.codAmount]
+  const value = [parcel?.paymentAmount, parcel?.cashAmount, parcel?.payment, parcel?.amount, parcel?.price, parcel?.codAmount]
     .find((item) => item !== undefined && item !== null && item !== "");
   const amount = safeMoney(value);
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
@@ -213,17 +213,23 @@ function getPaymentAmount(parcel) {
 
 
 function getCourierPay(parcel) {
-  return parcel?.status === "delivered" ? CONFIG.courierDeliveryPay : 0;
+  if (parcel?.status !== "delivered") return 0;
+  const stored = safeMoney(parcel?.courierPay);
+  return stored > 0 ? stored : CONFIG.courierDeliveryPay;
 }
 
 
 function getAdminProfit(parcel) {
-  return parcel?.status === "delivered" ? CONFIG.adminDeliveryProfit : 0;
+  if (parcel?.status !== "delivered") return 0;
+  const stored = safeMoney(parcel?.adminProfit);
+  return stored > 0 ? stored : CONFIG.adminDeliveryProfit;
 }
 
 
 function getDeliveryTotal(parcel) {
-  return parcel?.status === "delivered" ? CONFIG.deliveryTotalPrice : 0;
+  if (parcel?.status !== "delivered") return 0;
+  const stored = safeMoney(parcel?.deliveryTotalPrice);
+  return stored > 0 ? stored : CONFIG.deliveryTotalPrice;
 }
 
 

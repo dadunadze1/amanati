@@ -149,8 +149,15 @@ function publicUser(user) {
 
 function publicParcel(db, parcel) {
   const courier = parcel.courierUsername ? findUser(db, parcel.courierUsername) : null;
+  const paymentAmount = getParcelPaymentAmount(parcel);
+  const isDelivered = parcel.status === "delivered";
   return {
     ...parcel,
+    paymentAmount,
+    cashAmount: paymentAmount,
+    deliveryTotalPrice: isDelivered ? storedMoney(parcel.deliveryTotalPrice) || FINANCE.deliveryTotalPrice : storedMoney(parcel.deliveryTotalPrice),
+    courierPay: isDelivered ? storedMoney(parcel.courierPay) || FINANCE.courierDeliveryPay : storedMoney(parcel.courierPay),
+    adminProfit: isDelivered ? storedMoney(parcel.adminProfit) || FINANCE.adminDeliveryProfit : storedMoney(parcel.adminProfit),
     zoneName: parcel.zoneName || getZoneName(parcel.zoneId),
     autoAssigned: Boolean(parcel.autoAssigned),
     deliveredAt: parcel.deliveredAt || (parcel.status === "delivered" ? parcel.completedAt || "" : ""),
@@ -394,6 +401,25 @@ function cleanPaymentAmount(value) {
   const amount = Number(normalized);
   if (!Number.isFinite(amount) || amount < 0) throw httpError(400, "თანხა უნდა იყოს ნული ან მეტი.");
   return Math.round(amount * 100) / 100;
+}
+
+function storedMoney(value) {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
+}
+
+function getParcelPaymentAmount(parcel) {
+  return storedMoney(parcel?.paymentAmount ?? parcel?.cashAmount ?? parcel?.payment ?? parcel?.amount ?? parcel?.price ?? parcel?.codAmount);
+}
+
+function applyDeliveredFinance(parcel) {
+  if (!parcel || parcel.status !== "delivered") return;
+  const paymentAmount = getParcelPaymentAmount(parcel);
+  parcel.paymentAmount = paymentAmount;
+  parcel.cashAmount = paymentAmount;
+  parcel.deliveryTotalPrice = storedMoney(parcel.deliveryTotalPrice) || FINANCE.deliveryTotalPrice;
+  parcel.courierPay = storedMoney(parcel.courierPay) || FINANCE.courierDeliveryPay;
+  parcel.adminProfit = storedMoney(parcel.adminProfit) || FINANCE.adminDeliveryProfit;
 }
 
 function isCoordinateLabel(value) {
@@ -695,7 +721,7 @@ async function handleApi(request, response, url) {
     const lat = Number(body.lat);
     const lng = Number(body.lng);
     const address = String(body.address || "").trim();
-    const paymentAmount = cleanPaymentAmount(body.paymentAmount);
+    const paymentAmount = cleanPaymentAmount(body.paymentAmount ?? body.payment ?? body.cashAmount);
     if (!fullName || !phone || !Number.isFinite(lat) || !Number.isFinite(lng)) throw httpError(400, "ამანათის დეტალები აუცილებელია.");
     if (!address || isCoordinateLabel(address) || !hasHouseNumber(address)) throw httpError(400, "ქუჩა და შენობის ნომერი აუცილებელია.");
 
@@ -796,10 +822,7 @@ async function handleApi(request, response, url) {
     if (status === "delivered") {
       parcel.deliveredAt = now;
       parcel.failedAt = "";
-      parcel.deliveryTotalPrice = FINANCE.deliveryTotalPrice;
-      parcel.courierPay = FINANCE.courierDeliveryPay;
-      parcel.adminProfit = FINANCE.adminDeliveryProfit;
-      parcel.cashAmount = Number(parcel.paymentAmount || 0);
+      applyDeliveredFinance(parcel);
     }
     if (status === "failed") {
       parcel.failedAt = now;
@@ -820,7 +843,9 @@ async function handleApi(request, response, url) {
     let archived = 0;
     db.parcels.forEach((parcel) => {
       if (!parcel.archivedAt && isCompletedParcel(parcel) && (!parcelIds || parcelIds.has(parcel.id)) && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))) {
+        applyDeliveredFinance(parcel);
         parcel.archivedAt = now;
+        parcel.updatedAt = now;
         archived += 1;
       }
     });

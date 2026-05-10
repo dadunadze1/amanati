@@ -62,15 +62,15 @@ function mergeStaticStores(...stores) {
       .map((user) => normalizeStaticUser({ ...user, role: "courier", status: user?.status || "pending" }, { activatePendingCouriers: false }))
       .filter(Boolean)
       .filter((user) => !isDemoStaticUser(user));
-    const parcels = (Array.isArray(store.parcels) ? store.parcels : []).filter((parcel) => !isDemoStaticParcel(parcel));
-    const history = (Array.isArray(store.history) ? store.history : []).filter((parcel) => !isDemoStaticParcel(parcel));
+    const parcels = (Array.isArray(store.parcels) ? store.parcels : []).filter((parcel) => !isDemoStaticParcel(parcel)).map(normalizeStaticParcelFinance);
+    const history = (Array.isArray(store.history) ? store.history : []).filter((parcel) => !isDemoStaticParcel(parcel)).map(normalizeStaticParcelFinance);
 
     return {
-      users: mergeStaticRecordsByKey(merged.users, users, getStaticUserKey),
+      users: mergeStaticRecordsByKey(merged.users, users, getStaticUserKey, resolveStaticUserRecord),
       couriers: [],
-      pending: mergeStaticRecordsByKey(merged.pending, pending, getStaticUserKey),
-      parcels: mergeStaticRecordsByKey(merged.parcels, parcels, getStaticParcelKey),
-      history: mergeStaticRecordsByKey(merged.history, history, getStaticParcelKey),
+      pending: mergeStaticRecordsByKey(merged.pending, pending, getStaticUserKey, resolveStaticUserRecord),
+      parcels: mergeStaticRecordsByKey(merged.parcels, parcels, getStaticParcelKey, resolveStaticParcelRecord),
+      history: mergeStaticRecordsByKey(merged.history, history, getStaticParcelKey, resolveStaticParcelRecord),
       zones: mergeStaticRecordsByKey(merged.zones, Array.isArray(store.zones) ? store.zones : [], getStaticZoneKey),
       financeData: mergeStaticFinanceData(merged.financeData, store.financeData),
       settings: {
@@ -134,14 +134,43 @@ function isDemoStaticParcel(parcel) {
   return id.startsWith("static-parcel-") || id.startsWith("static-history-");
 }
 
-function mergeStaticRecordsByKey(baseRecords, nextRecords, getKey) {
+function mergeStaticRecordsByKey(baseRecords, nextRecords, getKey, resolveRecord = (current, next) => next) {
   const merged = new Map();
   [...(Array.isArray(baseRecords) ? baseRecords : []), ...(Array.isArray(nextRecords) ? nextRecords : [])].forEach((record) => {
     if (!record || typeof record !== "object") return;
     const key = getKey(record) || `missing-key-${merged.size}`;
-    merged.set(key, record);
+    const current = merged.get(key);
+    merged.set(key, current ? resolveRecord(current, record) : record);
   });
   return Array.from(merged.values());
+}
+
+function resolveStaticUserRecord(current, next) {
+  const currentTime = getStaticRecordTimestamp(current, ["updatedAt", "approvedAt", "createdAt", "requestedAt"]);
+  const nextTime = getStaticRecordTimestamp(next, ["updatedAt", "approvedAt", "createdAt", "requestedAt"]);
+  return nextTime >= currentTime ? { ...current, ...next } : { ...next, ...current };
+}
+
+function resolveStaticParcelRecord(current, next) {
+  const currentTime = getStaticRecordTimestamp(current);
+  const nextTime = getStaticRecordTimestamp(next);
+  const primary = nextTime >= currentTime ? next : current;
+  const secondary = primary === next ? current : next;
+  const merged = { ...secondary, ...primary };
+  ["archivedAt", "deliveredAt", "completedAt", "failedAt", "updatedAt", "assignedAt", "createdAt"].forEach((field) => {
+    merged[field] = primary[field] || secondary[field] || "";
+  });
+  if ((primary.archivedAt || secondary.archivedAt) && (primary.status === "delivered" || secondary.status === "delivered")) {
+    merged.status = "delivered";
+  }
+  return normalizeStaticParcelFinance(merged);
+}
+
+function getStaticRecordTimestamp(record, fields = ["updatedAt", "archivedAt", "deliveredAt", "completedAt", "failedAt", "assignedAt", "createdAt"]) {
+  return fields.reduce((latest, field) => {
+    const time = Date.parse(record?.[field] || "");
+    return Number.isFinite(time) ? Math.max(latest, time) : latest;
+  }, 0);
 }
 
 function getStaticUserKey(user) {
@@ -173,6 +202,34 @@ function mergeStaticFinanceData(baseFinance, nextFinance) {
     cashAdjustments: mergeStaticRecordsByKey(base.cashAdjustments, next.cashAdjustments, getStaticAdjustmentKey),
     payAdjustments: mergeStaticRecordsByKey(base.payAdjustments, next.payAdjustments, getStaticAdjustmentKey),
   };
+}
+
+function normalizeStaticParcelFinance(parcel) {
+  if (!parcel || typeof parcel !== "object") return parcel;
+  const paymentAmount = getStaticParcelPaymentAmount(parcel);
+  const isDelivered = parcel.status === "delivered";
+  const deliveryTotalPrice = getStaticMoney(parcel.deliveryTotalPrice);
+  const courierPay = getStaticMoney(parcel.courierPay);
+  const adminProfit = getStaticMoney(parcel.adminProfit);
+  return {
+    ...parcel,
+    paymentAmount,
+    cashAmount: paymentAmount,
+    deliveryTotalPrice: isDelivered ? deliveryTotalPrice || CONFIG.deliveryTotalPrice : deliveryTotalPrice,
+    courierPay: isDelivered ? courierPay || CONFIG.courierDeliveryPay : courierPay,
+    adminProfit: isDelivered ? adminProfit || CONFIG.adminDeliveryProfit : adminProfit,
+  };
+}
+
+function getStaticParcelPaymentAmount(parcel) {
+  const value = parcel?.paymentAmount ?? parcel?.cashAmount ?? parcel?.payment ?? parcel?.amount ?? parcel?.price ?? parcel?.codAmount ?? 0;
+  const amount = getStaticMoney(value);
+  return amount > 0 ? amount : 0;
+}
+
+function getStaticMoney(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
 }
 
 function getStaticAdjustmentKey(adjustment) {
@@ -258,11 +315,10 @@ function publicStaticUser(user) {
 
 function publicStaticParcel(store, parcel) {
   const courier = store.users.find((user) => normalizeUsername(user.username) === normalizeUsername(parcel.courierUsername));
+  const normalizedParcel = normalizeStaticParcelFinance(parcel);
   return {
-    ...parcel,
-    paymentAmount: Number(parcel.paymentAmount || parcel.cashAmount || 0),
-    cashAmount: Number(parcel.cashAmount || parcel.paymentAmount || 0),
-    status: parcel.status || "pending",
+    ...normalizedParcel,
+    status: normalizedParcel.status || "pending",
     courier: courier ? publicStaticUser(courier) : null,
   };
 }
@@ -313,6 +369,12 @@ function clearStaticSession() {
   clearData(STATIC_SESSION_STORAGE_KEY);
 }
 
+function verifyStaticPassword(user, password) {
+  const supplied = String(password || "");
+  if (user?.password !== undefined) return supplied === String(user.password || "");
+  return supplied === "";
+}
+
 async function staticApi(path, options = {}) {
   const store = await loadStaticBootstrap();
   const method = options.method || "GET";
@@ -331,7 +393,7 @@ async function staticApi(path, options = {}) {
   if (method === "POST" && apiPath === "/api/login") {
     const requestedUsername = body.username || store.settings.defaultUser || store.users.find((user) => user.role === "admin")?.username || store.users[0]?.username;
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(requestedUsername));
-    if (!user) throw new Error(STRINGS.invalidLogin);
+    if (!user || user.status !== "active" || !verifyStaticPassword(user, body.password)) throw new Error(STRINGS.invalidLogin);
     return { ...saveStaticSession(user), staticMode: true };
   }
 
@@ -438,6 +500,7 @@ async function staticApi(path, options = {}) {
   if (method === "GET" && apiPath === "/api/geocode/reverse") return {};
 
   if (method === "POST" && apiPath === "/api/users") {
+    const now = new Date().toISOString();
     const user = {
       id: `user-${Date.now()}`,
       username: body.username,
@@ -450,7 +513,10 @@ async function staticApi(path, options = {}) {
       bankDetails: body.bankDetails || "",
       zoneId: body.zoneId || "",
       zoneName: body.zoneName || "",
-      createdAt: new Date().toISOString(),
+      requestedAt: now,
+      approvedAt: now,
+      createdAt: now,
+      updatedAt: now,
     };
     store.users.push(user);
     saveStaticBootstrap();
@@ -479,7 +545,7 @@ async function staticApi(path, options = {}) {
   if (userMatch && method === "PUT") {
     const username = decodeURIComponent(userMatch[1]);
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
-    if (user) Object.assign(user, body);
+    if (user) Object.assign(user, body, { updatedAt: new Date().toISOString() });
     saveStaticBootstrap();
     return { user: user ? publicStaticUser(user) : null };
   }
@@ -499,7 +565,16 @@ async function staticApi(path, options = {}) {
     return { user: user ? publicStaticUser(user) : null };
   }
 
-  if (apiPath.match(/^\/api\/couriers\/([^/]+)\/password$/) && method === "PUT") return { ok: true };
+  const courierPasswordMatch = apiPath.match(/^\/api\/couriers\/([^/]+)\/password$/);
+  if (courierPasswordMatch && method === "PUT") {
+    const username = decodeURIComponent(courierPasswordMatch[1]);
+    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
+    if (!user || user.role !== "courier") throw new Error("კურიერი ვერ მოიძებნა.");
+    user.password = String(body.password || "");
+    user.updatedAt = new Date().toISOString();
+    saveStaticBootstrap();
+    return { ok: true };
+  }
 
   if (method === "POST" && apiPath === "/api/parcels") {
     const now = new Date().toISOString();
@@ -511,8 +586,8 @@ async function staticApi(path, options = {}) {
       address: body.address || "",
       fullName: body.fullName || "",
       phone: body.phone || "",
-      paymentAmount: Number(body.paymentAmount || body.payment || 0),
-      cashAmount: Number(body.paymentAmount || body.payment || 0),
+      paymentAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
+      cashAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       zoneId: body.zoneId || "",
       zoneName: body.zoneName || "",
       autoAssigned: Boolean(body.autoAssigned),
@@ -549,9 +624,7 @@ async function staticApi(path, options = {}) {
       parcel.completedAt = body.completedAt || now;
       parcel.deliveredAt = body.deliveredAt || parcel.completedAt;
       parcel.failedAt = "";
-      parcel.deliveryTotalPrice = CONFIG.deliveryTotalPrice;
-      parcel.courierPay = CONFIG.courierDeliveryPay;
-      parcel.adminProfit = CONFIG.adminDeliveryProfit;
+      Object.assign(parcel, normalizeStaticParcelFinance(parcel));
     }
     if (parcel.status === "failed") {
       parcel.completedAt = body.completedAt || now;
@@ -582,12 +655,10 @@ async function staticApi(path, options = {}) {
         && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
       ) {
         parcel.archivedAt = now;
+        parcel.updatedAt = now;
         parcel.completedAt = parcel.completedAt || parcel.deliveredAt || now;
         parcel.deliveredAt = parcel.deliveredAt || parcel.completedAt;
-        parcel.deliveryTotalPrice = Number(parcel.deliveryTotalPrice || CONFIG.deliveryTotalPrice);
-        parcel.courierPay = Number(parcel.courierPay || CONFIG.courierDeliveryPay);
-        parcel.adminProfit = Number(parcel.adminProfit || CONFIG.adminDeliveryProfit);
-        parcel.cashAmount = Number(parcel.cashAmount || parcel.paymentAmount || 0);
+        Object.assign(parcel, normalizeStaticParcelFinance(parcel));
         archived += 1;
       }
     });

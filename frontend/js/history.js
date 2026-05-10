@@ -212,6 +212,9 @@ async function archiveDay() {
       parcelIds: deliveredPins.map((pin) => pin.id),
     },
   });
+  const archivedIds = new Set(deliveredPins.map((pin) => pin.id));
+  state.activePins = state.activePins.filter((pin) => !archivedIds.has(pin.id));
+  if (archivedIds.has(state.selectedPinId)) hideSelectedParcelCard();
   closeDialog();
   await refreshPins();
   showToast(`${STRINGS.dayArchived} ქეში: ${formatMoney(companyTotal)}, კურიერის გამომუშავება: ${formatMoney(courierPay)}`);
