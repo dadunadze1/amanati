@@ -158,6 +158,21 @@ function createStaticToken(user) {
   return `static:${user.username}:${Date.now()}`;
 }
 
+function normalizeStaticGeocodeQuery(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/(?:\s*,\s*)+/g, ", ")
+    .replace(/\s+/g, " ");
+}
+
+function buildStaticGeocodeQuery(value) {
+  const normalized = normalizeStaticGeocodeQuery(value);
+  if (!normalized) return "";
+  if (/(თბილისი|tbilisi|georgia)/i.test(normalized)) return normalized;
+  return `${normalized}, Tbilisi, Georgia`;
+}
+
 function saveStaticSession(user) {
   const session = { token: createStaticToken(user), user: publicStaticUser(user), savedAt: new Date().toISOString() };
   saveData(STATIC_SESSION_STORAGE_KEY, session);
@@ -267,7 +282,35 @@ async function staticApi(path, options = {}) {
     };
   }
 
-  if (method === "GET" && apiPath === "/api/geocode/search") return [];
+  if (method === "GET" && apiPath === "/api/geocode/search") {
+    const rawQuery = String(url.searchParams.get("q") || "");
+    const normalizedQuery = normalizeStaticGeocodeQuery(rawQuery);
+    if (!normalizedQuery) return [];
+
+    const searchParams = {
+      q: buildStaticGeocodeQuery(rawQuery),
+      format: "jsonv2",
+      addressdetails: 1,
+      limit: 8,
+      "accept-language": "ka",
+      bounded: 1,
+      viewbox: getTbilisiViewbox(),
+    };
+
+    const results = await fetchOsmJson("/search", searchParams).catch(() => []);
+    const mapped = (Array.isArray(results) ? results : [])
+      .filter((result) => isTbilisiOsmResult(result))
+      .map((result) => ({
+        ...result,
+        lat: Number(result?.lat ?? result?.latitude),
+        lng: Number(result?.lng ?? result?.lon ?? result?.longitude),
+        display_name: result?.display_name || "",
+        address: result?.address || {},
+      }))
+      .filter((result) => Number.isFinite(result.lat) && Number.isFinite(result.lng));
+    console.log("[static geocode]", mapped);
+    return mapped;
+  }
   if (method === "GET" && apiPath === "/api/geocode/reverse") return {};
 
   if (method === "POST" && apiPath === "/api/users") {
