@@ -6,6 +6,8 @@ const FIREBASE_STATIC_STORE_DOC = "staticStore";
 let firebaseInitPromise = null;
 let firebaseStoreUnsubscribe = null;
 let lastFirebaseStoreJson = "";
+let firebaseAuthUnavailable = false;
+let firebaseAuthWarningShown = false;
 
 function saveData(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
@@ -34,6 +36,7 @@ function hasFirebaseSdk() {
 }
 
 async function initializeFirebaseStorage() {
+  if (firebaseAuthUnavailable) return null;
   if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
   if (firebaseInitPromise) return firebaseInitPromise;
 
@@ -44,9 +47,16 @@ async function initializeFirebaseStorage() {
     if (window.firebase.auth) {
       const auth = window.firebase.auth(app);
       if (!auth.currentUser) {
-        await auth.signInAnonymously().catch((error) => {
-          console.warn("[firebase] anonymous auth failed", error);
-        });
+        try {
+          await auth.signInAnonymously();
+        } catch (error) {
+          firebaseAuthUnavailable = true;
+          if (!firebaseAuthWarningShown) {
+            firebaseAuthWarningShown = true;
+            console.warn("[firebase] anonymous auth failed; using static local mode", error);
+          }
+          return null;
+        }
       }
     }
     const db = window.firebase.firestore(app);
