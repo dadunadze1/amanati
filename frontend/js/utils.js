@@ -61,22 +61,32 @@ function getParcelStatsDateKey(parcel) {
 
 
 function getParcelStatsDateKeys(parcel) {
-  const dateKey = getParcelStatsDateKey(parcel);
-  return dateKey ? [dateKey] : [];
+  if (!parcel || typeof parcel !== "object") return [];
+  if (parcel.status !== "delivered" && parcel.status !== "failed") {
+    const dateKey = getParcelStatsDateKey(parcel);
+    return dateKey ? [dateKey] : [];
+  }
+
+  const statusDates = parcel.status === "delivered"
+    ? [parcel.archivedAt, parcel.deliveredAt, parcel.completedAt, parcel.updatedAt, parcel.createdAt]
+    : [parcel.archivedAt, parcel.failedAt, parcel.completedAt, parcel.updatedAt, parcel.createdAt];
+  return [...new Set(statusDates.map(normalizeDateKey).filter(Boolean))];
 }
 
 
 function parcelMatchesStatsDate(parcel, dateKey) {
-  return getParcelStatsDateKey(parcel) === normalizeDateKey(dateKey);
+  const normalizedDateKey = normalizeDateKey(dateKey);
+  return Boolean(normalizedDateKey) && getParcelStatsDateKeys(parcel).includes(normalizedDateKey);
 }
 
 
 function parcelMatchesStatsDateRange(parcel, startDate, endDate) {
-  const dateKey = getParcelStatsDateKey(parcel);
   const start = normalizeDateKey(startDate);
   const end = normalizeDateKey(endDate || startDate);
-  if (!dateKey || !start || !end) return false;
-  return start <= end ? dateKey >= start && dateKey <= end : dateKey >= end && dateKey <= start;
+  if (!start || !end) return false;
+  const rangeStart = start <= end ? start : end;
+  const rangeEnd = start <= end ? end : start;
+  return getParcelStatsDateKeys(parcel).some((dateKey) => dateKey >= rangeStart && dateKey <= rangeEnd);
 }
 
 

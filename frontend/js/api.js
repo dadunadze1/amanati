@@ -451,10 +451,23 @@ async function staticApi(path, options = {}) {
 
   if (method === "POST" && apiPath === "/api/parcels/archive") {
     const parcelIds = Array.isArray(body.parcelIds) ? new Set(body.parcelIds) : null;
+    const courier = body.courierUsername || "";
+    const now = new Date().toISOString();
     let archived = 0;
     store.parcels.forEach((parcel) => {
-      if (parcel.status === "delivered" && (!parcelIds || parcelIds.has(parcel.id))) {
-        parcel.archivedAt = new Date().toISOString();
+      if (
+        !parcel.archivedAt
+        && parcel.status === "delivered"
+        && (!parcelIds || parcelIds.has(parcel.id))
+        && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
+      ) {
+        parcel.archivedAt = now;
+        parcel.completedAt = parcel.completedAt || parcel.deliveredAt || now;
+        parcel.deliveredAt = parcel.deliveredAt || parcel.completedAt;
+        parcel.deliveryTotalPrice = Number(parcel.deliveryTotalPrice || CONFIG.deliveryTotalPrice);
+        parcel.courierPay = Number(parcel.courierPay || CONFIG.courierDeliveryPay);
+        parcel.adminProfit = Number(parcel.adminProfit || CONFIG.adminDeliveryProfit);
+        parcel.cashAmount = Number(parcel.cashAmount || parcel.paymentAmount || 0);
         archived += 1;
       }
     });
