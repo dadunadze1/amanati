@@ -17,6 +17,15 @@ const CONFIG = {
   payAdjustmentsStorageKey: "deliveryPayAdjustments:v1",
 };
 
+const firebaseConfig = {
+  apiKey: "AIzaSyBF421H4mkNB9Ve_uJ8Ph6z4LrbxzKlrC4",
+  authDomain: "amanatebi123-43963.firebaseapp.com",
+  projectId: "amanatebi123-43963",
+  storageBucket: "amanatebi123-43963.firebasestorage.app",
+  messagingSenderId: "882036563594",
+  appId: "1:882036563594:web:c800b0f2bb6977a441d773",
+};
+
 const STRINGS = {
   emptyFields: "შეავსეთ ყველა ველი.",
   pendingSent: "რეგისტრაციის მოთხოვნა გაიგზავნა ადმინთან.",
