@@ -34,6 +34,15 @@ async function loadStaticBootstrap() {
     clearData(STATIC_DEPLOY_STORAGE_KEY);
   }
 
+  try {
+    if (typeof loadFirebaseStaticStore === "function") {
+      const firebaseStore = await loadFirebaseStaticStore();
+      if (firebaseStore && typeof firebaseStore === "object") fallback = { ...fallback, ...firebaseStore };
+    }
+  } catch (error) {
+    console.warn("Firebase static store unavailable", error);
+  }
+
   loadStaticBootstrap.cache = normalizeStaticStore(fallback);
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
   saveStaticBootstrap();
@@ -61,6 +70,11 @@ function normalizeStaticStore(store) {
 function saveStaticBootstrap() {
   if (!loadStaticBootstrap.cache) return;
   saveData(STATIC_DEPLOY_STORAGE_KEY, loadStaticBootstrap.cache);
+  if (typeof saveFirebaseStaticStore === "function") {
+    saveFirebaseStaticStore(loadStaticBootstrap.cache).catch((error) => {
+      console.warn("Firebase static store save failed", error);
+    });
+  }
 }
 
 function hydrateStaticFinanceStorage(financeData = {}) {
