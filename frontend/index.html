@@ -38,11 +38,23 @@
 
     <nav id="bottomNav" class="bottom-nav courier-bottom-nav" aria-label="მობილური ნავიგაცია" hidden></nav>
 
+    <div id="adminDrawerOverlay" class="admin-drawer-overlay" hidden></div>
+    <aside id="adminMobileDrawer" class="admin-mobile-drawer" aria-label="ადმინის სრული მენიუ" aria-hidden="true">
+      <div class="admin-mobile-drawer-head">
+        <div>
+          <strong>Admin tools</strong>
+          <span>სრული მენიუ</span>
+        </div>
+        <button id="adminDrawerClose" class="admin-drawer-close" type="button" aria-label="მენიუს დახურვა">×</button>
+      </div>
+      <div id="adminMobileDrawerBody" class="admin-mobile-drawer-body"></div>
+    </aside>
+
     <section id="courierOrdersSheet" class="courier-orders-sheet mobile-sheet" aria-label="კურიერის შეკვეთები" hidden></section>
 
     <div id="modeToast" class="mode-toast" role="status" hidden></div>
 
-    <div id="courierStatsCard" class="courier-stats-card" role="status" hidden></div>
+    <div id="courierStatsCard" class="courier-stats-card courier-map-stats-sheet collapsed" role="status" hidden></div>
 
     <div id="nearestParcelCard" class="nearest-card right-panel mobile-sheet" role="status" hidden></div>
   </main>

@@ -2,6 +2,11 @@
 
 
 
+const RECENT_ADDRESSES_STORAGE_KEY = "deliveryRecentAddresses:v1";
+const FAVORITE_ADDRESSES_STORAGE_KEY = "deliveryFavoriteAddresses:v1";
+const ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS = 300;
+
+
 async function refreshPins() {
   const selectedPinId = state.selectedPinId;
   clearAdminMapPins();
@@ -50,9 +55,12 @@ function openAddressSearchDialog(username) {
   const body = `
     <form id="addressSearchForm" class="address-search-form">
       <label for="addressSearchInput">მისამართის ძებნა თბილისში</label>
-      <div class="address-search-row">
-        <input id="addressSearchInput" type="search" autocomplete="street-address" required>
-        <button class="button primary" type="submit">ძებნა</button>
+      <div class="address-autocomplete-shell">
+        <div class="address-search-row">
+          <input id="addressSearchInput" type="search" autocomplete="street-address" aria-autocomplete="list" aria-controls="addressSearchSuggestions" required>
+          <button class="button primary" type="submit">ძებნა</button>
+        </div>
+        <div id="addressSearchSuggestions" class="address-autocomplete-dropdown" role="listbox" hidden></div>
       </div>
       <p id="addressSearchMessage" class="form-message" role="alert"></p>
     </form>
@@ -73,6 +81,11 @@ function openAddressSearchDialog(username) {
 
   document.getElementById("addressSearchForm")?.addEventListener("submit", (event) => {
     handleAddressSearch(event, username);
+  });
+  bindAddressAutocomplete({
+    inputId: "addressSearchInput",
+    dropdownId: "addressSearchSuggestions",
+    username,
   });
 }
 
@@ -117,6 +130,8 @@ function showPendingMarker(coords) {
 async function handleMapClick(event) {
   if (state.mode !== "selectingParcel") {
     closeActions();
+    closeAdminDrawer();
+    collapseCourierStatsSheet();
     collapseSelectedParcelCard();
     collapseDeliveredPinLabels();
     return;
@@ -154,7 +169,10 @@ async function openParcelDetailsDialog() {
       <small id="parcelAddressWarning">${escapeHtml(state.pendingAddressWarning)}</small>
     </div>
     <label for="parcelAddress">მისამართი</label>
-    <input id="parcelAddress" type="text" autocomplete="street-address" value="${escapeAttr(address)}" placeholder="ქუჩა და შენობის ნომერი">
+    <div class="address-autocomplete-shell">
+      <input id="parcelAddress" type="text" autocomplete="street-address" aria-autocomplete="list" aria-controls="parcelAddressSuggestions" value="${escapeAttr(address)}" placeholder="ქუჩა და შენობის ნომერი">
+      <div id="parcelAddressSuggestions" class="address-autocomplete-dropdown" role="listbox" hidden></div>
+    </div>
     <label for="parcelName">მიმღების სახელი</label>
     <input id="parcelName" type="text" autocomplete="name">
     <label for="parcelPhone">მობილური</label>
@@ -174,6 +192,11 @@ async function openParcelDetailsDialog() {
     { label: "შენახვა", variant: "primary", action: saveParcel },
     { label: "გაუქმება", variant: "secondary", action: () => { closeDialog(); cancelMapSelection(); } },
   ]);
+  bindAddressAutocomplete({
+    inputId: "parcelAddress",
+    dropdownId: "parcelAddressSuggestions",
+    username: state.selectedCourier,
+  });
 }
 
 
@@ -199,7 +222,7 @@ async function saveParcel() {
   const selectedCourierUsername = state.isAdmin ? (document.getElementById("parcelCourier")?.value || "") : state.selectedCourier;
   let courierUsername = selectedCourierUsername;
   if (!fullName || !phone || !state.pendingCoords || (!state.isAdmin && !courierUsername)) return;
-  if (!address || (isCoordinateLabel(address) && !(typeof isStaticDeploy === "function" && isStaticDeploy()))) return showToast(STRINGS.addressRequired);
+  if (!address || isCoordinateLabel(address)) return showToast(STRINGS.addressRequired);
   if (!Number.isFinite(paymentAmount) || paymentAmount < 0) return showToast("შეიყვანეთ სწორი თანხა.");
   state.pendingAddress = address;
   const autoAssignment = state.isAdmin && !courierUsername
@@ -259,6 +282,256 @@ function countActiveCourierPins(username) {
 }
 
 
+function bindAddressAutocomplete({ inputId, dropdownId, username }) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  if (!input || !dropdown) return;
+
+  let debounceTimer = null;
+  let requestId = 0;
+  let suggestions = [];
+  let activeIndex = -1;
+
+  const closeDropdown = () => {
+    dropdown.hidden = true;
+    dropdown.innerHTML = "";
+    activeIndex = -1;
+    input.removeAttribute("aria-activedescendant");
+  };
+
+  const render = (groups, stateClass = "") => {
+    suggestions = groups.flatMap((group) => group.items);
+    activeIndex = suggestions.length ? Math.max(0, Math.min(activeIndex, suggestions.length - 1)) : -1;
+    dropdown.hidden = false;
+    dropdown.classList.toggle("is-loading", stateClass === "loading");
+
+    if (stateClass === "loading") {
+      dropdown.innerHTML = `<div class="address-autocomplete-state">იძებნება</div>`;
+      return;
+    }
+
+    if (!suggestions.length) {
+      dropdown.innerHTML = `<div class="address-autocomplete-state">მისამართი ვერ მოიძებნა</div>`;
+      return;
+    }
+
+    let itemIndex = 0;
+    dropdown.innerHTML = groups.filter((group) => group.items.length).map((group) => `
+      <div class="address-autocomplete-section">
+        <div class="address-autocomplete-label">${escapeHtml(group.label)}</div>
+        ${group.items.map((item) => {
+          const index = itemIndex++;
+          const title = formatAutocompleteAddressTitle(item);
+          const meta = formatAutocompleteAddressMeta(item);
+          return `
+            <button id="${escapeAttr(dropdownId)}-item-${index}" class="address-autocomplete-item ${index === activeIndex ? "is-active" : ""}" type="button" role="option" data-autocomplete-index="${index}" aria-selected="${index === activeIndex ? "true" : "false"}">
+              <strong>${escapeHtml(title)}</strong>
+              <span>${escapeHtml(meta)}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `).join("");
+    input.setAttribute("aria-activedescendant", `${dropdownId}-item-${activeIndex}`);
+  };
+
+  const updateSuggestions = async () => {
+    const query = cleanAddressInput(input.value);
+    const currentRequestId = ++requestId;
+    if (!query) {
+      const groups = buildStoredAddressSuggestionGroups("");
+      if (groups.some((group) => group.items.length)) render(groups);
+      else closeDropdown();
+      return;
+    }
+
+    render([{ label: "", items: [] }], "loading");
+    try {
+      const [storedGroups, remoteResults] = await Promise.all([
+        Promise.resolve(buildStoredAddressSuggestionGroups(query)),
+        searchAddress(query),
+      ]);
+      if (currentRequestId !== requestId) return;
+      const remoteItems = remoteResults.map((item) => ({ ...item, source: "search" }));
+      const groups = mergeAutocompleteGroups(storedGroups, [{ label: "ძიების შედეგები", items: remoteItems }]);
+      activeIndex = groups.some((group) => group.items.length) ? 0 : -1;
+      render(groups);
+    } catch {
+      if (currentRequestId !== requestId) return;
+      render(buildStoredAddressSuggestionGroups(query));
+    }
+  };
+
+  input.addEventListener("input", () => {
+    window.clearTimeout(debounceTimer);
+    render([{ label: "", items: [] }], "loading");
+    debounceTimer = window.setTimeout(updateSuggestions, ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS);
+  });
+
+  input.addEventListener("focus", () => {
+    const groups = buildStoredAddressSuggestionGroups(cleanAddressInput(input.value));
+    if (groups.some((group) => group.items.length)) render(groups);
+  });
+
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      if (!dropdown.matches(":hover")) closeDropdown();
+    }, 120);
+  });
+
+  input.addEventListener("keydown", async (event) => {
+    if (dropdown.hidden || (!suggestions.length && event.key !== "Enter")) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, suggestions.length - 1);
+      render(getRenderedAutocompleteGroups(dropdown, suggestions));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      render(getRenderedAutocompleteGroups(dropdown, suggestions));
+    } else if (event.key === "Enter" && suggestions[activeIndex]) {
+      event.preventDefault();
+      await selectAutocompleteSuggestion(suggestions[activeIndex], input, closeDropdown, username);
+    } else if (event.key === "Escape") {
+      closeDropdown();
+    }
+  });
+
+  dropdown.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+
+  dropdown.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-autocomplete-index]");
+    if (!button) return;
+    const suggestion = suggestions[Number(button.dataset.autocompleteIndex)];
+    await selectAutocompleteSuggestion(suggestion, input, closeDropdown, username);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(`#${inputId}`) && !event.target.closest(`#${dropdownId}`)) closeDropdown();
+  });
+}
+
+
+function getRenderedAutocompleteGroups(dropdown, suggestions) {
+  const labels = [...dropdown.querySelectorAll(".address-autocomplete-label")].map((item) => item.textContent);
+  if (!labels.length) return [{ label: "შედეგები", items: suggestions }];
+  return [{ label: "შედეგები", items: suggestions }];
+}
+
+
+function buildStoredAddressSuggestionGroups(query) {
+  const filterStored = (items) => items.filter((item) => addressSuggestionMatches(item, query));
+  return [
+    { label: "ბოლო მისამართები", items: filterStored(readStoredAddressList(RECENT_ADDRESSES_STORAGE_KEY)).slice(0, 10) },
+    { label: "ფავორიტები", items: filterStored(readStoredAddressList(FAVORITE_ADDRESSES_STORAGE_KEY)).slice(0, 10) },
+  ];
+}
+
+
+function mergeAutocompleteGroups(...groupSets) {
+  const groups = groupSets.flat();
+  const seen = new Set();
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      const coords = getResultCoords(item);
+      const key = `${cleanAddressInput(item.address || item.displayName || item.display_name).toLocaleLowerCase()}:${Number(coords.lat).toFixed(6)}:${Number(coords.lng).toFixed(6)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
+  }));
+}
+
+
+function addressSuggestionMatches(item, query) {
+  const normalizedQuery = normalizeAddressToken(query);
+  if (!normalizedQuery) return true;
+  return normalizeAddressToken([
+    item.address,
+    item.displayName,
+    item.display_name,
+    item.suburb,
+    item.city,
+  ].filter(Boolean).join(" ")).includes(normalizedQuery);
+}
+
+
+function readStoredAddressList(storageKey) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.map(normalizeStoredAddressSuggestion).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+
+function normalizeStoredAddressSuggestion(item) {
+  const coords = getResultCoords(item);
+  const address = cleanAddressInput(item?.address || item?.displayName || item?.display_name || "");
+  if (!address || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) return null;
+  return {
+    ...item,
+    lat: coords.lat,
+    lng: coords.lng,
+    address,
+    displayName: cleanAddressInput(item.displayName || item.display_name || address),
+    source: item.source || "stored",
+  };
+}
+
+
+function saveRecentAddressSuggestion(result) {
+  const normalized = normalizeStoredAddressSuggestion({
+    ...result,
+    address: cleanAddressInput(result.address || formatOsmAddress(result) || result.displayName || result.display_name),
+    displayName: cleanAddressInput(result.displayName || result.display_name || ""),
+    source: "recent",
+  });
+  if (!normalized) return;
+  const current = readStoredAddressList(RECENT_ADDRESSES_STORAGE_KEY);
+  const next = [normalized, ...current.filter((item) => !isSameAddressSuggestion(item, normalized))].slice(0, 10);
+  localStorage.setItem(RECENT_ADDRESSES_STORAGE_KEY, JSON.stringify(next));
+}
+
+
+function isSameAddressSuggestion(a, b) {
+  const coordsA = getResultCoords(a);
+  const coordsB = getResultCoords(b);
+  return cleanAddressInput(a.address).toLocaleLowerCase() === cleanAddressInput(b.address).toLocaleLowerCase()
+    || (Math.abs(coordsA.lat - coordsB.lat) < 0.000001 && Math.abs(coordsA.lng - coordsB.lng) < 0.000001);
+}
+
+
+function formatAutocompleteAddressTitle(result) {
+  const address = result?.address || {};
+  if (address.road || address.house_number) return cleanAddressInput([address.road, address.house_number].filter(Boolean).join(" "));
+  return cleanAddressInput(result.address || formatOsmAddress(result) || result.displayName || result.display_name) || STRINGS.addressMissing;
+}
+
+
+function formatAutocompleteAddressMeta(result) {
+  const address = result?.address || {};
+  const locality = address.suburb || address.city || address.town || address.village || address.municipality || result.suburb || result.city || "";
+  const displayName = cleanAddressInput(result.displayName || result.display_name || "");
+  return cleanAddressInput(locality || displayName || "თბილისი");
+}
+
+
+async function selectAutocompleteSuggestion(suggestion, input, closeDropdown, username) {
+  if (!suggestion) return;
+  const selectedUsername = username ?? state.selectedCourier ?? "";
+  await selectAddressSearchResult(suggestion, selectedUsername, -1);
+  const address = cleanAddressInput(suggestion.address || formatOsmAddress(suggestion) || suggestion.displayName || suggestion.display_name);
+  if (input) input.value = address;
+  saveRecentAddressSuggestion({ ...suggestion, address });
+  closeDropdown();
+}
+
+
 async function handleAddressSearch(event, username) {
   event.preventDefault();
   const query = document.getElementById("addressSearchInput")?.value.trim();
@@ -271,7 +544,7 @@ async function handleAddressSearch(event, username) {
     if (resultsElement) resultsElement.innerHTML = "";
     const results = await searchAddress(query);
     if (!results.length) {
-      if (message) message.textContent = "ვერ მოიძებნა.";
+      if (message) message.textContent = "მისამართი ვერ მოიძებნა";
       state.pendingZone = null;
       state.pendingAutoAssignment = null;
       updateAddressSearchPreview("");
@@ -315,9 +588,19 @@ async function selectAddressSearchResult(result, username, selectedIndex = -1) {
   state.pendingAddress = address;
   state.pendingAddressWarning = result.warning || "";
   showPendingMarker(coords);
-  setMapView(coords, 17);
+  if (state.map?.flyTo) {
+    state.map.flyTo(toLeafletLatLng(coords), 17, { duration: 0.45 });
+  } else {
+    setMapView(coords, 17);
+  }
   await updatePendingZoneAssignment(coords);
   updateAddressSearchPreview(address, state.pendingAddressWarning);
+  updatePendingAddressPreview();
+  saveRecentAddressSuggestion({ ...result, address });
+  const addressSearchInput = document.getElementById("addressSearchInput");
+  const parcelAddressInput = document.getElementById("parcelAddress");
+  if (addressSearchInput) addressSearchInput.value = address;
+  if (parcelAddressInput) parcelAddressInput.value = address;
   const message = document.getElementById("addressSearchMessage");
   if (message) message.textContent = state.pendingAddressWarning;
   document.querySelectorAll("[data-address-result-index]").forEach((button) => {

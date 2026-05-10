@@ -6,6 +6,7 @@ function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
   [
     "map", "adminDashboard", "courierDashboard", "menuButton", "actionPanel", "bottomNav", "courierOrdersSheet", "modeToast", "courierStatsCard", "nearestParcelCard",
+    "adminDrawerOverlay", "adminMobileDrawer", "adminMobileDrawerBody", "adminDrawerClose",
     "setupModal", "setupForm", "setupUsername", "setupPassword",
     "setupError", "authModal", "loginForm", "loginUsername", "loginPassword",
     "loginError", "showRegisterButton", "registerModal", "registerForm", "regUsername",
@@ -26,11 +27,24 @@ function bindEvents() {
   els.menuButton.addEventListener("click", () => {
     collapseSelectedParcelCard();
     collapseDeliveredPinLabels();
+    if (state.isAdmin && isMobileViewport()) {
+      openAdminDrawer();
+      return;
+    }
     toggleActions();
   });
   els.dialogModal?.addEventListener("click", handleDialogBackdropClick);
   bindCourierSheetEvents();
+  bindCourierStatsSheetEvents();
+  bindAdminDrawerEvents();
   document.addEventListener("click", (event) => {
+    const drawerToggle = event.target.closest("[data-admin-drawer-toggle]");
+    if (drawerToggle) {
+      collapseCourierStatsSheet();
+      openAdminDrawer();
+      return;
+    }
+
     const presenceToggle = event.target.closest("[data-courier-presence-toggle]");
     if (presenceToggle) {
       const modes = ["online", "break", "offline"];
@@ -45,6 +59,8 @@ function bindEvents() {
     }
     const button = event.target.closest("[data-action]");
     if (!button) return;
+    if (button.closest("#bottomNav")) collapseCourierStatsSheet();
+    if (button.closest("#adminMobileDrawer")) closeAdminDrawer();
     handleAction(button.dataset.action, button.dataset.value, button);
   });
 
@@ -52,6 +68,8 @@ function bindEvents() {
     if (event.key === "Escape") {
       closeDialog();
       cancelMapSelection();
+      closeAdminDrawer();
+      collapseCourierStatsSheet();
     }
   });
 }
@@ -127,12 +145,39 @@ function renderActions() {
     `
     : "";
 
+  renderAdminMobileDrawer(actions, secondaryActions, renderActionButton);
+
   if (els.bottomNav) {
     els.bottomNav.hidden = !state.currentUser;
     els.bottomNav.innerHTML = state.isAdmin
-      ? actions.slice(0, 5).map((item) => renderActionButton(item, "bottom-nav-item")).join("")
+      ? `${actions.slice(0, 4).map((item) => renderActionButton(item, "bottom-nav-item")).join("")}
+        <button class="bottom-nav-item bottom-nav-item--menu" type="button" data-admin-drawer-toggle aria-label="სრული მენიუს გახსნა">
+          <b aria-hidden="true">☰</b>
+          <span>მენიუ</span>
+        </button>`
       : actions.map((item, index) => renderActionButton(item, "bottom-nav-item", index === 0)).join("");
   }
+}
+
+
+function renderAdminMobileDrawer(actions, secondaryActions, renderActionButton) {
+  if (!els.adminMobileDrawerBody) return;
+  if (!state.isAdmin) {
+    els.adminMobileDrawerBody.textContent = "";
+    closeAdminDrawer();
+    return;
+  }
+
+  els.adminMobileDrawerBody.innerHTML = `
+    <div class="admin-mobile-drawer-section">
+      <span class="app-sidebar-label">მთავარი ფუნქციები</span>
+      ${actions.map((item) => renderActionButton(item, "action-item mobile-admin-drawer-item")).join("")}
+    </div>
+    <div class="admin-mobile-drawer-section">
+      <span class="app-sidebar-label">Admin tools</span>
+      ${secondaryActions.map((item) => renderActionButton(item, "action-item action-item--secondary mobile-admin-drawer-item")).join("")}
+    </div>
+  `;
 }
 
 
@@ -157,6 +202,150 @@ function bindCourierSheetEvents() {
     if (Math.abs(delta) < 20) return;
     els.courierOrdersSheet.classList.toggle("is-expanded", delta < 0);
   });
+}
+
+
+function bindCourierStatsSheetEvents() {
+  let startY = 0;
+  let dragging = false;
+  let pointerId = null;
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!els.courierStatsCard || els.courierStatsCard.hidden || !event.target.closest("#courierStatsCard")) return;
+    startY = event.clientY;
+    dragging = true;
+    pointerId = event.pointerId;
+    els.courierStatsCard.classList.add("is-dragging");
+    els.courierStatsCard.setPointerCapture?.(pointerId);
+  });
+
+  document.addEventListener("pointerup", (event) => {
+    if (!dragging || !els.courierStatsCard) return;
+    dragging = false;
+    pointerId = null;
+    els.courierStatsCard.classList.remove("is-dragging");
+    const delta = event.clientY - startY;
+    if (Math.abs(delta) < 18) {
+      if (event.target.closest(".bottom-sheet-handle")) toggleCourierStatsSheet();
+      return;
+    }
+    if (delta < 0) expandCourierStatsSheet();
+    if (delta > 0) collapseCourierStatsSheet();
+  });
+
+  document.addEventListener("pointercancel", () => {
+    if (!dragging || !els.courierStatsCard) return;
+    dragging = false;
+    pointerId = null;
+    els.courierStatsCard.classList.remove("is-dragging");
+  });
+}
+
+
+function expandCourierStatsSheet() {
+  if (!els.courierStatsCard || els.courierStatsCard.hidden) return;
+  els.courierStatsCard.classList.remove("collapsed");
+  els.courierStatsCard.classList.add("expanded");
+  els.courierStatsCard.setAttribute("aria-expanded", "true");
+}
+
+
+function collapseCourierStatsSheet() {
+  if (!els.courierStatsCard) return;
+  els.courierStatsCard.classList.remove("expanded");
+  els.courierStatsCard.classList.add("collapsed");
+  els.courierStatsCard.setAttribute("aria-expanded", "false");
+}
+
+
+function toggleCourierStatsSheet() {
+  if (!els.courierStatsCard || els.courierStatsCard.hidden) return;
+  if (els.courierStatsCard.classList.contains("expanded")) {
+    collapseCourierStatsSheet();
+  } else {
+    expandCourierStatsSheet();
+  }
+}
+
+
+function bindAdminDrawerEvents() {
+  els.adminDrawerOverlay?.addEventListener("click", closeAdminDrawer);
+  els.adminDrawerClose?.addEventListener("click", closeAdminDrawer);
+
+  let startX = 0;
+  let startY = 0;
+  let currentX = 0;
+  let currentY = 0;
+  let startedFromRightEdge = false;
+  let startedInDrawer = false;
+
+  document.addEventListener("touchstart", (event) => {
+    if (!state.isAdmin || !isMobileViewport() || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    currentX = startX;
+    currentY = startY;
+    startedFromRightEdge = startX >= window.innerWidth - 28;
+    startedInDrawer = Boolean(event.target.closest("#adminMobileDrawer"));
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (event) => {
+    if (!state.isAdmin || !isMobileViewport() || event.touches.length !== 1) return;
+    currentX = event.touches[0].clientX;
+    currentY = event.touches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener("touchend", (event) => {
+    if (!state.isAdmin || !isMobileViewport() || !event.changedTouches.length) return;
+    const touch = event.changedTouches[0];
+    currentX = touch.clientX || currentX;
+    currentY = touch.clientY || currentY;
+    const deltaX = currentX - startX;
+    const deltaY = currentY - startY;
+    const isHorizontalSwipe = Math.abs(deltaX) > 56 && Math.abs(deltaY) < 80;
+
+    if (startedFromRightEdge && isHorizontalSwipe && deltaX < 0) {
+      openAdminDrawer();
+    } else if (startedInDrawer && isHorizontalSwipe && deltaX > 0) {
+      closeAdminDrawer();
+    }
+
+    startedFromRightEdge = false;
+    startedInDrawer = false;
+  }, { passive: true });
+}
+
+
+function openAdminDrawer() {
+  if (!state.isAdmin || !els.adminMobileDrawer) return;
+  closeActions();
+  els.adminMobileDrawer.classList.add("is-open");
+  els.adminMobileDrawer.setAttribute("aria-hidden", "false");
+  if (els.adminDrawerOverlay) {
+    els.adminDrawerOverlay.hidden = false;
+    requestAnimationFrame(() => els.adminDrawerOverlay.classList.add("is-open"));
+  }
+  els.menuButton?.setAttribute("aria-expanded", "true");
+}
+
+
+function closeAdminDrawer() {
+  if (!els.adminMobileDrawer) return;
+  els.adminMobileDrawer.classList.remove("is-open");
+  els.adminMobileDrawer.setAttribute("aria-hidden", "true");
+  if (els.adminDrawerOverlay) {
+    els.adminDrawerOverlay.classList.remove("is-open");
+    window.setTimeout(() => {
+      if (!els.adminDrawerOverlay?.classList.contains("is-open")) els.adminDrawerOverlay.hidden = true;
+    }, 250);
+  }
+  els.menuButton?.setAttribute("aria-expanded", "false");
+}
+
+
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 960px)").matches;
 }
 
 
@@ -392,6 +581,8 @@ function showToast(message) {
 
 async function logout() {
   await api("/api/logout", { method: "POST" }).catch(() => {});
+  closeAdminDrawer();
+  collapseCourierStatsSheet();
   if (state.watchId) navigator.geolocation.clearWatch(state.watchId);
   if (state.midnightTimer) window.clearTimeout(state.midnightTimer);
   resetMapSelectionUi();

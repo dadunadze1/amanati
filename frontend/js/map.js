@@ -254,6 +254,7 @@ async function renderCourierStatsCard(pins = state.activePins) {
   if (state.isAdmin || !state.currentUser) {
     els.courierStatsCard.hidden = true;
     els.courierStatsCard.textContent = "";
+    if (typeof collapseCourierStatsSheet === "function") collapseCourierStatsSheet();
     return;
   }
 
@@ -263,10 +264,15 @@ async function renderCourierStatsCard(pins = state.activePins) {
   const failed = pins.filter((pin) => pin.status === "failed").length;
   if (username !== state.currentUser) return;
   els.courierStatsCard.hidden = false;
+  if (!els.courierStatsCard.classList.contains("expanded")) {
+    els.courierStatsCard.classList.add("collapsed");
+  }
+  els.courierStatsCard.setAttribute("aria-expanded", els.courierStatsCard.classList.contains("expanded") ? "true" : "false");
   els.courierStatsCard.innerHTML = `
-    <div><span>დარჩენილი</span><strong>${pending}</strong></div>
-    <div><span>ჩაბარდა</span><strong>${deliveredPins.length}</strong></div>
-    <div><span>არ ჩაბარდა</span><strong>${failed}</strong></div>
+    <div class="bottom-sheet-handle" role="button" tabindex="0" aria-label="სტატისტიკის პანელის გაშლა"></div>
+    <div class="courier-map-stats-row"><span>დარჩენილი</span><strong>${pending}</strong></div>
+    <div class="courier-map-stats-row"><span>ჩაბარდა</span><strong>${deliveredPins.length}</strong></div>
+    <div class="courier-map-stats-row"><span>არ ჩაბარდა</span><strong>${failed}</strong></div>
   `;
 }
 
@@ -444,6 +450,23 @@ function buildUrl(baseUrl, params) {
 }
 
 
+function buildNominatimReverseUrl(coords) {
+  return buildUrl("https://nominatim.openstreetmap.org/reverse", {
+    format: "jsonv2",
+    lat: coords.lat,
+    lon: coords.lng,
+    "accept-language": "ka",
+    zoom: 18,
+    addressdetails: 1,
+  });
+}
+
+
+function buildNominatimSearchUrl(params) {
+  return buildUrl("https://nominatim.openstreetmap.org/search", params);
+}
+
+
 function buildGoogleMapsRouteUrl(origin, destination) {
   return buildUrl("https://www.google.com/maps/dir/", {
     api: 1,
@@ -455,17 +478,17 @@ function buildGoogleMapsRouteUrl(origin, destination) {
 
 
 async function fetchOsmJson(path, params) {
-  if (typeof isStaticDeploy === "function" && isStaticDeploy()) return null;
-  const proxyPath = path === "/search" || path === "/reverse" ? `/api/geocode${path}` : "";
-  const headers = {
-    Accept: "application/json",
-    ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}),
-  };
-  if (!proxyPath) return null;
-  const requestUrl = buildApiUrl(proxyPath, params);
+  const requestUrl = path === "/search"
+    ? buildNominatimSearchUrl(params)
+    : path === "/reverse"
+      ? buildUrl("https://nominatim.openstreetmap.org/reverse", params)
+      : null;
+  if (!requestUrl) return null;
+  console.log("[geocode] osm url", requestUrl.toString());
   const response = await fetch(requestUrl, {
-    headers,
+    headers: { Accept: "application/json" },
   }).catch(() => null);
+  console.log("[geocode] osm response status", response?.status || 0);
   if (!response || !response.ok) return null;
   const data = await response.json();
   return data;
@@ -517,10 +540,16 @@ function formatOsmAddress(result, fallback = "") {
     || address.quarter
     || "";
   const houseNumber = address.house_number || "";
-  if (streetName && houseNumber) return cleanAddressInput(`${streetName} ${houseNumber}`);
+  const locality = address.suburb
+    || address.city
+    || address.town
+    || address.village
+    || address.municipality
+    || "";
+  if (streetName && houseNumber) return cleanAddressInput([`${streetName} ${houseNumber}`, locality].filter(Boolean).join(", "));
   if (streetName) {
     if (result && typeof result === "object") result._addressWarning = "შენობის ნომერი ვერ მოიძებნა, ნაჩვენებია ქუჩა.";
-    return cleanAddressInput(streetName);
+    return cleanAddressInput([streetName, locality].filter(Boolean).join(", "));
   }
 
   const displayAddress = cleanAddressInput(result?.display_name || "");
@@ -567,29 +596,32 @@ async function reverseGeocodeCoords(coords) {
   const fallbackAddress = formatCoordsAddress(coords);
 
   try {
-    const result = await fetchOsmJson("/reverse", {
-      format: "jsonv2",
-      lat: coords.lat,
-      lon: coords.lng,
-      zoom: 18,
-      addressdetails: 1,
-      "accept-language": "ka,en",
+    const requestUrl = buildNominatimReverseUrl(coords);
+    console.log("[geocode] reverse url", requestUrl.toString());
+    const response = await fetch(requestUrl, {
+      headers: { Accept: "application/json" },
     });
-    console.log("[geocode] reverse response", result);
+    console.log("[geocode] reverse response status", response.status);
+    if (!response.ok) throw new Error(`Reverse geocode failed: ${response.status}`);
+    const result = await response.json();
+    console.log("[geocode] reverse display_name", result?.display_name || "");
     const address = formatOsmAddress(result, "");
-    console.log("[geocode] selected formatted address", address || fallbackAddress);
+    const finalAddress = address || fallbackAddress;
+    console.log("[geocode] final formatted address", finalAddress);
     const isPendingCoords = state.pendingCoords
       && Number(state.pendingCoords.lat) === Number(coords.lat)
       && Number(state.pendingCoords.lng) === Number(coords.lng);
     if (isPendingCoords) {
       state.pendingAddressWarning = result?._addressWarning || (address ? "" : "მისამართი ვერ მოიძებნა, ნაჩვენებია კოორდინატები.");
     }
-    return address || fallbackAddress;
-  } catch {
+    return finalAddress;
+  } catch (error) {
+    console.log("[geocode] reverse failed", error?.message || error);
     const isPendingCoords = state.pendingCoords
       && Number(state.pendingCoords.lat) === Number(coords.lat)
       && Number(state.pendingCoords.lng) === Number(coords.lng);
     if (isPendingCoords) state.pendingAddressWarning = "მისამართი ვერ მოიძებნა, ნაჩვენებია კოორდინატები.";
+    console.log("[geocode] final formatted address", fallbackAddress);
     return fallbackAddress;
   }
 }
@@ -627,7 +659,7 @@ async function searchAddress(query) {
       countrycodes: "ge",
       viewbox: getTbilisiViewbox(),
       bounded: 1,
-      "accept-language": "ka,en",
+      "accept-language": "ka",
     });
     const normalizedBatch = normalizeOsmSearchResults(batch || [], queryParts);
     results.push(...normalizedBatch);
