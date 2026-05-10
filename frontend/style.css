@@ -527,6 +527,8 @@ button {
   position: relative;
   display: grid;
   gap: 8px;
+  overflow: visible;
+  z-index: 2400;
 }
 
 .address-autocomplete-shell > input {
@@ -538,12 +540,15 @@ button {
   top: calc(100% + 8px);
   right: 0;
   left: 0;
-  z-index: 1200;
-  display: grid;
+  z-index: 2500;
+  display: block;
   gap: 6px;
+  width: 100%;
+  min-width: 100%;
   max-height: min(42dvh, 360px);
   padding: 10px;
   overflow-y: auto;
+  pointer-events: auto;
   color: var(--text);
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(148, 163, 184, 0.28);
@@ -555,8 +560,44 @@ button {
   backdrop-filter: blur(18px);
 }
 
+.address-autocomplete-dropdown:not([hidden]) {
+  display: block;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
 .address-autocomplete-dropdown[hidden] {
   display: none;
+}
+
+@media (min-width: 961px) {
+  .app-shell.is-admin-dashboard .right-panel:has(.address-autocomplete-dropdown:not([hidden])),
+  .app-shell.is-admin-dashboard .nearest-card-body:has(.address-autocomplete-dropdown:not([hidden])),
+  .app-shell.is-admin-dashboard .modal-card:has(.address-autocomplete-dropdown:not([hidden])),
+  .app-shell.is-admin-dashboard .dialog-body:has(.address-autocomplete-dropdown:not([hidden])) {
+    overflow: visible !important;
+  }
+
+  .app-shell.is-admin-dashboard .address-autocomplete-shell {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 2400 !important;
+  }
+
+  .app-shell.is-admin-dashboard .address-autocomplete-dropdown {
+    position: absolute !important;
+    right: 0;
+    left: 0;
+    z-index: 2500 !important;
+    display: block !important;
+    width: 100%;
+    min-width: 100%;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateY(0) !important;
+  }
 }
 
 .address-autocomplete-section {

@@ -320,6 +320,12 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
   const closeDropdown = () => {
     dropdown.hidden = true;
     dropdown.innerHTML = "";
+    dropdown.style.display = "none";
+    dropdown.style.opacity = "";
+    dropdown.style.pointerEvents = "";
+    dropdown.style.position = "";
+    dropdown.style.transform = "";
+    dropdown.style.zIndex = "";
     activeIndex = -1;
     input.removeAttribute("aria-activedescendant");
     if (documentClickHandler) {
@@ -336,10 +342,22 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
     document.addEventListener("click", documentClickHandler);
   };
 
-  const render = (groups, stateClass = "") => {
-    suggestions = groups.flatMap((group) => group.items);
-    activeIndex = suggestions.length ? Math.max(0, Math.min(activeIndex, suggestions.length - 1)) : -1;
+  const forceDropdownVisible = () => {
     dropdown.hidden = false;
+    dropdown.style.display = "block";
+    dropdown.style.opacity = "1";
+    dropdown.style.pointerEvents = "auto";
+    dropdown.style.position = "absolute";
+    dropdown.style.transform = "translateY(0)";
+    dropdown.style.zIndex = "2500";
+  };
+
+  const render = (groups, stateClass = "") => {
+    dropdown.innerHTML = "";
+    suggestions = groups.flatMap((group) => group.items);
+    console.log("[dropdown visible]", suggestions.length);
+    activeIndex = suggestions.length ? Math.max(0, Math.min(activeIndex, suggestions.length - 1)) : -1;
+    forceDropdownVisible();
     ensureDocumentClickHandler();
     dropdown.classList.toggle("is-loading", stateClass === "loading");
 
