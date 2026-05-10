@@ -2,6 +2,9 @@
 
 const STATIC_DEPLOY_STORAGE_KEY = "deliveryStaticBootstrap:v1";
 const STATIC_SESSION_STORAGE_KEY = "deliveryStaticSession:v1";
+const STATIC_DEMO_COURIER_USERNAMES = new Set(["courier1", "courier2"]);
+const STATIC_DEMO_COURIER_IDS = new Set(["static-courier-1", "static-courier-2"]);
+const STATIC_DEMO_COURIER_PHONES = new Set(["+995555000001", "+995555000002"]);
 let staticRealtimeRefreshTimer = null;
 
 function isStaticDeploy() {
@@ -11,7 +14,7 @@ function isStaticDeploy() {
 async function loadStaticBootstrap() {
   if (loadStaticBootstrap.cache) return loadStaticBootstrap.cache;
 
-  let fallback = {
+  const fallback = {
     users: [],
     pending: [],
     parcels: [],
@@ -20,17 +23,18 @@ async function loadStaticBootstrap() {
     financeData: {},
     settings: {},
   };
+  const stores = [fallback];
 
   try {
     const response = await fetch("./data/bootstrap.json", { cache: "no-store" });
-    if (response.ok) fallback = { ...fallback, ...(await response.json()) };
+    if (response.ok) stores.push(await response.json());
   } catch (error) {
     console.warn("Static bootstrap data unavailable", error);
   }
 
   try {
     const stored = loadData(STATIC_DEPLOY_STORAGE_KEY);
-    if (stored && typeof stored === "object") fallback = { ...fallback, ...stored };
+    if (stored && typeof stored === "object") stores.push(stored);
   } catch {
     clearData(STATIC_DEPLOY_STORAGE_KEY);
   }
@@ -38,35 +42,148 @@ async function loadStaticBootstrap() {
   try {
     if (typeof loadFirebaseStaticStore === "function") {
       const firebaseStore = await loadFirebaseStaticStore();
-      if (firebaseStore && typeof firebaseStore === "object") fallback = { ...fallback, ...firebaseStore };
+      if (firebaseStore && typeof firebaseStore === "object") stores.push(firebaseStore);
     }
   } catch (error) {
     console.warn("Firebase static store unavailable", error);
   }
 
-  loadStaticBootstrap.cache = normalizeStaticStore(fallback);
+  loadStaticBootstrap.cache = normalizeStaticStore(mergeStaticStores(...stores));
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
   saveStaticBootstrap();
   startStaticRealtimeSync();
   return loadStaticBootstrap.cache;
 }
 
+function mergeStaticStores(...stores) {
+  return stores.filter((store) => store && typeof store === "object").reduce((merged, store) => {
+    const users = normalizeStaticUsers(store).filter((user) => !isDemoStaticUser(user));
+    const pending = (Array.isArray(store.pending) ? store.pending : [])
+      .map((user) => normalizeStaticUser({ ...user, role: "courier", status: user?.status || "pending" }, { activatePendingCouriers: false }))
+      .filter(Boolean)
+      .filter((user) => !isDemoStaticUser(user));
+    const parcels = (Array.isArray(store.parcels) ? store.parcels : []).filter((parcel) => !isDemoStaticParcel(parcel));
+    const history = (Array.isArray(store.history) ? store.history : []).filter((parcel) => !isDemoStaticParcel(parcel));
+
+    return {
+      users: mergeStaticRecordsByKey(merged.users, users, getStaticUserKey),
+      couriers: [],
+      pending: mergeStaticRecordsByKey(merged.pending, pending, getStaticUserKey),
+      parcels: mergeStaticRecordsByKey(merged.parcels, parcels, getStaticParcelKey),
+      history: mergeStaticRecordsByKey(merged.history, history, getStaticParcelKey),
+      zones: mergeStaticRecordsByKey(merged.zones, Array.isArray(store.zones) ? store.zones : [], getStaticZoneKey),
+      financeData: mergeStaticFinanceData(merged.financeData, store.financeData),
+      settings: {
+        ...(merged.settings && typeof merged.settings === "object" ? merged.settings : {}),
+        ...(store.settings && typeof store.settings === "object" ? store.settings : {}),
+      },
+    };
+  }, {
+    users: [],
+    pending: [],
+    parcels: [],
+    history: [],
+    zones: [],
+    financeData: {},
+    settings: {},
+  });
+}
+
 function normalizeStaticStore(store) {
-  const users = Array.isArray(store.users) ? store.users : [];
-  const extraCouriers = (Array.isArray(store.couriers) ? store.couriers : [])
-    .filter((courier) => !users.some((user) => normalizeUsername(user.username) === normalizeUsername(courier.username)))
-    .map((courier) => ({ ...courier, role: "courier", status: courier.status || "active" }));
-  const mergedUsers = [...users, ...extraCouriers];
+  const merged = mergeStaticStores(store);
+  const mergedUsers = merged.users;
   return {
     users: mergedUsers,
     couriers: mergedUsers.filter((user) => user.role === "courier"),
-    pending: Array.isArray(store.pending) ? store.pending : [],
-    parcels: Array.isArray(store.parcels) ? store.parcels : [],
-    history: Array.isArray(store.history) ? store.history : [],
-    zones: Array.isArray(store.zones) ? store.zones : [],
-    financeData: store.financeData && typeof store.financeData === "object" ? store.financeData : {},
-    settings: store.settings && typeof store.settings === "object" ? store.settings : {},
+    pending: merged.pending,
+    parcels: merged.parcels,
+    history: merged.history,
+    zones: merged.zones,
+    financeData: merged.financeData,
+    settings: merged.settings,
   };
+}
+
+function normalizeStaticUsers(store) {
+  const users = Array.isArray(store.users) ? store.users : [];
+  const couriers = Array.isArray(store.couriers) ? store.couriers.map((courier) => ({ ...courier, role: "courier", status: courier.status || "active" })) : [];
+  return [...users, ...couriers].map((user) => normalizeStaticUser(user)).filter(Boolean);
+}
+
+function normalizeStaticUser(user, options = {}) {
+  if (!user || typeof user !== "object") return null;
+  const role = user.role === "admin" ? "admin" : "courier";
+  const activatePendingCouriers = options.activatePendingCouriers !== false;
+  const status = role === "courier" && activatePendingCouriers && user.status === "pending" ? "active" : user.status || "active";
+  return {
+    ...user,
+    role,
+    status,
+  };
+}
+
+function isDemoStaticUser(user) {
+  const username = normalizeUsername(user?.username);
+  const id = String(user?.id || "").trim().toLowerCase();
+  const phone = String(user?.phone || "").trim();
+  return user?.role !== "admin" && (STATIC_DEMO_COURIER_IDS.has(id) || (STATIC_DEMO_COURIER_USERNAMES.has(username) && STATIC_DEMO_COURIER_PHONES.has(phone)));
+}
+
+function isDemoStaticParcel(parcel) {
+  const id = String(parcel?.id || "").trim().toLowerCase();
+  return id.startsWith("static-parcel-") || id.startsWith("static-history-");
+}
+
+function mergeStaticRecordsByKey(baseRecords, nextRecords, getKey) {
+  const merged = new Map();
+  [...(Array.isArray(baseRecords) ? baseRecords : []), ...(Array.isArray(nextRecords) ? nextRecords : [])].forEach((record) => {
+    if (!record || typeof record !== "object") return;
+    const key = getKey(record) || `missing-key-${merged.size}`;
+    merged.set(key, record);
+  });
+  return Array.from(merged.values());
+}
+
+function getStaticUserKey(user) {
+  return normalizeUsername(user?.username) || String(user?.id || "").trim().toLowerCase();
+}
+
+function getStaticParcelKey(parcel) {
+  const id = String(parcel?.id || "").trim().toLowerCase();
+  if (id) return id;
+  return [
+    normalizeUsername(parcel?.courierUsername),
+    parcel?.createdAt || parcel?.assignedAt || parcel?.completedAt || "",
+    parcel?.phone || "",
+    parcel?.lat || "",
+    parcel?.lng || "",
+  ].join("|");
+}
+
+function getStaticZoneKey(zone) {
+  return String(zone?.id || zone?.name || "").trim().toLowerCase();
+}
+
+function mergeStaticFinanceData(baseFinance, nextFinance) {
+  const base = baseFinance && typeof baseFinance === "object" ? baseFinance : {};
+  const next = nextFinance && typeof nextFinance === "object" ? nextFinance : {};
+  return {
+    ...base,
+    ...next,
+    cashAdjustments: mergeStaticRecordsByKey(base.cashAdjustments, next.cashAdjustments, getStaticAdjustmentKey),
+    payAdjustments: mergeStaticRecordsByKey(base.payAdjustments, next.payAdjustments, getStaticAdjustmentKey),
+  };
+}
+
+function getStaticAdjustmentKey(adjustment) {
+  const id = String(adjustment?.id || "").trim().toLowerCase();
+  if (id) return id;
+  return [
+    normalizeUsername(adjustment?.courierId || adjustment?.username),
+    adjustment?.date || adjustment?.dateKey || adjustment?.startDate || "",
+    adjustment?.timestamp || adjustment?.updatedAt || adjustment?.createdAt || "",
+    adjustment?.amount ?? adjustment?.delta ?? "",
+  ].join("|");
 }
 
 function saveStaticBootstrap() {
@@ -88,7 +205,7 @@ function startStaticRealtimeSync() {
 
 function applyFirebaseStaticStoreUpdate(store) {
   if (!store || typeof store !== "object") return;
-  const normalizedStore = normalizeStaticStore(store);
+  const normalizedStore = normalizeStaticStore(mergeStaticStores(loadStaticBootstrap.cache, store));
   loadStaticBootstrap.cache = normalizedStore;
   saveData(STATIC_DEPLOY_STORAGE_KEY, normalizedStore);
   hydrateStaticFinanceStorage(normalizedStore.financeData);
@@ -230,6 +347,7 @@ async function staticApi(path, options = {}) {
   if (method === "POST" && apiPath === "/api/register") {
     const existing = store.users.find((user) => normalizeUsername(user.username) === normalizeUsername(body.username));
     if (existing) throw new Error("მომხმარებელი უკვე არსებობს.");
+    const now = new Date().toISOString();
     const user = {
       id: `user-${Date.now()}`,
       username: body.username,
@@ -239,7 +357,9 @@ async function staticApi(path, options = {}) {
       phone: body.phone || "",
       role: "courier",
       status: "active",
-      createdAt: new Date().toISOString(),
+      requestedAt: now,
+      approvedAt: now,
+      createdAt: now,
     };
     store.users.push(user);
     saveStaticBootstrap();
