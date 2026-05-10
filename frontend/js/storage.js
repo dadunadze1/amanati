@@ -2,6 +2,7 @@
 
 const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
+const FIREBASE_AUTH_DISABLED_STORAGE_KEY = "deliveryFirebaseAuthDisabled:v1";
 
 let firebaseInitPromise = null;
 let firebaseStoreUnsubscribe = null;
@@ -35,8 +36,21 @@ function hasFirebaseSdk() {
   return Boolean(window.firebase?.initializeApp && window.firebase?.firestore);
 }
 
+function isFirebaseAuthDisabledLocally() {
+  return loadData(FIREBASE_AUTH_DISABLED_STORAGE_KEY)?.projectId === firebaseConfig?.projectId;
+}
+
+function markFirebaseAuthDisabled() {
+  firebaseAuthUnavailable = true;
+  saveData(FIREBASE_AUTH_DISABLED_STORAGE_KEY, {
+    projectId: firebaseConfig?.projectId || "",
+    reason: "anonymous-auth-failed",
+    savedAt: new Date().toISOString(),
+  });
+}
+
 async function initializeFirebaseStorage() {
-  if (firebaseAuthUnavailable) return null;
+  if (firebaseAuthUnavailable || isFirebaseAuthDisabledLocally()) return null;
   if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
   if (firebaseInitPromise) return firebaseInitPromise;
 
@@ -50,7 +64,7 @@ async function initializeFirebaseStorage() {
         try {
           await auth.signInAnonymously();
         } catch (error) {
-          firebaseAuthUnavailable = true;
+          markFirebaseAuthDisabled();
           if (!firebaseAuthWarningShown) {
             firebaseAuthWarningShown = true;
             console.warn("[firebase] anonymous auth failed; using static local mode", error);
