@@ -408,7 +408,7 @@ function formatCoordsAddress(coords) {
 
 function normalizeAddressToken(value) {
   return String(value || "")
-    .toLocaleLowerCase()
+    .toLocaleLowerCase("ka-GE")
     .replace(/[.,;:"'()]/g, " ")
     .replace(/\b(street|st|avenue|ave|road|rd|lane|ln|drive|dr)\b/gi, " ")
     .replace(/\b(ქუჩა|ქ|გამზირი|გამზ|ჩიხი|შესახვევი|გზატკეცილი)\b/gi, " ")
@@ -417,9 +417,40 @@ function normalizeAddressToken(value) {
 }
 
 
+function normalizeGeocodeSearchQuery(value) {
+  return String(value || "")
+    .toLocaleLowerCase("ka-GE")
+    .replace(/[，]/g, ",")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/\s+/g, " ")
+    .replace(/^\s*,+\s*|\s*,+\s*$/g, "")
+    .trim();
+}
+
+
+function queryHasCityOrCountry(value) {
+  return /(?:^|[\s,])(tbilisi|თბილისი|georgia|საქართველო)(?:[\s,]|$)/i.test(String(value || ""));
+}
+
+
+function queryHasGeorgianText(value) {
+  return /[ა-ჰ]/.test(String(value || ""));
+}
+
+
+function withDefaultGeocodeLocation(value) {
+  const query = normalizeGeocodeSearchQuery(value);
+  if (!query) return "";
+  if (queryHasCityOrCountry(query)) return query;
+  if (queryHasGeorgianText(query) && query.length <= 64) return `${query}, Tbilisi, Georgia`;
+  return query;
+}
+
+
 function normalizeHouseNumber(value) {
   return String(value || "")
-    .toLocaleLowerCase()
+    .toLocaleLowerCase("ka-GE")
     .replace(/^(#|№|n|no\.?)\s*/i, "")
     .replace(/\s+/g, "")
     .trim();
@@ -540,6 +571,7 @@ async function fetchOsmJson(path, params, options = {}) {
     throw createGeocodeBusyError();
   }
   const data = await response.json();
+  console.log("[geocode raw]", data);
   return data;
 }
 
@@ -702,7 +734,7 @@ async function searchAddress(query, options = {}) {
     ] : []),
   ];
   const results = [];
-  const requestParamsList = searchParamsList.slice(0, queryParts.houseNumber ? 2 : 1);
+  const requestParamsList = searchParamsList.slice(0, queryParts.houseNumber ? 4 : 3);
   for (const params of requestParamsList) {
     const batch = await fetchOsmJson("/search", {
       format: "jsonv2",
@@ -733,7 +765,7 @@ async function searchAddress(query, options = {}) {
 
 
 function parseAddressQuery(query) {
-  const original = cleanAddressInput(query);
+  const original = normalizeGeocodeSearchQuery(cleanAddressInput(query));
   const numberPattern = /(?:^|[\s,])(?:#|№|N|No\.?)?\s*(\d+[A-Za-zა-ჰ]?(?:[-/]\d+[A-Za-zა-ჰ]?)?)\s*$/i;
   let match = original.match(numberPattern);
   let houseNumber = match?.[1] || "";
@@ -755,31 +787,36 @@ function parseAddressQuery(query) {
 
 
 function normalizeAddressQueryStreet(value) {
-  return cleanAddressInput(value)
-    .replace(/[,]+/g, " ")
+  return normalizeGeocodeSearchQuery(cleanAddressInput(value))
     .replace(/\b(tbilisi|georgia|თბილისი|საქართველო)\b/gi, " ")
+    .replace(/[,]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 
 function buildAddressSearchParams(queryParts) {
-  const query = queryParts.original;
-  const street = queryParts.street;
+  const query = normalizeGeocodeSearchQuery(queryParts.original);
+  const street = normalizeGeocodeSearchQuery(queryParts.street);
   const houseNumber = queryParts.houseNumber;
+  const defaultQuery = withDefaultGeocodeLocation(query);
+  const streetHouseQuery = houseNumber && street ? withDefaultGeocodeLocation(`${street} ${houseNumber}`) : "";
+  const houseStreetQuery = houseNumber && street ? withDefaultGeocodeLocation(`${houseNumber} ${street}`) : "";
   const variants = [
+    streetHouseQuery,
+    houseStreetQuery,
+    defaultQuery,
+    `თბილისი ${query}`,
+    `${query} საქართველო`,
     query,
     `${query}, თბილისი`,
     `${query}, Tbilisi`,
     `${query}, Tbilisi, Georgia`,
-    houseNumber && street ? `${street} ${houseNumber}, Tbilisi, Georgia` : "",
-    houseNumber && street ? `${houseNumber} ${street}, Tbilisi, Georgia` : "",
     houseNumber && street ? `${street} street ${houseNumber}, Tbilisi, Georgia` : "",
     houseNumber && street ? `${street} ქუჩა ${houseNumber}, თბილისი` : "",
-    `${query}, თბილისი`,
   ].filter(Boolean);
 
-  return [...new Set(variants)].map((q) => ({ q }));
+  return [...new Set(variants.map((item) => normalizeGeocodeSearchQuery(item)).filter(Boolean))].map((q) => ({ q }));
 }
 
 
@@ -815,6 +852,27 @@ function searchLocalAddressFallback(queryParts) {
       step: { lat: 0, lng: 0 },
       address: "მაკდონალდსი, ვაჟა-ფშაველას გამზირი",
       area: "საბურთალო",
+    },
+    {
+      tokens: ["ავლაბარი", "avlabari"],
+      base: { lat: 41.69282, lng: 44.81679 },
+      step: { lat: 0, lng: 0 },
+      address: "ავლაბარი",
+      area: "თბილისი",
+    },
+    {
+      tokens: ["რუსთაველი", "შოთა რუსთაველი", "rustaveli", "shota rustaveli"],
+      base: { lat: 41.70077, lng: 44.79445 },
+      step: { lat: 0.00001, lng: -0.000025 },
+      address: "შოთა რუსთაველის გამზირი",
+      area: "მთაწმინდა",
+    },
+    {
+      tokens: ["გლდანი", "gldani"],
+      base: { lat: 41.79125, lng: 44.81785 },
+      step: { lat: 0, lng: 0 },
+      address: "გლდანი",
+      area: "თბილისი",
     },
     {
       tokens: ["ირაკლი აბაშიძის", "აბაშიძის", "irakli abashidze", "abashidze"],
@@ -860,7 +918,7 @@ function normalizeOsmSearchResults(results, queryParts) {
       const coords = getResultCoords(result);
       const address = formatOsmAddress(result, queryParts.street || queryParts.original) || formatCoordsAddress(coords);
       const displayName = cleanAddressInput(result?.display_name || "");
-      const acceptedForTbilisi = isWithinTbilisiBounds(coords) || /tbilisi|თბილისი/i.test(displayName);
+      const acceptedForTbilisi = isLikelyTbilisiSearchResult(result, coords, displayName);
       return {
         ...result,
         lat: coords.lat,
@@ -870,7 +928,41 @@ function normalizeOsmSearchResults(results, queryParts) {
         acceptedForTbilisi,
       };
     })
-    .filter((result) => Number.isFinite(result.lat) && Number.isFinite(result.lng) && result.address && result.acceptedForTbilisi);
+    .filter((result) => (
+      Number.isFinite(result.lat)
+      && Number.isFinite(result.lng)
+      && result.address
+      && result.acceptedForTbilisi
+      && isAllowedOsmSearchResult(result)
+    ));
+}
+
+
+function isLikelyTbilisiSearchResult(result, coords, displayName) {
+  if (isWithinTbilisiBounds(coords)) return true;
+  const address = result?.address || {};
+  const locationText = [
+    displayName,
+    address.city,
+    address.town,
+    address.municipality,
+    address.county,
+    address.state,
+    address.country,
+  ].filter(Boolean).join(" ");
+  if (/tbilisi|თბილისი/i.test(locationText)) return true;
+  return /georgia|საქართველო/i.test(locationText) && isAllowedOsmSearchResult(result);
+}
+
+
+function isAllowedOsmSearchResult(result) {
+  const address = result?.address || {};
+  const osmClass = String(result?.class || "").toLocaleLowerCase("ka-GE");
+  const osmType = String(result?.type || "").toLocaleLowerCase("ka-GE");
+  const allowedTypes = new Set(["road", "residential", "house", "building", "amenity", "neighbourhood", "suburb"]);
+  if (allowedTypes.has(osmType) || allowedTypes.has(osmClass)) return true;
+  if (address.road || address.house_number || address.building || address.amenity || address.neighbourhood || address.suburb) return true;
+  return ["highway", "building", "amenity", "place"].includes(osmClass);
 }
 
 
