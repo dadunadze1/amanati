@@ -63,6 +63,7 @@ async function refreshPinsOnce() {
   } else {
     hideSelectedParcelCard();
   }
+  scheduleMapInvalidateSize();
 }
 
 

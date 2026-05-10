@@ -25,6 +25,23 @@ async function initializeMap() {
     if (!state.currentUser) return;
     rerenderCurrentMapPins();
   });
+  bindMapResizeInvalidation();
+  scheduleMapInvalidateSize();
+}
+
+
+function scheduleMapInvalidateSize(delay = 300) {
+  setTimeout(() => {
+    state.map?.invalidateSize();
+  }, delay);
+}
+
+
+function bindMapResizeInvalidation() {
+  const scheduleResize = () => scheduleMapInvalidateSize();
+  window.addEventListener("resize", scheduleResize, { passive: true });
+  window.addEventListener("orientationchange", scheduleResize, { passive: true });
+  window.visualViewport?.addEventListener("resize", scheduleResize, { passive: true });
 }
 
 

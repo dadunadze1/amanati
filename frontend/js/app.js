@@ -393,6 +393,7 @@ async function renderAdminDashboard(pins = state.activePins) {
       <strong>${escapeHtml(card.value)}</strong>
     </button>
   `).join("");
+  scheduleMapInvalidateSize();
 }
 
 

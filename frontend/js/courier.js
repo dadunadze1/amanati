@@ -133,6 +133,7 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
       </div>
     ` : ""}
   `;
+  scheduleMapInvalidateSize();
 }
 
 

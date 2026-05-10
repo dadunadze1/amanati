@@ -81,6 +81,7 @@ function completeLogin(payload) {
   renderCourierMobileDashboard().catch(() => {});
   startLocationWatch();
   refreshPins();
+  scheduleMapInvalidateSize();
   scheduleMidnightRefresh();
 }
 
