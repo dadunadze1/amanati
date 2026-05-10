@@ -129,9 +129,14 @@ function renderActions() {
   els.actionPanel.innerHTML = state.isAdmin
     ? `
       <div class="app-sidebar-brand">
-        <span aria-hidden="true">DC</span>
+        <span class="swift-brand-mark" aria-hidden="true">
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+        </span>
         <div>
-          <strong>Dispatch</strong>
+          <strong>Swift Delivery</strong>
           <small>Admin dashboard</small>
         </div>
       </div>
