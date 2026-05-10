@@ -4,6 +4,8 @@ const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
 
 let firebaseInitPromise = null;
+let firebaseStoreUnsubscribe = null;
+let lastFirebaseStoreJson = "";
 
 function saveData(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
@@ -71,8 +73,10 @@ async function loadFirebaseStaticStore() {
       return null;
     }
     const data = snapshot.data() || {};
+    const store = data.store && typeof data.store === "object" ? data.store : data;
+    lastFirebaseStoreJson = JSON.stringify(store);
     console.log("[firebase] static store loaded");
-    return data.store && typeof data.store === "object" ? data.store : data;
+    return store;
   } catch (error) {
     console.warn("[firebase] static store load failed", error);
     return null;
@@ -84,6 +88,7 @@ async function saveFirebaseStaticStore(store) {
   if (!db || !store || typeof store !== "object") return false;
 
   try {
+    lastFirebaseStoreJson = JSON.stringify(store);
     await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
       store,
       updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
@@ -94,4 +99,35 @@ async function saveFirebaseStaticStore(store) {
     console.warn("[firebase] static store save failed", error);
     return false;
   }
+}
+
+async function startFirebaseStaticStoreListener(onStoreChange) {
+  if (firebaseStoreUnsubscribe) return firebaseStoreUnsubscribe;
+  const db = await initializeFirebaseStorage();
+  if (!db) return null;
+
+  firebaseStoreUnsubscribe = db
+    .collection(FIREBASE_STATIC_STORE_COLLECTION)
+    .doc(FIREBASE_STATIC_STORE_DOC)
+    .onSnapshot((snapshot) => {
+      if (!snapshot.exists) return;
+      const data = snapshot.data() || {};
+      const store = data.store && typeof data.store === "object" ? data.store : data;
+      const storeJson = JSON.stringify(store);
+      if (!storeJson || storeJson === lastFirebaseStoreJson) return;
+      lastFirebaseStoreJson = storeJson;
+      console.log("[firebase] realtime static store update");
+      onStoreChange?.(store);
+    }, (error) => {
+      console.warn("[firebase] realtime listener failed", error);
+    });
+
+  console.log("[firebase] realtime listener started");
+  return firebaseStoreUnsubscribe;
+}
+
+function stopFirebaseStaticStoreListener() {
+  if (!firebaseStoreUnsubscribe) return;
+  firebaseStoreUnsubscribe();
+  firebaseStoreUnsubscribe = null;
 }

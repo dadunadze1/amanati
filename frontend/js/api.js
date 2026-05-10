@@ -46,6 +46,7 @@ async function loadStaticBootstrap() {
   loadStaticBootstrap.cache = normalizeStaticStore(fallback);
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
   saveStaticBootstrap();
+  startStaticRealtimeSync();
   return loadStaticBootstrap.cache;
 }
 
@@ -75,6 +76,26 @@ function saveStaticBootstrap() {
       console.warn("Firebase static store save failed", error);
     });
   }
+}
+
+function startStaticRealtimeSync() {
+  if (!isStaticDeploy() || typeof startFirebaseStaticStoreListener !== "function") return;
+  startFirebaseStaticStoreListener(applyFirebaseStaticStoreUpdate).catch((error) => {
+    console.warn("Firebase realtime sync unavailable", error);
+  });
+}
+
+function applyFirebaseStaticStoreUpdate(store) {
+  if (!store || typeof store !== "object") return;
+  const normalizedStore = normalizeStaticStore(store);
+  loadStaticBootstrap.cache = normalizedStore;
+  saveData(STATIC_DEPLOY_STORAGE_KEY, normalizedStore);
+  hydrateStaticFinanceStorage(normalizedStore.financeData);
+
+  if (!state.currentUser || !state.map || typeof refreshPins !== "function") return;
+  refreshPins().catch((error) => {
+    console.warn("Realtime refresh failed", error);
+  });
 }
 
 function hydrateStaticFinanceStorage(financeData = {}) {
