@@ -3,6 +3,7 @@
 const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
 const FIREBASE_AUTH_DISABLED_STORAGE_KEY = "deliveryFirebaseAuthDisabled:v1";
+const FIREBASE_AUTH_DISABLED_RETRY_MS = 6 * 60 * 60 * 1000;
 
 let firebaseInitPromise = null;
 let firebaseStoreUnsubscribe = null;
@@ -37,7 +38,14 @@ function hasFirebaseSdk() {
 }
 
 function isFirebaseAuthDisabledLocally() {
-  return loadData(FIREBASE_AUTH_DISABLED_STORAGE_KEY)?.projectId === firebaseConfig?.projectId;
+  const saved = loadData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
+  if (saved?.projectId !== firebaseConfig?.projectId) return false;
+  const savedAt = Date.parse(saved.savedAt || "");
+  if (!Number.isFinite(savedAt) || Date.now() - savedAt > FIREBASE_AUTH_DISABLED_RETRY_MS) {
+    clearData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
+    return false;
+  }
+  return true;
 }
 
 function markFirebaseAuthDisabled() {

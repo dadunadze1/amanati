@@ -8,6 +8,7 @@
       "username": "admin",
       "role": "admin",
       "status": "active",
+      "password": "admin",
       "firstName": "Admin",
       "lastName": "",
       "phone": "",

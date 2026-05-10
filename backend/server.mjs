@@ -496,10 +496,11 @@ async function handleApi(request, response, url) {
       id: randomBytes(12).toString("hex"),
       username,
       role: "courier",
-      status: "pending",
+      status: "active",
       passwordHash: hashPassword(password),
       ...profile,
       requestedAt: now,
+      approvedAt: now,
       createdAt: now,
     });
     await writeDb(db);

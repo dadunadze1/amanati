@@ -99,10 +99,8 @@ async function handleRegistration(event) {
   try {
     await api("/api/register", { method: "POST", body: { username, firstName, lastName, phone, password } });
     els.registerForm.reset();
-    setMessage(els.regError, isStaticDeploy() ? "რეგისტრაცია დასრულდა. შეგიძლიათ შეხვიდეთ." : STRINGS.pendingSent, false);
-    if (isStaticDeploy()) {
-      window.setTimeout(() => switchModal("login"), 700);
-    }
+    setMessage(els.regError, "რეგისტრაცია დასრულდა. შეგიძლიათ შეხვიდეთ.", false);
+    window.setTimeout(() => switchModal("login"), 700);
   } catch (error) {
     setMessage(els.regError, error.message, true);
   }

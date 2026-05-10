@@ -5,6 +5,7 @@ const STATIC_SESSION_STORAGE_KEY = "deliveryStaticSession:v1";
 const STATIC_DEMO_COURIER_USERNAMES = new Set(["courier1", "courier2"]);
 const STATIC_DEMO_COURIER_IDS = new Set(["static-courier-1", "static-courier-2"]);
 const STATIC_DEMO_COURIER_PHONES = new Set(["+995555000001", "+995555000002"]);
+const STATIC_DEFAULT_ADMIN_PASSWORD = "admin";
 let staticRealtimeRefreshTimer = null;
 
 function isStaticDeploy() {
@@ -115,10 +116,13 @@ function normalizeStaticUser(user, options = {}) {
   const role = user.role === "admin" ? "admin" : "courier";
   const activatePendingCouriers = options.activatePendingCouriers !== false;
   const status = role === "courier" && activatePendingCouriers && user.status === "pending" ? "active" : user.status || "active";
+  const normalizedUsername = normalizeUsername(user.username);
+  const isSeedAdmin = role === "admin" && normalizedUsername === "admin" && String(user.id || "").toLowerCase() === "static-admin";
   return {
     ...user,
     role,
     status,
+    password: user.password ?? (isSeedAdmin ? STATIC_DEFAULT_ADMIN_PASSWORD : user.password),
   };
 }
 

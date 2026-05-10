@@ -336,8 +336,10 @@ function parcelMatchesHistoryFilters(parcel, filters) {
 
 
 function parcelMatchesDate(parcel, dateKey) {
+  const normalizedDateKey = normalizeDateKey(dateKey);
+  if (!normalizedDateKey) return false;
   return [parcel.createdAt, parcel.assignedAt, parcel.completedAt, parcel.deliveredAt, parcel.failedAt, parcel.updatedAt, parcel.archivedAt]
-    .some((value) => toDateKey(new Date(value)) === dateKey);
+    .some((value) => normalizeDateKey(value) === normalizedDateKey);
 }
 
 

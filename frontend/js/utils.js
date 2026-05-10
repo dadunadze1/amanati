@@ -53,9 +53,9 @@ function normalizeDateKey(value) {
 function getParcelStatsDateKey(parcel) {
   if (!parcel || typeof parcel !== "object") return "";
   const statusDates = parcel.status === "delivered"
-    ? [parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+    ? [parcel.deliveredAt, parcel.completedAt, parcel.updatedAt, parcel.archivedAt]
     : parcel.status === "failed"
-      ? [parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+      ? [parcel.failedAt, parcel.completedAt, parcel.updatedAt, parcel.archivedAt]
       : [parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
   return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
 }
@@ -63,15 +63,8 @@ function getParcelStatsDateKey(parcel) {
 
 function getParcelStatsDateKeys(parcel) {
   if (!parcel || typeof parcel !== "object") return [];
-  if (parcel.status !== "delivered" && parcel.status !== "failed") {
-    const dateKey = getParcelStatsDateKey(parcel);
-    return dateKey ? [dateKey] : [];
-  }
-
-  const statusDates = parcel.status === "delivered"
-    ? [parcel.archivedAt, parcel.deliveredAt, parcel.completedAt, parcel.updatedAt, parcel.createdAt]
-    : [parcel.archivedAt, parcel.failedAt, parcel.completedAt, parcel.updatedAt, parcel.createdAt];
-  return [...new Set(statusDates.map(normalizeDateKey).filter(Boolean))];
+  const dateKey = getParcelStatsDateKey(parcel);
+  return dateKey ? [dateKey] : [];
 }
 
 
