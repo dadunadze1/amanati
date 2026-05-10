@@ -5,9 +5,30 @@
 const RECENT_ADDRESSES_STORAGE_KEY = "deliveryRecentAddresses:v1";
 const FAVORITE_ADDRESSES_STORAGE_KEY = "deliveryFavoriteAddresses:v1";
 const ADDRESS_AUTOCOMPLETE_DEBOUNCE_MS = 300;
+let refreshPinsPromise = null;
+let refreshPinsQueued = false;
 
 
 async function refreshPins() {
+  if (refreshPinsPromise) {
+    refreshPinsQueued = true;
+    return refreshPinsPromise;
+  }
+
+  refreshPinsPromise = refreshPinsOnce();
+  try {
+    await refreshPinsPromise;
+  } finally {
+    refreshPinsPromise = null;
+    if (refreshPinsQueued) {
+      refreshPinsQueued = false;
+      await refreshPins();
+    }
+  }
+}
+
+
+async function refreshPinsOnce() {
   const selectedPinId = state.selectedPinId;
   clearAdminMapPins();
   state.activePins = [];
@@ -288,6 +309,7 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
   if (!input || !dropdown) return;
 
   let debounceTimer = null;
+  let documentClickHandler = null;
   let requestId = 0;
   let suggestions = [];
   let activeIndex = -1;
@@ -297,12 +319,25 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
     dropdown.innerHTML = "";
     activeIndex = -1;
     input.removeAttribute("aria-activedescendant");
+    if (documentClickHandler) {
+      document.removeEventListener("click", documentClickHandler);
+      documentClickHandler = null;
+    }
+  };
+
+  const ensureDocumentClickHandler = () => {
+    if (documentClickHandler) return;
+    documentClickHandler = (event) => {
+      if (!event.target.closest(`#${inputId}`) && !event.target.closest(`#${dropdownId}`)) closeDropdown();
+    };
+    document.addEventListener("click", documentClickHandler);
   };
 
   const render = (groups, stateClass = "") => {
     suggestions = groups.flatMap((group) => group.items);
     activeIndex = suggestions.length ? Math.max(0, Math.min(activeIndex, suggestions.length - 1)) : -1;
     dropdown.hidden = false;
+    ensureDocumentClickHandler();
     dropdown.classList.toggle("is-loading", stateClass === "loading");
 
     if (stateClass === "loading") {
@@ -408,9 +443,7 @@ function bindAddressAutocomplete({ inputId, dropdownId, username }) {
     await selectAutocompleteSuggestion(suggestion, input, closeDropdown, username);
   });
 
-  document.addEventListener("click", (event) => {
-    if (!event.target.closest(`#${inputId}`) && !event.target.closest(`#${dropdownId}`)) closeDropdown();
-  });
+  ensureDocumentClickHandler();
 }
 
 

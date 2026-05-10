@@ -2,6 +2,7 @@
 
 const STATIC_DEPLOY_STORAGE_KEY = "deliveryStaticBootstrap:v1";
 const STATIC_SESSION_STORAGE_KEY = "deliveryStaticSession:v1";
+let staticRealtimeRefreshTimer = null;
 
 function isStaticDeploy() {
   return window.IS_STATIC_DEPLOY === true || window.location.hostname.includes("github.io");
@@ -93,9 +94,12 @@ function applyFirebaseStaticStoreUpdate(store) {
   hydrateStaticFinanceStorage(normalizedStore.financeData);
 
   if (!state.currentUser || !state.map || typeof refreshPins !== "function") return;
-  refreshPins().catch((error) => {
-    console.warn("Realtime refresh failed", error);
-  });
+  window.clearTimeout(staticRealtimeRefreshTimer);
+  staticRealtimeRefreshTimer = window.setTimeout(() => {
+    refreshPins().catch((error) => {
+      console.warn("Realtime refresh failed", error);
+    });
+  }, 350);
 }
 
 function hydrateStaticFinanceStorage(financeData = {}) {

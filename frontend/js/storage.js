@@ -88,7 +88,9 @@ async function saveFirebaseStaticStore(store) {
   if (!db || !store || typeof store !== "object") return false;
 
   try {
-    lastFirebaseStoreJson = JSON.stringify(store);
+    const storeJson = JSON.stringify(store);
+    if (storeJson && storeJson === lastFirebaseStoreJson) return true;
+    lastFirebaseStoreJson = storeJson;
     await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
       store,
       updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
@@ -110,6 +112,7 @@ async function startFirebaseStaticStoreListener(onStoreChange) {
     .collection(FIREBASE_STATIC_STORE_COLLECTION)
     .doc(FIREBASE_STATIC_STORE_DOC)
     .onSnapshot((snapshot) => {
+      if (snapshot.metadata?.hasPendingWrites) return;
       if (!snapshot.exists) return;
       const data = snapshot.data() || {};
       const store = data.store && typeof data.store === "object" ? data.store : data;
