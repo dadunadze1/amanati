@@ -41,6 +41,9 @@ function bindMapResizeInvalidation() {
   const scheduleResize = () => scheduleMapInvalidateSize();
   window.addEventListener("resize", scheduleResize, { passive: true });
   window.addEventListener("orientationchange", scheduleResize, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) scheduleResize();
+  });
   window.visualViewport?.addEventListener("resize", scheduleResize, { passive: true });
 }
 

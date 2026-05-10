@@ -95,12 +95,13 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
         <strong>${pending}</strong>
       </div>
     </div>
-    <div class="courier-mini-route">
+    <button class="courier-mini-route" type="button" data-courier-current-order>
       <span>${nearest ? "შემდეგი მისამართი" : "შეკვეთა არ არის"}</span>
       <strong>${escapeHtml(nearest ? getParcelAddress(nearest) : "აქტიური შეკვეთა არ არის")}</strong>
       <small>${Number.isFinite(nearestDistance) ? `${escapeHtml(formatDistance(nearestDistance))} / ETA ${estimateCourierEta(nearestDistance)}` : "GPS ლოკაციას ველოდებით"}</small>
-    </div>
+    </button>
   `;
+  els.courierDashboard.querySelector("[data-courier-current-order]")?.addEventListener("click", openNearestCurrentCourierOrder);
 
   els.courierOrdersSheet.innerHTML = `
     <button class="courier-sheet-handle" type="button" data-courier-sheet-toggle aria-label="შეკვეთების პანელის გაშლა">
@@ -134,6 +135,55 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
     ` : ""}
   `;
   scheduleMapInvalidateSize();
+}
+
+
+function getNearestCurrentCourierOrder() {
+  const activePins = (state.activePins || []).filter((pin) => (
+    normalizeUsername(pin.courierUsername) === normalizeUsername(state.currentUser)
+    && pin.status !== "delivered"
+    && !pin.archivedAt
+    && Number.isFinite(Number(pin.lat))
+    && Number.isFinite(Number(pin.lng))
+  ));
+  const pendingPins = activePins.filter((pin) => pin.status === "pending");
+  const candidates = pendingPins.length ? pendingPins : activePins;
+  return sortCourierPinsByStatusAndDistance(candidates)[0] || null;
+}
+
+
+function openNearestCurrentCourierOrder() {
+  const pin = getNearestCurrentCourierOrder();
+  if (!pin) {
+    showToast("აქტიური შეკვეთა ვერ მოიძებნა");
+    return;
+  }
+
+  const coords = toLeafletLatLng(pin);
+  if (state.map?.flyTo) {
+    state.map.flyTo(coords, Math.max(getMapZoom(), 17), { duration: 0.55, easeLinearity: 0.22 });
+  } else {
+    setMapView(pin, 17);
+  }
+  openParcelTab(pin.id, { focus: false });
+  highlightCourierOrderPin(pin);
+  scheduleMapInvalidateSize();
+}
+
+
+function highlightCourierOrderPin(pin) {
+  if (!state.map || !window.L) return;
+  const highlight = L.circleMarker(toLeafletLatLng(pin), {
+    interactive: false,
+    radius: 22,
+    fillColor: "#facc15",
+    fillOpacity: 0.24,
+    color: "#f59e0b",
+    opacity: 0.95,
+    weight: 3,
+    className: "courier-focus-highlight",
+  }).addTo(state.map);
+  window.setTimeout(() => highlight.remove(), 1450);
 }
 
 

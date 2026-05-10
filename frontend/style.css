@@ -7813,3 +7813,142 @@ button.finance-card:hover,
     z-index: 1300;
   }
 }
+
+/* iPhone standalone courier PWA refinements */
+@media (display-mode: standalone) and (max-width: 480px) {
+  html,
+  body,
+  .app-shell.is-courier-mobile {
+    min-height: 100dvh;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  .app-shell.is-courier-mobile {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app-shell.is-courier-mobile #map,
+  .app-shell.is-courier-mobile .map,
+  .app-shell.is-courier-mobile .leaflet-container {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    background: transparent;
+    z-index: 1;
+  }
+
+  .app-shell.is-courier-mobile .courier-mobile-top {
+    top: calc(env(safe-area-inset-top) + 6px);
+    right: 10px;
+    left: 10px;
+    gap: 6px;
+    z-index: 1400;
+  }
+
+  .app-shell.is-courier-mobile .courier-status-row {
+    min-height: 0;
+    max-height: 58px;
+    grid-template-columns: minmax(0, 1fr) minmax(74px, 0.72fr) minmax(62px, 0.56fr);
+    gap: 6px;
+    padding: 6px;
+    border-radius: 16px;
+  }
+
+  .app-shell.is-courier-mobile .courier-online-toggle,
+  .app-shell.is-courier-mobile .courier-day-pill {
+    min-height: 38px;
+    gap: 1px;
+    padding: 5px 7px;
+    border-radius: 12px;
+  }
+
+  .app-shell.is-courier-mobile .courier-online-toggle strong,
+  .app-shell.is-courier-mobile .courier-day-pill strong {
+    font-size: 0.82rem;
+    line-height: 1;
+  }
+
+  .app-shell.is-courier-mobile .courier-day-pill span {
+    font-size: 0.62rem;
+    line-height: 1;
+  }
+
+  .app-shell.is-courier-mobile .courier-mini-route {
+    width: 100%;
+    min-height: 0;
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    appearance: none;
+    -webkit-appearance: none;
+    color: #713f12;
+    background: rgba(254, 249, 195, 0.94);
+    border: 1px solid rgba(234, 179, 8, 0.38);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(120, 53, 15, 0.14);
+    backdrop-filter: blur(12px);
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .app-shell.is-courier-mobile .courier-mini-route:active {
+    transform: scale(0.985);
+  }
+
+  .app-shell.is-courier-mobile .courier-mini-route strong {
+    color: #422006;
+    font-size: 0.82rem;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+
+  .app-shell.is-courier-mobile .courier-mini-route span,
+  .app-shell.is-courier-mobile .courier-mini-route small {
+    font-size: 0.66rem;
+    line-height: 1.1;
+  }
+
+  .app-shell.is-courier-mobile .bottom-nav {
+    bottom: env(safe-area-inset-bottom);
+    z-index: 1400;
+  }
+
+  .app-shell.is-courier-mobile.courier-detail-open .bottom-nav,
+  .app-shell.is-courier-mobile.courier-detail-open .courier-bottom-nav {
+    display: grid;
+  }
+
+  .app-shell.is-courier-mobile.courier-detail-open .nearest-card:not([hidden]) {
+    bottom: calc(var(--courier-bottom-nav) + env(safe-area-inset-bottom) + 10px);
+    max-height: min(58dvh, calc(100dvh - var(--courier-bottom-nav) - env(safe-area-inset-bottom) - 116px));
+  }
+}
+
+.app-shell.is-courier-mobile .courier-focus-highlight {
+  animation: courierPinFocus 1.4s ease-out both;
+  pointer-events: none;
+}
+
+@keyframes courierPinFocus {
+  0% {
+    stroke-width: 2;
+    opacity: 1;
+    transform: scale(0.65);
+  }
+
+  45% {
+    opacity: 0.92;
+    transform: scale(1.2);
+  }
+
+  100% {
+    stroke-width: 1;
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
