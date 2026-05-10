@@ -780,7 +780,7 @@ async function handleApi(request, response, url) {
     if (session.role !== "admin" && status === "delivered") {
       const courierCoords = { lat: Number(body.currentLat), lng: Number(body.currentLng) };
       if (!Number.isFinite(courierCoords.lat) || !Number.isFinite(courierCoords.lng)) throw httpError(400, "მდებარეობა ვერ განისაზღვრა.");
-      if (distanceInMeters(courierCoords, parcel) > 200) throw httpError(403, "შეკვეთის ჩაბარება შესაძლებელია მხოლოდ 200 მეტრის რადიუსში.");
+      if (distanceInMeters(courierCoords, parcel) > 30000) throw httpError(403, "შეკვეთის ჩაბარება შესაძლებელია მხოლოდ 30 კმ რადიუსში.");
     }
     const now = new Date().toISOString();
     parcel.status = status;

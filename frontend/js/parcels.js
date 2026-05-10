@@ -654,8 +654,8 @@ async function updatePinStatus(pinId, status, options = {}) {
       showToast("მდებარეობა ჯერ არ არის განსაზღვრული.");
       return;
     }
-    if (pin && distanceInMeters(state.currentPosition, pin) > 200) {
-      showToast("ჩაბარება შესაძლებელია მხოლოდ 200 მეტრის რადიუსში.");
+    if (pin && distanceInMeters(state.currentPosition, pin) > 30000) {
+      showToast("ჩაბარება შესაძლებელია მხოლოდ 30 კმ რადიუსში.");
       return;
     }
   }
