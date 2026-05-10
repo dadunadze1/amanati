@@ -7934,6 +7934,35 @@ button.finance-card:hover,
   pointer-events: none;
 }
 
+@media (max-width: 1180px) {
+  .app-shell.is-courier-mobile .courier-orders-sheet,
+  .app-shell.is-courier-mobile .courier-orders-sheet:not([hidden]),
+  .app-shell.is-courier-mobile .courier-orders-sheet.is-expanded,
+  .app-shell.is-courier-mobile .courier-map-stats-sheet,
+  .app-shell.is-courier-mobile .courier-map-stats-sheet:not([hidden]),
+  .app-shell.is-courier-mobile .courier-stats-card,
+  .app-shell.is-courier-mobile .bottom-sheet-handle,
+  .app-shell.is-courier-mobile .courier-sheet-handle {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .app-shell.is-courier-mobile .leaflet-bottom {
+    bottom: calc(var(--courier-bottom-nav) + env(safe-area-inset-bottom) + 8px);
+  }
+}
+
 @keyframes courierPinFocus {
   0% {
     stroke-width: 2;

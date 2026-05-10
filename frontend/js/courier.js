@@ -60,7 +60,9 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
 
   els.appShell?.classList.add("is-courier-mobile");
   els.courierDashboard.hidden = false;
-  els.courierOrdersSheet.hidden = false;
+  els.courierOrdersSheet.hidden = true;
+  els.courierOrdersSheet.textContent = "";
+  els.courierOrdersSheet.classList.remove("is-expanded");
 
   const activePins = Array.isArray(pins) ? pins : [];
   const sortedPins = sortCourierPinsByStatusAndDistance(activePins);
@@ -71,14 +73,9 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
     delivered: activePins.filter((pin) => pin.status === "delivered").length,
   }));
   const pending = activePins.filter((pin) => pin.status === "pending").length;
-  const deliveredToday = todayStats.delivered || 0;
   const status = getCourierPresenceStatus(activePins);
   const nearest = sortedPins.find((pin) => pin.status === "pending") || sortedPins[0];
   const nearestDistance = nearest && state.hasCurrentPosition ? distanceInMeters(state.currentPosition, nearest) : NaN;
-  const pendingPins = sortedPins.filter((pin) => pin.status === "pending");
-  const activeDeliveryPins = sortedPins.filter((pin) => pin.status !== "pending");
-  const pendingCards = (await Promise.all(pendingPins.map(renderCourierMobileOrderCard))).join("");
-  const activeCards = (await Promise.all(activeDeliveryPins.map(renderCourierMobileOrderCard))).join("");
 
   els.courierDashboard.innerHTML = `
     <div class="courier-status-row">
@@ -103,37 +100,6 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
   `;
   els.courierDashboard.querySelector("[data-courier-current-order]")?.addEventListener("click", openNearestCurrentCourierOrder);
 
-  els.courierOrdersSheet.innerHTML = `
-    <button class="courier-sheet-handle" type="button" data-courier-sheet-toggle aria-label="შეკვეთების პანელის გაშლა">
-      <span></span>
-    </button>
-    <div class="courier-sheet-head">
-      <div>
-        <span>შეკვეთები</span>
-        <strong>${pending} აქტიური</strong>
-      </div>
-      <button class="courier-sheet-action" type="button" data-action="nearestParcel">უახლოესი</button>
-    </div>
-    <div class="courier-sheet-stats">
-      <span><b>${activePins.length}</b> ყველა</span>
-      <span><b>${pending}</b> pending</span>
-      <span><b>${deliveredToday}</b> delivered</span>
-      <span><b>${escapeHtml(formatMoney(todayStats.courierPay || 0))}</b> დღეს</span>
-    </div>
-    <div class="courier-orders-list">
-      ${pendingCards ? `<div class="courier-sheet-section-title">Pending deliveries</div>${pendingCards}` : ""}
-      ${activeCards ? `<div class="courier-sheet-section-title">Active deliveries</div>${activeCards}` : ""}
-      ${!pendingCards && !activeCards ? `<div class="courier-empty-state">აქტიური შეკვეთა არ არის.</div>` : ""}
-    </div>
-    ${nearest ? `
-      <div class="courier-sticky-actions">
-        <button type="button" data-action="focusAdminPin" data-value="${escapeAttr(nearest.id)}">მიღება</button>
-        <button type="button" data-action="routeCourierPin" data-value="${escapeAttr(nearest.id)}">გზაში</button>
-        <button class="is-success" type="button" data-action="setStatus" data-value="${escapeAttr(nearest.id)}" data-status="delivered">ჩაბარდა</button>
-        <button class="is-danger" type="button" data-action="setStatus" data-value="${escapeAttr(nearest.id)}" data-status="failed">ვერ</button>
-      </div>
-    ` : ""}
-  `;
   scheduleMapInvalidateSize();
 }
 

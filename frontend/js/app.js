@@ -189,6 +189,7 @@ function renderAdminMobileDrawer(actions, secondaryActions, renderActionButton) 
 function bindCourierSheetEvents() {
   document.addEventListener("click", (event) => {
     const toggle = event.target.closest("[data-courier-sheet-toggle]");
+    if (toggle && event.target.closest(".app-shell.is-courier-mobile")) return;
     if (!toggle || !els.courierOrdersSheet) return;
     els.courierOrdersSheet.classList.toggle("is-expanded");
   });
@@ -196,6 +197,7 @@ function bindCourierSheetEvents() {
   let startY = 0;
   let dragging = false;
   document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".app-shell.is-courier-mobile")) return;
     if (!event.target.closest(".courier-sheet-handle")) return;
     startY = event.clientY;
     dragging = true;
@@ -216,6 +218,7 @@ function bindCourierStatsSheetEvents() {
   let pointerId = null;
 
   document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".app-shell.is-courier-mobile")) return;
     if (!els.courierStatsCard || els.courierStatsCard.hidden || !event.target.closest("#courierStatsCard")) return;
     startY = event.clientY;
     dragging = true;

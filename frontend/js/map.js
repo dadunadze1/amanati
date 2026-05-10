@@ -271,6 +271,13 @@ function rerenderCurrentMapPins() {
 
 
 async function renderCourierStatsCard(pins = state.activePins) {
+  if (!state.isAdmin && window.matchMedia?.("(max-width: 1180px)")?.matches) {
+    els.courierStatsCard.hidden = true;
+    els.courierStatsCard.textContent = "";
+    if (typeof collapseCourierStatsSheet === "function") collapseCourierStatsSheet();
+    return;
+  }
+
   if (state.isAdmin || !state.currentUser) {
     els.courierStatsCard.hidden = true;
     els.courierStatsCard.textContent = "";
