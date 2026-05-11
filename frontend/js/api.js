@@ -5,7 +5,7 @@ const STATIC_SESSION_STORAGE_KEY = "deliveryStaticSession:v1";
 const STATIC_DEMO_COURIER_USERNAMES = new Set(["courier1", "courier2"]);
 const STATIC_DEMO_COURIER_IDS = new Set(["static-courier-1", "static-courier-2"]);
 const STATIC_DEMO_COURIER_PHONES = new Set(["+995555000001", "+995555000002"]);
-const STATIC_DEFAULT_ADMIN_PASSWORD = "admin";
+const STATIC_DEFAULT_ADMIN_PASSWORD = "123456";
 let staticRealtimeRefreshTimer = null;
 
 function isStaticDeploy() {
