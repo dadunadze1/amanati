@@ -15,6 +15,7 @@ async function openParcelHistorySearch() {
         <div class="parcel-history-search-row">
           <input id="parcelHistoryQuery" type="search" autocomplete="off" placeholder="სახელი, ტელეფონი, მისამართი, კურიერი ან თარიღი">
           <button class="button primary" type="submit">ძებნა</button>
+          <button id="parcelHistoryExport" class="button secondary" type="button">CSV</button>
         </div>
         <div class="parcel-history-filters" aria-label="ამანათის ისტორიის ფილტრები">
           <select id="parcelHistoryStatus">
@@ -49,6 +50,7 @@ async function openParcelHistorySearch() {
     searchParcelHistory();
   });
   document.getElementById("parcelHistoryQuery")?.addEventListener("input", scheduleParcelHistorySearch);
+  document.getElementById("parcelHistoryExport")?.addEventListener("click", exportParcelHistoryCsv);
   ["parcelHistoryStatus", "parcelHistoryDateFrom", "parcelHistoryDateTo", "parcelHistoryCourier"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", searchParcelHistory);
   });
@@ -79,11 +81,121 @@ async function searchParcelHistory() {
       .sort(sortParcelHistoryRecords);
     state.historySearchResults = parcels;
     await renderParcelHistoryResults(parcels);
+    return parcels;
   } catch {
     state.historySearchResults = [];
     if (message) message.textContent = "ისტორიის ჩატვირთვა ვერ მოხერხდა";
     if (results) results.innerHTML = "<p class=\"history-empty\">ისტორიის ჩატვირთვა ვერ მოხერხდა</p>";
+    return [];
   }
+}
+
+
+async function exportParcelHistoryCsv() {
+  const button = document.getElementById("parcelHistoryExport");
+  const previousLabel = button?.textContent || "CSV";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "მზადდება";
+  }
+
+  try {
+    const parcels = await searchParcelHistory();
+    if (!parcels.length) {
+      showToast("საექსპორტო ჩანაწერი არ არის.");
+      return;
+    }
+    downloadCsvFile(getParcelHistoryExportFilename(), buildParcelHistoryCsv(parcels));
+    showToast(`CSV ექსპორტი მზადაა: ${parcels.length} ჩანაწერი`);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = previousLabel;
+    }
+  }
+}
+
+
+function buildParcelHistoryCsv(parcels) {
+  const headers = [
+    "ID",
+    "მიმღები",
+    "ტელეფონი",
+    "მისამართი",
+    "სტატუსი",
+    "კურიერის ლოგინი",
+    "კურიერი",
+    "კურიერის ტელეფონი",
+    "ზონა",
+    "ქეში",
+    "კურიერის ანაზღაურება",
+    "ადმინის მოგება",
+    "შექმნა",
+    "მიბმა",
+    "ჩაბარდა",
+    "ვერ ჩაბარდა",
+    "ისტორიაში გადავიდა",
+    "მიზეზი",
+  ];
+  const rows = parcels.map((item) => [
+    item.id || "",
+    item.fullName || "",
+    item.phone || "",
+    getParcelExportAddress(item),
+    getStatusLabel(item.status),
+    item.courierUsername || "მიუბმელი",
+    parcelCourierDisplayName(item),
+    parcelCourierPhone(item) || "",
+    parcelZoneLabel(item),
+    getPaymentAmount(item),
+    getCourierPay(item),
+    getAdminProfit(item),
+    formatOptionalDateTime(item.createdAt),
+    formatOptionalDateTime(item.assignedAt),
+    formatOptionalDateTime(item.deliveredAt || (item.status === "delivered" ? item.completedAt : "")),
+    formatOptionalDateTime(item.failedAt || (item.status === "failed" ? item.completedAt : "")),
+    formatOptionalDateTime(item.archivedAt),
+    parcelFailureReason(item),
+  ]);
+  return [headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+}
+
+
+function getParcelExportAddress(parcel) {
+  const cached = typeof getCachedParcelAddress === "function" ? getCachedParcelAddress(parcel.id) : "";
+  const stored = typeof getStoredParcelAddress === "function" ? getStoredParcelAddress(parcel) : "";
+  if (stored) return stored;
+  if (cached) return cached;
+  if (parcel.address) return parcel.address;
+  if (Number.isFinite(Number(parcel.lat)) && Number.isFinite(Number(parcel.lng))) return `${Number(parcel.lat).toFixed(6)}, ${Number(parcel.lng).toFixed(6)}`;
+  return STRINGS.addressMissing;
+}
+
+
+function escapeCsvCell(value) {
+  const text = String(value ?? "").replace(/\r?\n|\r/g, " ");
+  return /[",;]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
+}
+
+
+function downloadCsvFile(filename, csvText) {
+  const blob = new Blob([`\ufeff${csvText}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+
+function getParcelHistoryExportFilename() {
+  const dateFrom = document.getElementById("parcelHistoryDateFrom")?.value || "";
+  const dateTo = document.getElementById("parcelHistoryDateTo")?.value || "";
+  const suffix = [dateFrom, dateTo].filter(Boolean).join("_") || getTodayKey();
+  return `amanatebi-history-${suffix}.csv`;
 }
 
 
