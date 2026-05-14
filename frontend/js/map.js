@@ -1214,14 +1214,24 @@ function renderCourierLocationMarkers() {
     const phone = location.phone || "ტელეფონი არ არის";
     const displayName = location.displayName || location.username || "კურიერი";
 
-    addCourierLocationOverlay(createCircleMarker(coords, {
+    const username = normalizeUsername(location.username);
+    const isSelected = username && state.selectedCourierLocationUsername === username;
+    const marker = createCircleMarker(coords, {
       radius: 8,
       fillColor,
       color: "#ffffff",
       weight: 3,
       fillOpacity: 0.95,
       className: `courier-location-marker courier-location-marker--${isOnline ? "online" : "offline"}`,
-    }));
+    });
+    marker.on("click", (event) => {
+      stopMapClick(event);
+      state.selectedCourierLocationUsername = isSelected ? "" : username;
+      renderCourierLocationMarkers();
+    });
+    addCourierLocationOverlay(marker);
+
+    if (!isSelected) return;
 
     addCourierLocationOverlay(L.marker(toLeafletLatLng(coords), {
       interactive: false,

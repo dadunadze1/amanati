@@ -26,6 +26,7 @@ const state = {
   courierLocationStatusTimer: null,
   courierPresenceStatus: "online",
   lastCourierLocationWriteAt: 0,
+  selectedCourierLocationUsername: "",
   routeLayer: null,
   routePinId: null,
   selectedPinId: null,
