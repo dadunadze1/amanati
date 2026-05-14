@@ -761,17 +761,6 @@ async function updatePinStatus(pinId, status, options = {}) {
     openFailureReasonDialog(pinId);
     return;
   }
-  if (!state.isAdmin && status === "delivered") {
-    if (!state.hasCurrentPosition) {
-      showToast("მდებარეობა ჯერ არ არის განსაზღვრული.");
-      return;
-    }
-    if (pin && distanceInMeters(state.currentPosition, pin) > 30000) {
-      showToast("ჩაბარება შესაძლებელია მხოლოდ 30 კმ რადიუსში.");
-      return;
-    }
-  }
-
   const timestamp = new Date().toISOString();
   const completedAt = options.completedAt || (["delivered", "failed"].includes(status) ? timestamp : undefined);
   const deliveredAt = options.deliveredAt || (status === "delivered" ? completedAt : undefined);

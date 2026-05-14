@@ -804,11 +804,6 @@ async function handleApi(request, response, url) {
     if (!canAccessCourier(session, parcel.courierUsername)) throw httpError(403, "წვდომა აკრძალულია.");
     if (session.role !== "admin" && status === "pending") throw httpError(403, "Only admin can return a parcel to pending.");
     if (session.role !== "admin" && parcel.status === "delivered" && status === "failed") throw httpError(403, "ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
-    if (session.role !== "admin" && status === "delivered") {
-      const courierCoords = { lat: Number(body.currentLat), lng: Number(body.currentLng) };
-      if (!Number.isFinite(courierCoords.lat) || !Number.isFinite(courierCoords.lng)) throw httpError(400, "მდებარეობა ვერ განისაზღვრა.");
-      if (distanceInMeters(courierCoords, parcel) > 30000) throw httpError(403, "შეკვეთის ჩაბარება შესაძლებელია მხოლოდ 30 კმ რადიუსში.");
-    }
     const now = new Date().toISOString();
     parcel.status = status;
     parcel.updatedAt = now;
