@@ -3,7 +3,7 @@
 
 
 const COURIER_LOCATION_REFRESH_MS = 60000;
-const COURIER_LOCATION_OFFLINE_MS = 150000;
+const COURIER_LOCATION_VISIBLE_MS = 120000;
 
 
 async function initializeMap() {
@@ -1207,10 +1207,15 @@ function renderCourierLocationMarkers() {
 
     const updatedAt = Date.parse(location.updatedAt || "");
     const age = Number.isFinite(updatedAt) ? Date.now() - updatedAt : Infinity;
-    const isOnline = location.status !== "offline" && age <= COURIER_LOCATION_OFFLINE_MS;
+    const isOnline = location.status !== "offline" && age <= COURIER_LOCATION_VISIBLE_MS;
+    if (!isOnline) {
+      const username = normalizeUsername(location.username);
+      if (username && state.selectedCourierLocationUsername === username) state.selectedCourierLocationUsername = "";
+      return;
+    }
     const coords = { lat, lng };
-    const fillColor = isOnline ? "#0f766e" : "#64748b";
-    const labelStatus = isOnline ? "Online" : "Offline";
+    const fillColor = "#0f766e";
+    const labelStatus = "Online";
     const phone = location.phone || "ტელეფონი არ არის";
     const displayName = location.displayName || location.username || "კურიერი";
 
@@ -1222,7 +1227,7 @@ function renderCourierLocationMarkers() {
       color: "#ffffff",
       weight: 3,
       fillOpacity: 0.95,
-      className: `courier-location-marker courier-location-marker--${isOnline ? "online" : "offline"}`,
+      className: "courier-location-marker courier-location-marker--online",
     });
     marker.on("click", (event) => {
       stopMapClick(event);
@@ -1238,7 +1243,7 @@ function renderCourierLocationMarkers() {
       icon: L.divIcon({
         className: "courier-location-label-icon",
         html: `
-          <div class="courier-location-label courier-location-label--${isOnline ? "online" : "offline"}">
+          <div class="courier-location-label courier-location-label--online">
             <strong>${escapeHtml(displayName)}</strong>
             <span>${escapeHtml(phone)}</span>
             <small>${escapeHtml(labelStatus)}</small>
