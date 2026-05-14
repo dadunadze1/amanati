@@ -85,6 +85,45 @@ function handleDialogBackdropClick(event) {
 
 
 function renderActions() {
+  const adminActionGroups = [
+    {
+      label: "რუკა",
+      actions: [
+        ["showAllAdminPins", "რუკა", "⌖", "ყველა პინის ჩვენება"],
+        ["adminMap", "ფილტრები", "◉", "რუკის ფილტრები"],
+      ],
+    },
+    {
+      label: "ამანათები",
+      actions: [
+        ["addParcel", "დამატება", "+", "ახალი ამანათის დამატება"],
+        ["parcelHistory", "ისტორია", "◷", "ამანათების ისტორია"],
+        ["adminCloseDay", "დღის დახურვა", "✓", "დღის დახურვა"],
+      ],
+    },
+    {
+      label: "კურიერები",
+      actions: [
+        ["adminUsers", "სია", "◎", "კურიერების მართვა"],
+        ["adminRegister", "რეგისტრაცია", "+", "კურიერის ან ადმინის დამატება"],
+        ["zoneManagement", "ზონები", "▧", "ზონების მართვა"],
+        ["adminStats", "სტატისტიკა", "▦", "კურიერების სტატისტიკა"],
+      ],
+    },
+    {
+      label: "ფინანსები",
+      actions: [
+        ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
+      ],
+    },
+    {
+      label: "პარამეტრები",
+      actions: [
+        ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
+        ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
+      ],
+    },
+  ];
   const actions = state.isAdmin
     ? [
         ["showAllAdminPins", "რუკა", "⌖", "ყველა პინის ჩვენება"],
@@ -102,16 +141,6 @@ function renderActions() {
         ["history", "ისტორია", "↺"],
         ["logout", "გასვლა", "←"],
       ];
-
-  const secondaryActions = state.isAdmin
-    ? [
-        ["adminRegister", "რეგისტრაცია", "+"],
-        ["adminStats", "სტატისტიკა", "▦"],
-        ["adminMap", "ფილტრები", "◉"],
-        ["adminCloseDay", "დღის დახურვა", "✓"],
-        ["logout", "გასვლა", "←"],
-      ]
-    : [];
 
   const renderActionButton = ([action, label, icon, hint], className = "action-item", isActive = false) => `
     <button class="${className}${isActive ? " is-active" : ""}" type="button" data-action="${action}" title="${escapeAttr(hint || label)}">
@@ -143,16 +172,12 @@ function renderActions() {
         </div>
       </div>
       <div class="app-sidebar-section">
-        ${actions.map((item) => renderActionButton(item)).join("")}
-      </div>
-      <div class="app-sidebar-section app-sidebar-section--secondary">
-        <span class="app-sidebar-label">სწრაფი მოქმედებები</span>
-        ${secondaryActions.map((item) => renderActionButton(item, "action-item action-item--secondary")).join("")}
+        ${renderAdminActionGroups(adminActionGroups, renderActionButton)}
       </div>
     `
     : "";
 
-  renderAdminMobileDrawer(actions, secondaryActions, renderActionButton);
+  renderAdminMobileDrawer(adminActionGroups, renderActionButton);
 
   if (els.bottomNav) {
     els.bottomNav.hidden = !state.currentUser;
@@ -167,7 +192,17 @@ function renderActions() {
 }
 
 
-function renderAdminMobileDrawer(actions, secondaryActions, renderActionButton) {
+function renderAdminActionGroups(groups, renderActionButton, itemClassName = "action-item") {
+  return groups.map((group) => `
+    <div class="admin-action-group">
+      <span class="app-sidebar-label">${escapeHtml(group.label)}</span>
+      ${group.actions.map((item) => renderActionButton(item, itemClassName)).join("")}
+    </div>
+  `).join("");
+}
+
+
+function renderAdminMobileDrawer(adminActionGroups, renderActionButton) {
   if (!els.adminMobileDrawerBody) return;
   if (!state.isAdmin) {
     els.adminMobileDrawerBody.textContent = "";
@@ -177,12 +212,7 @@ function renderAdminMobileDrawer(actions, secondaryActions, renderActionButton) 
 
   els.adminMobileDrawerBody.innerHTML = `
     <div class="admin-mobile-drawer-section">
-      <span class="app-sidebar-label">მთავარი ფუნქციები</span>
-      ${actions.map((item) => renderActionButton(item, "action-item mobile-admin-drawer-item")).join("")}
-    </div>
-    <div class="admin-mobile-drawer-section">
-      <span class="app-sidebar-label">Admin tools</span>
-      ${secondaryActions.map((item) => renderActionButton(item, "action-item action-item--secondary mobile-admin-drawer-item")).join("")}
+      ${renderAdminActionGroups(adminActionGroups, renderActionButton, "action-item mobile-admin-drawer-item")}
     </div>
   `;
 }
