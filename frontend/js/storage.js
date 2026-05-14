@@ -7,6 +7,7 @@ const FIREBASE_AUTH_DISABLED_RETRY_MS = 6 * 60 * 60 * 1000;
 
 let firebaseInitPromise = null;
 let firebaseStoreUnsubscribe = null;
+let firebaseCourierLocationsUnsubscribe = null;
 let lastFirebaseStoreJson = "";
 let firebaseAuthUnavailable = false;
 let firebaseAuthWarningShown = false;
@@ -165,4 +166,61 @@ function stopFirebaseStaticStoreListener() {
   if (!firebaseStoreUnsubscribe) return;
   firebaseStoreUnsubscribe();
   firebaseStoreUnsubscribe = null;
+}
+
+function getCourierLocationKey(username) {
+  return encodeURIComponent(normalizeUsername(username))
+    .replace(/%/g, "_")
+    .replace(/[^a-z0-9_~-]/gi, "_");
+}
+
+async function saveFirebaseCourierLocation(location) {
+  const db = await initializeFirebaseStorage();
+  if (!db || !location?.username) return false;
+
+  try {
+    const key = getCourierLocationKey(location.username);
+    await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
+      courierLocations: {
+        [key]: {
+          username: location.username,
+          displayName: location.displayName || location.username,
+          phone: location.phone || "",
+          lat: Number(location.lat),
+          lng: Number(location.lng),
+          status: location.status || "online",
+          updatedAt: location.updatedAt || new Date().toISOString(),
+        },
+      },
+      courierLocationsUpdatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  } catch (error) {
+    console.warn("[firebase] courier location save failed", error);
+    return false;
+  }
+}
+
+async function startFirebaseCourierLocationsListener(onLocationsChange) {
+  if (firebaseCourierLocationsUnsubscribe) return firebaseCourierLocationsUnsubscribe;
+  const db = await initializeFirebaseStorage();
+  if (!db) return null;
+
+  firebaseCourierLocationsUnsubscribe = db
+    .collection(FIREBASE_STATIC_STORE_COLLECTION)
+    .doc(FIREBASE_STATIC_STORE_DOC)
+    .onSnapshot((snapshot) => {
+      const data = snapshot.data() || {};
+      onLocationsChange?.(data.courierLocations && typeof data.courierLocations === "object" ? data.courierLocations : {});
+    }, (error) => {
+      console.warn("[firebase] courier locations listener failed", error);
+    });
+
+  return firebaseCourierLocationsUnsubscribe;
+}
+
+function stopFirebaseCourierLocationsListener() {
+  if (!firebaseCourierLocationsUnsubscribe) return;
+  firebaseCourierLocationsUnsubscribe();
+  firebaseCourierLocationsUnsubscribe = null;
 }

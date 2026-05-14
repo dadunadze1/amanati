@@ -185,6 +185,53 @@ button {
   display: none !important;
 }
 
+.courier-location-label {
+  min-width: 138px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.28);
+  border-radius: 8px;
+  background: #ecfeff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  color: #134e4a;
+  font-size: 0.72rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.courier-location-label strong,
+.courier-location-label span,
+.courier-location-label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.courier-location-label strong {
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.courier-location-label span {
+  color: #0f766e;
+}
+
+.courier-location-label small {
+  color: #0f766e;
+  font-weight: 850;
+}
+
+.courier-location-label--offline {
+  border-color: rgba(100, 116, 139, 0.28);
+  background: #f8fafc;
+  color: #334155;
+}
+
+.courier-location-label--offline span,
+.courier-location-label--offline small {
+  color: #64748b;
+}
+
 .nearest-card {
   position: fixed;
   right: 18px;

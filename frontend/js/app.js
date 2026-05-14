@@ -47,14 +47,16 @@ function bindEvents() {
 
     const presenceToggle = event.target.closest("[data-courier-presence-toggle]");
     if (presenceToggle) {
-      const modes = ["online", "break", "offline"];
-      const labels = { online: "Online", break: "Break", offline: "Offline" };
+      const modes = ["online", "offline"];
+      const labels = { online: "Online", offline: "Offline" };
       const current = modes.includes(presenceToggle.dataset.mode) ? presenceToggle.dataset.mode : "online";
       const next = modes[(modes.indexOf(current) + 1) % modes.length];
+      state.courierPresenceStatus = next;
       presenceToggle.dataset.mode = next;
       presenceToggle.classList.remove("courier-status-online", "courier-status-busy", "courier-status-delivering", "courier-status-break", "courier-status-offline");
       presenceToggle.classList.add(`courier-status-${next}`);
       presenceToggle.querySelector("strong").textContent = labels[next];
+      handleCourierPresenceChange();
       return;
     }
     const button = event.target.closest("[data-action]");

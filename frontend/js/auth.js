@@ -70,7 +70,9 @@ async function handleLogin(event) {
 function completeLogin(payload) {
   state.authToken = payload.token;
   state.currentUser = payload.user.username;
+  state.currentUserProfile = payload.user;
   state.isAdmin = payload.user.role === "admin";
+  state.courierPresenceStatus = state.isAdmin ? "offline" : "online";
   els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open");
   hideModal(els.setupModal);
   hideModal(els.authModal);
@@ -80,6 +82,7 @@ function completeLogin(payload) {
   renderAdminDashboard();
   renderCourierMobileDashboard().catch(() => {});
   startLocationWatch();
+  startCourierLocationServices();
   refreshPins();
   scheduleMapInvalidateSize();
   scheduleMidnightRefresh();
@@ -114,6 +117,7 @@ function switchModal(target) {
 
 
 async function logout() {
+  await stopCourierLocationServices({ markOffline: true });
   await api("/api/logout", { method: "POST" }).catch(() => {});
   if (state.watchId) navigator.geolocation.clearWatch(state.watchId);
   if (state.midnightTimer) window.clearTimeout(state.midnightTimer);
@@ -121,8 +125,10 @@ async function logout() {
   state.watchId = null;
   state.midnightTimer = null;
   state.currentUser = null;
+  state.currentUserProfile = null;
   state.authToken = null;
   state.isAdmin = false;
+  state.courierPresenceStatus = "offline";
   state.hasCurrentPosition = false;
   state.activePins = [];
   clearActiveRoute();

@@ -2,6 +2,10 @@
 
 
 
+const COURIER_LOCATION_REFRESH_MS = 40000;
+const COURIER_LOCATION_OFFLINE_MS = 90000;
+
+
 async function initializeMap() {
   state.markers = [];
 
@@ -267,6 +271,7 @@ function rerenderCurrentMapPins() {
   clearAdminMapPins();
   const visiblePins = state.isAdmin ? filterPinsForAdminMap(state.activePins) : state.activePins;
   renderParcelMarkers(visiblePins);
+  renderCourierLocationMarkers();
 }
 
 
@@ -366,6 +371,18 @@ function clearParcelOverlays() {
 
 function clearAdminMapPins() {
   clearParcelOverlays();
+}
+
+
+function addCourierLocationOverlay(overlay) {
+  state.courierLocationOverlays.push(overlay);
+  return overlay;
+}
+
+
+function clearCourierLocationOverlays() {
+  (state.courierLocationOverlays || []).forEach(clearMapObject);
+  state.courierLocationOverlays = [];
 }
 
 
@@ -1080,5 +1097,151 @@ function startLocationWatch() {
       setMarkerPosition(state.locationMarker, state.currentPosition);
     }
 
+    maybePublishCourierLocation();
   }, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 });
 }
+
+
+function startCourierLocationServices() {
+  stopCourierLocationServices();
+  if (!state.currentUser) return;
+  if (state.isAdmin) {
+    startAdminCourierLocationListener();
+    return;
+  }
+  state.courierPresenceStatus = state.courierPresenceStatus === "offline" ? "offline" : "online";
+  startCourierLocationPublishing();
+}
+
+
+async function stopCourierLocationServices(options = {}) {
+  window.clearInterval(state.courierLocationRefreshTimer);
+  window.clearInterval(state.courierLocationStatusTimer);
+  state.courierLocationRefreshTimer = null;
+  state.courierLocationStatusTimer = null;
+  state.lastCourierLocationWriteAt = 0;
+
+  if (typeof stopFirebaseCourierLocationsListener === "function") stopFirebaseCourierLocationsListener();
+  state.courierLocationUnsubscribe = null;
+  clearCourierLocationOverlays();
+
+  if (options.markOffline && !state.isAdmin && state.currentUser) {
+    await publishCourierLocation({ status: "offline", force: true }).catch(() => {});
+  }
+}
+
+
+function startCourierLocationPublishing() {
+  window.clearInterval(state.courierLocationRefreshTimer);
+  state.courierLocationRefreshTimer = window.setInterval(() => {
+    maybePublishCourierLocation({ force: true });
+  }, COURIER_LOCATION_REFRESH_MS);
+  maybePublishCourierLocation({ force: true });
+}
+
+
+function handleCourierPresenceChange() {
+  if (state.isAdmin || !state.currentUser) return;
+  renderCourierMobileDashboard().catch(() => {});
+  if (state.courierPresenceStatus === "offline") {
+    publishCourierLocation({ status: "offline", force: true }).catch(() => {});
+    return;
+  }
+  maybePublishCourierLocation({ force: true });
+}
+
+
+function maybePublishCourierLocation(options = {}) {
+  if (state.isAdmin || !state.currentUser || state.courierPresenceStatus === "offline") return;
+  if (!state.hasCurrentPosition || document.hidden) return;
+  const now = Date.now();
+  if (!options.force && now - state.lastCourierLocationWriteAt < COURIER_LOCATION_REFRESH_MS) return;
+  publishCourierLocation({ status: "online" }).catch(() => {});
+}
+
+
+async function publishCourierLocation(options = {}) {
+  if (state.isAdmin || !state.currentUser || typeof saveFirebaseCourierLocation !== "function") return false;
+  if (!state.hasCurrentPosition) return false;
+  if (document.hidden && options.status !== "offline") return false;
+
+  const profile = state.currentUserProfile || { username: state.currentUser };
+  const location = {
+    username: state.currentUser,
+    displayName: userFullName(profile) || state.currentUser,
+    phone: profile.phone || "",
+    lat: state.currentPosition.lat,
+    lng: state.currentPosition.lng,
+    status: options.status || "online",
+    updatedAt: new Date().toISOString(),
+  };
+  state.lastCourierLocationWriteAt = Date.now();
+  return saveFirebaseCourierLocation(location);
+}
+
+
+function startAdminCourierLocationListener() {
+  if (typeof startFirebaseCourierLocationsListener !== "function") return;
+  startFirebaseCourierLocationsListener((locations) => {
+    state.courierLocations = locations || {};
+    renderCourierLocationMarkers();
+  }).then((unsubscribe) => {
+    state.courierLocationUnsubscribe = unsubscribe;
+  }).catch((error) => {
+    console.warn("Courier location listener unavailable", error);
+  });
+
+  window.clearInterval(state.courierLocationStatusTimer);
+  state.courierLocationStatusTimer = window.setInterval(renderCourierLocationMarkers, 15000);
+}
+
+
+function renderCourierLocationMarkers() {
+  clearCourierLocationOverlays();
+  if (!state.isAdmin || !state.map) return;
+
+  Object.values(state.courierLocations || {}).forEach((location) => {
+    const lat = Number(location?.lat);
+    const lng = Number(location?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const updatedAt = Date.parse(location.updatedAt || "");
+    const age = Number.isFinite(updatedAt) ? Date.now() - updatedAt : Infinity;
+    const isOnline = location.status !== "offline" && age <= COURIER_LOCATION_OFFLINE_MS;
+    const coords = { lat, lng };
+    const fillColor = isOnline ? "#0f766e" : "#64748b";
+    const labelStatus = isOnline ? "Online" : "Offline";
+    const phone = location.phone || "ტელეფონი არ არის";
+    const displayName = location.displayName || location.username || "კურიერი";
+
+    addCourierLocationOverlay(createCircleMarker(coords, {
+      radius: 8,
+      fillColor,
+      color: "#ffffff",
+      weight: 3,
+      fillOpacity: 0.95,
+      className: `courier-location-marker courier-location-marker--${isOnline ? "online" : "offline"}`,
+    }));
+
+    addCourierLocationOverlay(L.marker(toLeafletLatLng(coords), {
+      interactive: false,
+      icon: L.divIcon({
+        className: "courier-location-label-icon",
+        html: `
+          <div class="courier-location-label courier-location-label--${isOnline ? "online" : "offline"}">
+            <strong>${escapeHtml(displayName)}</strong>
+            <span>${escapeHtml(phone)}</span>
+            <small>${escapeHtml(labelStatus)}</small>
+          </div>
+        `,
+        iconSize: [0, 0],
+        iconAnchor: [-12, 28],
+      }),
+    }).addTo(state.map));
+  });
+}
+
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) maybePublishCourierLocation({ force: true });
+});

@@ -154,10 +154,8 @@ function highlightCourierOrderPin(pin) {
 
 
 function getCourierPresenceStatus(pins) {
-  if (!state.hasCurrentPosition) return { key: "offline", label: "Offline" };
-  if (state.routePinId) return { key: "delivering", label: "Delivering" };
-  if ((pins || []).some((pin) => pin.status === "pending")) return { key: "busy", label: "Busy" };
-  return { key: "online", label: "Online" };
+  const key = state.courierPresenceStatus === "offline" ? "offline" : "online";
+  return { key, label: key === "online" ? "Online" : "Offline" };
 }
 
 
