@@ -97,6 +97,7 @@ function openAddressSearchDialog(username) {
 
   showDialog(state.isAdmin ? "რუკაზე პინის დამატება" : "მისამართის დამატება", body, [
     { label: "შემდეგი", variant: "primary", action: () => confirmAddressSearchSelection(username) },
+    { label: "პინის გასწორება", variant: "secondary", action: () => startPendingMarkerAdjustment(username) },
     { label: "რუკაზე არჩევა", variant: "secondary", action: () => startMapSelection(username) },
     { label: "გაუქმება", variant: "secondary", action: () => { closeDialog(); cancelMapSelection(); } },
   ]);
@@ -121,6 +122,7 @@ function startMapSelection(username) {
   state.selectedCourier = username;
   state.pendingCoords = null;
   state.pendingAddress = "";
+  state.pendingAddressLocked = false;
   state.pendingAddressWarning = "";
   state.pendingZone = null;
   state.pendingAutoAssignment = null;
@@ -128,6 +130,22 @@ function startMapSelection(username) {
   els.menuButton.hidden = true;
   els.modeToast.hidden = false;
   els.modeToast.textContent = STRINGS.chooseMapPoint;
+}
+
+
+function startPendingMarkerAdjustment(username) {
+  const message = document.getElementById("addressSearchMessage");
+  if (!state.pendingCoords) {
+    if (message) message.textContent = "ჯერ მოძებნეთ მისამართი, რომ პინი დაისვას.";
+    return;
+  }
+  closeDialog();
+  state.selectedCourier = username;
+  state.pendingAddressLocked = true;
+  state.mode = "selectingParcel";
+  els.menuButton.hidden = true;
+  els.modeToast.hidden = false;
+  els.modeToast.textContent = "გადაადგილე პინი ზუსტ ადგილზე, შემდეგ დააჭირე პინს ან რუკას.";
 }
 
 
@@ -139,13 +157,37 @@ function cancelMapSelection() {
 
 function showPendingMarker(coords) {
   clearMapObject(state.pendingMarker);
-  state.pendingMarker = createCircleMarker(coords, {
-    radius: 10,
-    fillColor: "#24566f",
-    color: "#fff",
-    weight: 2,
-    fillOpacity: 0.95,
+  if (!state.map || !window.L) return;
+  state.pendingMarker = L.marker(toLeafletLatLng(coords), {
+    draggable: true,
+    autoPan: true,
+    icon: L.divIcon({
+      className: "pending-parcel-marker",
+      html: "<span></span>",
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    }),
   });
+  state.pendingMarker.addTo(state.map);
+  state.pendingMarker.on("dragend", handlePendingMarkerDragEnd);
+  state.pendingMarker.on("click", async (event) => {
+    stopMapClick(event);
+    if (state.mode !== "selectingParcel" || !state.pendingCoords) return;
+    await updatePendingZoneAssignment(state.pendingCoords);
+    await openParcelDetailsDialog();
+    updatePendingAddressPreview();
+    els.modeToast.hidden = true;
+  });
+}
+
+
+async function handlePendingMarkerDragEnd(event) {
+  const coords = toCoords(event.target.getLatLng());
+  state.pendingCoords = coords;
+  state.pendingAddressWarning = "პინი ხელით გადაადგილდა. მისამართის ტექსტი დარჩება როგორც ჩაწერილია.";
+  await updatePendingZoneAssignment(coords);
+  updateAddressSearchPreview(getPendingAddressLabel(), state.pendingAddressWarning);
+  updatePendingAddressPreview();
 }
 
 
@@ -160,16 +202,18 @@ async function handleMapClick(event) {
   }
   if (!event.latlng) return;
   const coords = toCoords(event.latlng);
+  const lockedAddress = state.pendingAddressLocked ? getPendingAddressLabel() : "";
   state.pendingCoords = coords;
-  state.pendingAddress = STRINGS.addressLoading;
+  state.pendingAddress = lockedAddress || STRINGS.addressLoading;
   state.pendingAddressWarning = "";
   setMapView(coords, Math.max(getMapZoom(), 17));
   showPendingMarker(coords);
   els.modeToast.hidden = false;
-  els.modeToast.textContent = STRINGS.addressLoading;
+  els.modeToast.textContent = lockedAddress ? "პინი განახლდა. მისამართის ტექსტი უცვლელია." : STRINGS.addressLoading;
   const address = await reverseGeocodeCoords(coords);
   if (state.pendingCoords !== coords) return;
-  state.pendingAddress = address || formatCoordsAddress(coords);
+  state.pendingAddress = lockedAddress || address || formatCoordsAddress(coords);
+  if (lockedAddress) state.pendingAddressWarning = "პინი ხელით გადაადგილდა. მისამართის ტექსტი დარჩება როგორც ჩაწერილია.";
   await updatePendingZoneAssignment(coords);
   await openParcelDetailsDialog();
   updatePendingAddressPreview();
@@ -620,8 +664,9 @@ function formatAutocompleteAddressMeta(result) {
 async function selectAutocompleteSuggestion(suggestion, input, closeDropdown, username) {
   if (!suggestion) return;
   const selectedUsername = username ?? state.selectedCourier ?? "";
-  await selectAddressSearchResult(suggestion, selectedUsername, -1);
-  const address = cleanAddressInput(suggestion.address || formatOsmAddress(suggestion) || suggestion.displayName || suggestion.display_name);
+  const typedAddress = cleanAddressInput(input?.value || "");
+  await selectAddressSearchResult(suggestion, selectedUsername, -1, typedAddress);
+  const address = getAddressLabelForSearchSelection(suggestion, typedAddress);
   if (input) input.value = address;
   saveRecentAddressSuggestion({ ...suggestion, address });
   closeDropdown();
@@ -652,14 +697,14 @@ async function handleAddressSearch(event, username) {
       return;
     }
     if (message) message.textContent = results[0].warning || "";
-    renderAddressSearchResults(results, username);
-    await selectAddressSearchResult(results[0], username, 0);
+    renderAddressSearchResults(results, username, query);
+    await selectAddressSearchResult(results[0], username, 0, query);
   } catch (error) {
     const localFallback = searchLocalAddressFallback(parseAddressQuery(query));
     if (localFallback.length) {
       if (message) message.textContent = error?.code === "GEOCODE_BUSY" ? GEOCODE_BUSY_MESSAGE : "";
-      renderAddressSearchResults(localFallback, username);
-      await selectAddressSearchResult(localFallback[0], username, 0);
+      renderAddressSearchResults(localFallback, username, query);
+      await selectAddressSearchResult(localFallback[0], username, 0, query);
       return;
     }
     if (message) message.textContent = error?.code === "GEOCODE_BUSY" ? GEOCODE_BUSY_MESSAGE : "მისამართის ძებნა ვერ მოხერხდა.";
@@ -667,33 +712,41 @@ async function handleAddressSearch(event, username) {
 }
 
 
-function renderAddressSearchResults(results, username) {
+function renderAddressSearchResults(results, username, requestedAddress = "") {
   const resultsElement = document.getElementById("addressSearchResults");
   if (!resultsElement) return;
   resultsElement.innerHTML = results.map((result, index) => `
     <button class="address-result-button" type="button" data-address-result-index="${index}">
-      <strong>${escapeHtml(result.address || formatOsmAddress(result) || STRINGS.addressMissing)}</strong>
+      <strong>${escapeHtml(getAddressLabelForSearchSelection(result, requestedAddress) || STRINGS.addressMissing)}</strong>
       <span>${escapeHtml(result.displayName || result.display_name || formatCoordsAddress(getResultCoords(result)))}</span>
       ${result.warning ? `<small>${escapeHtml(result.warning)}</small>` : ""}
     </button>
   `).join("");
   resultsElement.querySelectorAll("[data-address-result-index]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await selectAddressSearchResult(results[Number(button.dataset.addressResultIndex)], username, Number(button.dataset.addressResultIndex));
+      await selectAddressSearchResult(results[Number(button.dataset.addressResultIndex)], username, Number(button.dataset.addressResultIndex), requestedAddress);
     });
   });
 }
 
 
-async function selectAddressSearchResult(result, username, selectedIndex = -1) {
+function getAddressLabelForSearchSelection(result, requestedAddress = "") {
+  const requested = cleanAddressInput(requestedAddress);
+  if (requested && result?.isApproximateAddress) return requested;
+  return cleanAddressInput(result?.address || formatOsmAddress(result) || result?.displayName || result?.display_name);
+}
+
+
+async function selectAddressSearchResult(result, username, selectedIndex = -1, requestedAddress = "") {
   if (!result) return;
   const coords = getResultCoords(result);
   if (!Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) return;
-  const address = cleanAddressInput(result.address || formatOsmAddress(result) || result.displayName || result.display_name) || formatCoordsAddress(coords);
+  const address = getAddressLabelForSearchSelection(result, requestedAddress) || formatCoordsAddress(coords);
   console.log("[geocode] selected formatted address", address);
   state.selectedCourier = username;
   state.pendingCoords = coords;
   state.pendingAddress = address;
+  state.pendingAddressLocked = Boolean(cleanAddressInput(requestedAddress));
   state.pendingAddressWarning = result.warning || "";
   showPendingMarker(coords);
   if (state.map?.flyTo) {
@@ -725,6 +778,7 @@ async function confirmAddressSearchSelection(username) {
   }
   state.selectedCourier = username;
   state.pendingAddress = getPendingAddressLabel() || formatCoordsAddress(state.pendingCoords);
+  state.pendingAddressLocked = Boolean(getPendingAddressLabel());
   await updatePendingZoneAssignment(state.pendingCoords);
   state.mode = "selectingParcel";
   els.menuButton.hidden = true;
@@ -1323,6 +1377,7 @@ function resetMapSelectionUi() {
   clearMapObject(state.pendingMarker);
   state.pendingMarker = null;
   state.pendingAddress = "";
+  state.pendingAddressLocked = false;
   state.pendingAddressWarning = "";
   state.pendingZone = null;
   state.pendingAutoAssignment = null;

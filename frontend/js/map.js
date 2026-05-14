@@ -773,6 +773,8 @@ function buildAddressSearchParams(queryParts) {
     query,
     houseNumber && street ? normalizeGeocodeQuery(`${street} ${houseNumber}`) : "",
     houseNumber && street ? normalizeGeocodeQuery(`${houseNumber} ${street}`) : "",
+    houseNumber && street ? normalizeGeocodeQuery(street) : "",
+    houseNumber && street ? normalizeGeocodeQuery(`${street}, თბილისი`) : "",
     queryParts.original && queryParts.original !== query ? queryParts.original : "",
     queryParts.original ? `თბილისი ${queryParts.original}` : "",
     queryParts.original ? `${queryParts.original} საქართველო` : "",
@@ -847,10 +849,12 @@ function rankAddressResults(results, queryParts) {
   const ranked = results
     .map((result) => {
       const score = scoreAddressResult(result, queryParts);
+      const isApproximateAddress = Boolean(queryParts.houseNumber && !resultHasRequestedHouseNumber(result, queryParts.houseNumber));
       return {
         ...result,
         score,
-        warning: result._addressWarning || (queryParts.houseNumber && !resultHasRequestedHouseNumber(result, queryParts.houseNumber) ? STRINGS.addressStreetFallback : ""),
+        isApproximateAddress,
+        warning: result._addressWarning || (isApproximateAddress ? "ზუსტი ნომერი ვერ მოიძებნა, პინი დაისვა ახლო შედეგზე. საჭიროების შემთხვევაში გადაწიე პინი." : ""),
       };
     })
     .sort((a, b) => b.score - a.score);

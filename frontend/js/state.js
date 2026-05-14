@@ -57,6 +57,7 @@ const state = {
   pendingCoords: null,
   pendingMarker: null,
   pendingAddress: "",
+  pendingAddressLocked: false,
   pendingAddressWarning: "",
   pendingZone: null,
   pendingAutoAssignment: null,

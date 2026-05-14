@@ -770,6 +770,27 @@ button {
   line-height: 1.35;
 }
 
+.pending-parcel-marker {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: rgba(36, 86, 111, 0.16);
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.28);
+  cursor: grab;
+}
+
+.pending-parcel-marker span {
+  width: 14px;
+  height: 14px;
+  display: block;
+  background: #24566f;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+}
+
 .list-button,
 .parcel-row,
 .stats-card {
