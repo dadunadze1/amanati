@@ -4747,6 +4747,10 @@ button,
   backdrop-filter: blur(14px);
 }
 
+.app-shell.is-admin-dashboard .app-topbar[hidden] {
+  display: none !important;
+}
+
 .app-sidebar-brand {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
