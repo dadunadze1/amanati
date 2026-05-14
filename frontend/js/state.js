@@ -28,6 +28,8 @@ const state = {
   courierPresenceStatus: "online",
   lastCourierLocationWriteAt: 0,
   lastLocationWatchErrorToastAt: 0,
+  firebaseSyncStatus: "unknown",
+  lastFirebaseSyncToastAt: 0,
   selectedCourierLocationUsername: "",
   routeLayer: null,
   routePinId: null,

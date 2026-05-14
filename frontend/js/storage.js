@@ -4,6 +4,7 @@ const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
 const FIREBASE_AUTH_DISABLED_STORAGE_KEY = "deliveryFirebaseAuthDisabled:v1";
 const FIREBASE_AUTH_DISABLED_RETRY_MS = 6 * 60 * 60 * 1000;
+const FIREBASE_SYNC_TOAST_THROTTLE_MS = 60 * 1000;
 
 let firebaseInitPromise = null;
 let firebaseStoreUnsubscribe = null;
@@ -58,6 +59,26 @@ function markFirebaseAuthDisabled() {
   });
 }
 
+function markFirebaseSyncIssue(message) {
+  if (typeof state !== "object") return;
+  state.firebaseSyncStatus = "error";
+  if (!state.currentUser || typeof showToast !== "function") return;
+
+  const now = Date.now();
+  if (now - state.lastFirebaseSyncToastAt < FIREBASE_SYNC_TOAST_THROTTLE_MS) return;
+  state.lastFirebaseSyncToastAt = now;
+  showToast(message || "Firebase სინქი დროებით ვერ მუშაობს. ცვლილება ლოკალურად შეინახა.");
+}
+
+function markFirebaseSyncOk() {
+  if (typeof state !== "object") return;
+  const wasError = state.firebaseSyncStatus === "error";
+  state.firebaseSyncStatus = "ok";
+  if (wasError && state.currentUser && typeof showToast === "function") {
+    showToast("Firebase სინქი აღდგა.");
+  }
+}
+
 async function initializeFirebaseStorage() {
   if (firebaseAuthUnavailable || isFirebaseAuthDisabledLocally()) return null;
   if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
@@ -78,6 +99,7 @@ async function initializeFirebaseStorage() {
             firebaseAuthWarningShown = true;
             console.warn("[firebase] anonymous auth failed; using static local mode", error);
           }
+          markFirebaseSyncIssue("Firebase ავტორიზაცია ვერ ჩაირთო. საერთო სინქი დროებით გამორთულია.");
           return null;
         }
       }
@@ -89,6 +111,7 @@ async function initializeFirebaseStorage() {
     return db;
   }).catch((error) => {
     console.warn("[firebase] init failed", error);
+    markFirebaseSyncIssue("Firebase ვერ ჩაირთო. ინტერნეტი ან Firebase პარამეტრები შეამოწმე.");
     return null;
   });
 
@@ -109,9 +132,11 @@ async function loadFirebaseStaticStore() {
     const store = data.store && typeof data.store === "object" ? data.store : data;
     lastFirebaseStoreJson = JSON.stringify(store);
     console.log("[firebase] static store loaded");
+    markFirebaseSyncOk();
     return store;
   } catch (error) {
     console.warn("[firebase] static store load failed", error);
+    markFirebaseSyncIssue("Firebase მონაცემების ჩატვირთვა ვერ მოხერხდა.");
     return null;
   }
 }
@@ -129,9 +154,11 @@ async function saveFirebaseStaticStore(store) {
       updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     console.log("[firebase] static store saved");
+    markFirebaseSyncOk();
     return true;
   } catch (error) {
     console.warn("[firebase] static store save failed", error);
+    markFirebaseSyncIssue("Firebase-ში შენახვა ვერ მოხერხდა. ცვლილება ამ მოწყობილობაზე დარჩა.");
     return false;
   }
 }
@@ -153,12 +180,15 @@ async function startFirebaseStaticStoreListener(onStoreChange) {
       if (!storeJson || storeJson === lastFirebaseStoreJson) return;
       lastFirebaseStoreJson = storeJson;
       console.log("[firebase] realtime static store update");
+      markFirebaseSyncOk();
       onStoreChange?.(store);
     }, (error) => {
       console.warn("[firebase] realtime listener failed", error);
+      markFirebaseSyncIssue("Firebase live სინქი გაითიშა. ინტერნეტი შეამოწმე.");
     });
 
   console.log("[firebase] realtime listener started");
+  markFirebaseSyncOk();
   return firebaseStoreUnsubscribe;
 }
 
@@ -194,9 +224,11 @@ async function saveFirebaseCourierLocation(location) {
       },
       courierLocationsUpdatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+    markFirebaseSyncOk();
     return true;
   } catch (error) {
     console.warn("[firebase] courier location save failed", error);
+    markFirebaseSyncIssue("კურიერის live ლოკაცია Firebase-ში ვერ განახლდა.");
     return false;
   }
 }
@@ -211,9 +243,11 @@ async function startFirebaseCourierLocationsListener(onLocationsChange) {
     .doc(FIREBASE_STATIC_STORE_DOC)
     .onSnapshot((snapshot) => {
       const data = snapshot.data() || {};
+      markFirebaseSyncOk();
       onLocationsChange?.(data.courierLocations && typeof data.courierLocations === "object" ? data.courierLocations : {});
     }, (error) => {
       console.warn("[firebase] courier locations listener failed", error);
+      markFirebaseSyncIssue("კურიერების live ლოკაციების სინქი გაითიშა.");
     });
 
   return firebaseCourierLocationsUnsubscribe;
