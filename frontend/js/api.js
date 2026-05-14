@@ -9,7 +9,13 @@ const STATIC_DEFAULT_ADMIN_PASSWORD = "123456";
 let staticRealtimeRefreshTimer = null;
 
 function isStaticDeploy() {
-  return window.IS_STATIC_DEPLOY === true || window.location.hostname.includes("github.io");
+  const hostname = window.location.hostname;
+  return (
+    window.IS_STATIC_DEPLOY === true
+    || hostname.includes("github.io")
+    || hostname.endsWith(".web.app")
+    || hostname.endsWith(".firebaseapp.com")
+  );
 }
 
 async function loadStaticBootstrap() {
