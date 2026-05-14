@@ -794,6 +794,103 @@ button {
   margin-top: 8px;
 }
 
+.live-courier-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.live-courier-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.live-courier-summary span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.live-courier-summary strong {
+  color: var(--success);
+  font-size: 1.1rem;
+  font-weight: 950;
+}
+
+.live-courier-list {
+  display: grid;
+  gap: 8px;
+}
+
+.live-courier-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.live-courier-card.is-online {
+  border-left-color: #0f766e;
+}
+
+.live-courier-card strong,
+.live-courier-card span,
+.live-courier-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-courier-card strong {
+  color: var(--text);
+  font-weight: 950;
+}
+
+.live-courier-card span,
+.live-courier-card small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.live-courier-meta {
+  min-width: 82px;
+  text-align: right;
+}
+
+.live-courier-card.is-online .live-courier-meta span {
+  color: #0f766e;
+}
+
+.live-courier-orders {
+  min-width: 54px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.live-courier-orders b {
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.live-courier-orders span {
+  font-size: 0.66rem;
+}
+
 .route-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

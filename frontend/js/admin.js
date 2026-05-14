@@ -148,6 +148,81 @@ function openAdminStatsChoice(username) {
 }
 
 
+async function openLiveCouriersDialog() {
+  try {
+    const couriers = await getCouriers();
+    const rows = couriers.map(renderLiveCourierRow).join("");
+    const onlineCount = couriers.filter((courier) => getLiveCourierStatus(courier.username).isOnline).length;
+    const body = `
+      <div class="live-courier-panel">
+        <div class="live-courier-summary">
+          <span>Online</span>
+          <strong>${onlineCount}/${couriers.length}</strong>
+        </div>
+        <div class="live-courier-list">
+          ${rows || "<div class=\"history-empty history-empty-card\">კურიერი ჯერ არ არის</div>"}
+        </div>
+      </div>
+    `;
+    showDialog("Live კურიერები", body, [
+      { label: "განახლება", variant: "primary", action: openLiveCouriersDialog },
+      { label: "დახურვა", variant: "secondary", action: closeDialog },
+    ]);
+  } catch {
+    showDialog("Live კურიერები", `<div class="history-empty history-empty-card">კურიერების live სიის ჩატვირთვა ვერ მოხერხდა</div>`, [
+      { label: "დახურვა", variant: "secondary", action: closeDialog },
+    ]);
+  }
+}
+
+
+function renderLiveCourierRow(courier) {
+  const live = getLiveCourierStatus(courier.username);
+  const activeCount = state.activePins.filter((pin) => normalizeUsername(pin.courierUsername) === normalizeUsername(courier.username) && pin.status === "pending").length;
+  return `
+    <article class="live-courier-card ${live.isOnline ? "is-online" : "is-offline"}">
+      <div>
+        <strong>${escapeHtml(userFullName(courier) || courier.username)}</strong>
+        <span>${escapeHtml(courier.phone || "ტელეფონი არ არის")}</span>
+      </div>
+      <div class="live-courier-meta">
+        <span>${live.isOnline ? "Online" : "Offline"}</span>
+        <small>${escapeHtml(live.label)}</small>
+      </div>
+      <div class="live-courier-orders">
+        <b>${activeCount}</b>
+        <span>აქტიური</span>
+      </div>
+    </article>
+  `;
+}
+
+
+function getLiveCourierStatus(username) {
+  const location = Object.values(state.courierLocations || {})
+    .find((item) => normalizeUsername(item?.username) === normalizeUsername(username));
+  if (!location) return { isOnline: false, label: "ლოკაცია არ არის" };
+
+  const updatedAt = Date.parse(location.updatedAt || "");
+  if (!Number.isFinite(updatedAt)) return { isOnline: false, label: "დრო უცნობია" };
+
+  const ageMs = Date.now() - updatedAt;
+  const visibleMs = typeof COURIER_LOCATION_VISIBLE_MS === "number" ? COURIER_LOCATION_VISIBLE_MS : 120000;
+  const isOnline = location.status !== "offline" && ageMs <= visibleMs;
+  return {
+    isOnline,
+    label: `${formatLiveCourierAge(ageMs)} წინ`,
+  };
+}
+
+
+function formatLiveCourierAge(ageMs) {
+  const seconds = Math.max(0, Math.round(ageMs / 1000));
+  if (seconds < 60) return `${seconds} წმ`;
+  return `${Math.round(seconds / 60)} წთ`;
+}
+
+
 async function openAdminUserDay(username) {
   return openCourierStatsProfile(username);
 }

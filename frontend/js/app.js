@@ -90,6 +90,7 @@ function renderActions() {
       label: "რუკა",
       actions: [
         ["showAllAdminPins", "რუკა", "⌖", "ყველა პინის ჩვენება"],
+        ["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"],
         ["adminMap", "ფილტრები", "◉", "რუკის ფილტრები"],
       ],
     },
@@ -484,6 +485,7 @@ async function handleAction(action, value, sourceElement) {
     pending: openPendingRequests,
     adminRegister: openAdminRegisterDialog,
     adminStats: openAdminStatsUsers,
+    liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
     adminUsers: openUserManagement,
     zoneManagement: openZoneManagement,
