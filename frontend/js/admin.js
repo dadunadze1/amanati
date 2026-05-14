@@ -216,6 +216,11 @@ function getLiveCourierStatus(username) {
 }
 
 
+function getOnlineCourierCount(couriers = []) {
+  return couriers.filter((courier) => getLiveCourierStatus(courier.username).isOnline).length;
+}
+
+
 function formatLiveCourierAge(ageMs) {
   const seconds = Math.max(0, Math.round(ageMs / 1000));
   if (seconds < 60) return `${seconds} წმ`;

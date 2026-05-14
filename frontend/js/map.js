@@ -1185,6 +1185,7 @@ function startAdminCourierLocationListener() {
   startFirebaseCourierLocationsListener((locations) => {
     state.courierLocations = locations || {};
     renderCourierLocationMarkers();
+    renderAdminDashboard().catch(() => {});
   }).then((unsubscribe) => {
     state.courierLocationUnsubscribe = unsubscribe;
   }).catch((error) => {
@@ -1192,7 +1193,10 @@ function startAdminCourierLocationListener() {
   });
 
   window.clearInterval(state.courierLocationStatusTimer);
-  state.courierLocationStatusTimer = window.setInterval(renderCourierLocationMarkers, 15000);
+  state.courierLocationStatusTimer = window.setInterval(() => {
+    renderCourierLocationMarkers();
+    renderAdminDashboard().catch(() => {});
+  }, 15000);
 }
 
 
