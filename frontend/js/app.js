@@ -37,6 +37,7 @@ function bindEvents() {
   bindCourierSheetEvents();
   bindCourierStatsSheetEvents();
   bindAdminDrawerEvents();
+  bindAdminDashboardScrollEvents();
   document.addEventListener("click", (event) => {
     const drawerToggle = event.target.closest("[data-admin-drawer-toggle]");
     if (drawerToggle) {
@@ -358,6 +359,49 @@ function bindAdminDrawerEvents() {
 }
 
 
+function bindAdminDashboardScrollEvents() {
+  let touchStartY = 0;
+  let lastTouchY = 0;
+
+  const shouldHandle = (target) => (
+    state.isAdmin
+    && isMobileViewport()
+    && els.adminDashboard
+    && !els.adminDashboard.hidden
+    && !target?.closest?.(".modal-overlay.active, #adminMobileDrawer, .right-panel:not([hidden]), .bottom-nav")
+  );
+
+  const setCollapsed = (collapsed) => {
+    if (!els.appShell || state.adminDashboardCollapsed === collapsed) return;
+    state.adminDashboardCollapsed = collapsed;
+    els.appShell.classList.toggle("admin-dashboard-collapsed", collapsed);
+    scheduleMapInvalidateSize(120);
+  };
+
+  document.addEventListener("wheel", (event) => {
+    if (!shouldHandle(event.target)) return;
+    if (Math.abs(event.deltaY) < 8) return;
+    setCollapsed(event.deltaY > 0);
+  }, { passive: true });
+
+  document.addEventListener("touchstart", (event) => {
+    if (!shouldHandle(event.target) || event.touches.length !== 1) return;
+    touchStartY = event.touches[0].clientY;
+    lastTouchY = touchStartY;
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (event) => {
+    if (!shouldHandle(event.target) || event.touches.length !== 1) return;
+    const currentY = event.touches[0].clientY;
+    const totalDelta = currentY - touchStartY;
+    const stepDelta = currentY - lastTouchY;
+    lastTouchY = currentY;
+    if (Math.abs(totalDelta) < 24 || Math.abs(stepDelta) < 4) return;
+    setCollapsed(stepDelta < 0);
+  }, { passive: true });
+}
+
+
 function openAdminDrawer() {
   if (!state.isAdmin || !els.adminMobileDrawer) return;
   closeActions();
@@ -400,6 +444,7 @@ async function renderAdminDashboard(pins = state.activePins) {
   }
 
   els.appShell?.classList.add("is-admin-dashboard");
+  els.appShell?.classList.toggle("admin-dashboard-collapsed", Boolean(state.adminDashboardCollapsed));
   els.adminDashboard.hidden = false;
 
   let courierCount = state.adminMapCouriers?.length || 0;
@@ -641,7 +686,8 @@ async function logout() {
   state.isAdmin = false;
   state.hasCurrentPosition = false;
   state.activePins = [];
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open");
+  state.adminDashboardCollapsed = false;
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open", "admin-dashboard-collapsed");
   if (els.adminDashboard) {
     els.adminDashboard.hidden = true;
     els.adminDashboard.textContent = "";

@@ -5169,6 +5169,12 @@ button,
     overflow: auto;
   }
 
+  .app-shell.is-admin-dashboard.admin-dashboard-collapsed .app-topbar {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(calc(100% + 18px));
+  }
+
   .app-shell.is-admin-dashboard.has-selected-pin .app-topbar {
     display: none;
   }
