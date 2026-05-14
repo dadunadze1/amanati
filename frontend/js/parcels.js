@@ -1226,6 +1226,54 @@ async function runAutoDayClose(closeDate = getPreviousDateKey()) {
 }
 
 
+function getRetentionCutoffDateKey(referenceDate = new Date()) {
+  const cutoff = new Date(referenceDate);
+  cutoff.setHours(12, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - Number(CONFIG.dataRetentionMonths || 8));
+  return toDateKey(cutoff);
+}
+
+
+async function runAutoRetentionCleanup() {
+  if (!state.currentUser || !state.isAdmin || state.retentionCleanupInProgress) return { deletedParcels: 0 };
+
+  const todayKey = getTodayKey();
+  const localDoneKey = `deliveryRetentionCleanupDone:${todayKey}`;
+  if (loadData(localDoneKey)) return { deletedParcels: 0 };
+
+  state.retentionCleanupInProgress = true;
+  try {
+    if (isStaticDeploy() && typeof loadStaticBootstrap === "function") {
+      const store = await loadStaticBootstrap();
+      if (store?.settings?.lastRetentionCleanupDate === todayKey) {
+        saveData(localDoneKey, true);
+        return { deletedParcels: 0 };
+      }
+    }
+
+    const cutoffDate = getRetentionCutoffDateKey();
+    const payload = await api("/api/maintenance/retention", {
+      method: "POST",
+      body: {
+        cutoffDate,
+        retentionMonths: Number(CONFIG.dataRetentionMonths || 8),
+      },
+    });
+    saveData(localDoneKey, true);
+    const deletedTotal = Number(payload.deletedParcels || 0) + Number(payload.deletedCashAdjustments || 0) + Number(payload.deletedPayAdjustments || 0);
+    if (deletedTotal > 0) {
+      showToast(`ძველი მონაცემები გასუფთავდა: ${deletedTotal} ჩანაწერი`);
+    }
+    return payload;
+  } catch (error) {
+    console.warn("Retention cleanup failed", error);
+    return { deletedParcels: 0 };
+  } finally {
+    state.retentionCleanupInProgress = false;
+  }
+}
+
+
 function getStoredParcelAddress(parcel) {
   return cleanStoredAddress(parcel?.address);
 }

@@ -305,6 +305,54 @@ function saveStaticFinanceData(financeData) {
   saveStaticBootstrap();
 }
 
+function getStaticRetentionParcelDateKey(parcel) {
+  return normalizeDateKey(parcel?.archivedAt || parcel?.completedAt || parcel?.deliveredAt || parcel?.failedAt || parcel?.updatedAt || parcel?.createdAt);
+}
+
+function isStaticRetentionParcelExpired(parcel, cutoffDate) {
+  const dateKey = getStaticRetentionParcelDateKey(parcel);
+  return Boolean(dateKey && cutoffDate && dateKey < cutoffDate);
+}
+
+function getStaticRetentionAdjustmentDateKey(adjustment) {
+  return normalizeDateKey(adjustment?.date || adjustment?.dateKey || adjustment?.startDate || adjustment?.timestamp || adjustment?.updatedAt || adjustment?.createdAt);
+}
+
+function filterStaticRetentionAdjustments(adjustments, cutoffDate) {
+  const items = Array.isArray(adjustments) ? adjustments : [];
+  return items.filter((adjustment) => {
+    const dateKey = getStaticRetentionAdjustmentDateKey(adjustment);
+    return !dateKey || !cutoffDate || dateKey >= cutoffDate;
+  });
+}
+
+function runStaticRetentionCleanup(store, cutoffDate) {
+  const beforeHistory = store.history.length;
+  const beforeParcels = store.parcels.length;
+  const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
+  const beforeCashAdjustments = Array.isArray(financeData.cashAdjustments) ? financeData.cashAdjustments.length : 0;
+  const beforePayAdjustments = Array.isArray(financeData.payAdjustments) ? financeData.payAdjustments.length : 0;
+
+  store.history = store.history.filter((parcel) => !isStaticRetentionParcelExpired(parcel, cutoffDate));
+  store.parcels = store.parcels.filter((parcel) => !parcel.archivedAt || !isStaticRetentionParcelExpired(parcel, cutoffDate));
+
+  const cashAdjustments = filterStaticRetentionAdjustments(financeData.cashAdjustments, cutoffDate);
+  const payAdjustments = filterStaticRetentionAdjustments(financeData.payAdjustments, cutoffDate);
+  store.financeData = {
+    ...financeData,
+    cashAdjustments,
+    payAdjustments,
+  };
+  saveData(CONFIG.cashAdjustmentsStorageKey, normalizeFinanceAdjustmentList(cashAdjustments, "cash"));
+  saveData(CONFIG.payAdjustmentsStorageKey, normalizeFinanceAdjustmentList(payAdjustments, "pay"));
+
+  return {
+    deletedParcels: (beforeHistory - store.history.length) + (beforeParcels - store.parcels.length),
+    deletedCashAdjustments: beforeCashAdjustments - cashAdjustments.length,
+    deletedPayAdjustments: beforePayAdjustments - payAdjustments.length,
+  };
+}
+
 function publicStaticUser(user) {
   return {
     id: user.id || user.username,
@@ -683,6 +731,24 @@ async function staticApi(path, options = {}) {
     }
     saveStaticBootstrap();
     return { archived };
+  }
+
+  if (method === "POST" && apiPath === "/api/maintenance/retention") {
+    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია ძველი მონაცემების გასუფთავება.");
+    const cutoffDate = normalizeDateKey(body.cutoffDate);
+    if (!cutoffDate) throw new Error("გასუფთავების თარიღი არასწორია.");
+    const result = runStaticRetentionCleanup(store, cutoffDate);
+    const now = new Date().toISOString();
+    store.settings.lastRetentionCleanupDate = toDateKey(new Date());
+    store.settings.lastRetentionCleanupAt = now;
+    store.settings.retentionCutoffDate = cutoffDate;
+    store.settings.retentionMonths = Number(body.retentionMonths || CONFIG.dataRetentionMonths || 8);
+    saveStaticBootstrap();
+    return {
+      ...result,
+      cutoffDate,
+      retentionMonths: store.settings.retentionMonths,
+    };
   }
 
   console.warn("Static API fallback returned empty response for", method, apiPath);

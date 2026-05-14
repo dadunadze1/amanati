@@ -64,6 +64,7 @@ const state = {
   activeDialogTitle: "",
   midnightTimer: null,
   autoCloseInProgress: false,
+  retentionCleanupInProgress: false,
   mode: "idle",
 };
 
@@ -120,6 +121,9 @@ function handleDayChange(oldDay, newDay) {
   runAutoDayClose(oldDay).catch((error) => {
     console.warn("Auto day close failed", error);
   });
+  runAutoRetentionCleanup().catch((error) => {
+    console.warn("Retention cleanup failed", error);
+  });
   refreshPins().catch((error) => {
     showToast(error.message || STRINGS.serverFailed);
   });
@@ -145,6 +149,7 @@ async function handleMidnightRefresh() {
   if (!state.currentUser) return;
 
   await runAutoDayClose(getPreviousDateKey()).catch(() => {});
+  await runAutoRetentionCleanup().catch(() => {});
   await refreshPins();
   if (state.activeDialogTitle === "ჩემი დღე") await openTodayStats();
   scheduleMidnightRefresh();

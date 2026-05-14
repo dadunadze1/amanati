@@ -86,6 +86,9 @@ function completeLogin(payload) {
   runAutoDayClose(getPreviousDateKey()).catch((error) => {
     console.warn("Auto day close failed", error);
   });
+  runAutoRetentionCleanup().catch((error) => {
+    console.warn("Retention cleanup failed", error);
+  });
   refreshPins();
   scheduleMapInvalidateSize();
   scheduleMidnightRefresh();

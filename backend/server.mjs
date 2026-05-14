@@ -23,6 +23,7 @@ const contentTypes = new Map([
 const emptyDb = () => ({
   users: [],
   parcels: [],
+  settings: {},
 });
 
 const FINANCE = {
@@ -30,6 +31,7 @@ const FINANCE = {
   courierDeliveryPay: 3.5,
   adminDeliveryProfit: 2.5,
 };
+const DATA_RETENTION_MONTHS = 8;
 
 // Zone configuration lives here so future boundary changes are one small edit.
 // Polygon points are [lat, lng] and are checked with a standard point-in-polygon test.
@@ -321,6 +323,15 @@ function toDateKey(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
+}
+
+function getRetentionParcelDateKey(parcel) {
+  return toDateKey(parcel.archivedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || parcel.updatedAt || parcel.createdAt);
+}
+
+function isRetentionParcelExpired(parcel, cutoffDate) {
+  const dateKey = getRetentionParcelDateKey(parcel);
+  return Boolean(dateKey && cutoffDate && dateKey < cutoffDate);
 }
 
 function distanceInMeters(a, b) {
@@ -853,6 +864,35 @@ async function handleApi(request, response, url) {
     });
     await writeDb(db);
     sendJson(response, 200, { archived });
+    return;
+  }
+
+  if (method === "POST" && path === "/api/maintenance/retention") {
+    requireAdmin(request);
+    const body = await readJsonBody(request);
+    const cutoffDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.cutoffDate || ""))
+      ? String(body.cutoffDate)
+      : toDateKey(body.cutoffDate);
+    if (!cutoffDate) throw httpError(400, "გასუფთავების თარიღი არასწორია.");
+
+    const beforeParcels = db.parcels.length;
+    db.parcels = db.parcels.filter((parcel) => !parcel.archivedAt || !isRetentionParcelExpired(parcel, cutoffDate));
+    const now = new Date().toISOString();
+    db.settings = {
+      ...(db.settings && typeof db.settings === "object" ? db.settings : {}),
+      lastRetentionCleanupDate: toDateKey(now),
+      lastRetentionCleanupAt: now,
+      retentionCutoffDate: cutoffDate,
+      retentionMonths: Number(body.retentionMonths || DATA_RETENTION_MONTHS),
+    };
+    await writeDb(db);
+    sendJson(response, 200, {
+      deletedParcels: beforeParcels - db.parcels.length,
+      deletedCashAdjustments: 0,
+      deletedPayAdjustments: 0,
+      cutoffDate,
+      retentionMonths: db.settings.retentionMonths,
+    });
     return;
   }
 
