@@ -410,6 +410,7 @@ async function renderAdminDashboard(pins = state.activePins) {
   }
 
   els.appShell?.classList.add("is-admin-dashboard");
+  els.appShell?.classList.toggle("admin-dashboard-hidden", Boolean(state.adminDashboardHidden));
   els.adminDashboard.hidden = Boolean(state.adminDashboardHidden);
 
   let courierCount = state.adminMapCouriers?.length || 0;
@@ -453,6 +454,7 @@ function showAdminDashboard() {
   if (els.adminDashboard) {
     els.adminDashboard.hidden = false;
   }
+  els.appShell?.classList.remove("admin-dashboard-hidden");
   renderActions();
   renderAdminDashboard().catch(() => {});
   scheduleMapInvalidateSize(120);
@@ -464,6 +466,7 @@ function hideAdminDashboard() {
   if (els.adminDashboard) {
     els.adminDashboard.hidden = true;
   }
+  els.appShell?.classList.add("admin-dashboard-hidden");
   renderActions();
   renderAdminDashboard().catch(() => {});
   scheduleMapInvalidateSize(120);
@@ -676,7 +679,7 @@ async function logout() {
   state.hasCurrentPosition = false;
   state.activePins = [];
   state.adminDashboardHidden = false;
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open");
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   if (els.adminDashboard) {
     els.adminDashboard.hidden = true;
     els.adminDashboard.textContent = "";

@@ -74,7 +74,7 @@ function completeLogin(payload) {
   state.isAdmin = payload.user.role === "admin";
   state.courierPresenceStatus = state.isAdmin ? "offline" : "online";
   state.adminDashboardHidden = false;
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open");
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   hideModal(els.setupModal);
   hideModal(els.authModal);
   hideModal(els.registerModal);
