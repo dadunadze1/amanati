@@ -1076,7 +1076,11 @@ function getOverpassElementCoords(element) {
 
 
 function startLocationWatch() {
-  if (!navigator.geolocation || state.watchId || !state.map) return;
+  if (!navigator.geolocation) {
+    if (!state.isAdmin) notifyLocationWatchError({ code: 0 });
+    return;
+  }
+  if (state.watchId || !state.map) return;
 
   state.watchId = navigator.geolocation.watchPosition((position) => {
     state.currentPosition = {
@@ -1098,7 +1102,23 @@ function startLocationWatch() {
     }
 
     maybePublishCourierLocation();
-  }, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 });
+  }, notifyLocationWatchError, { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 });
+}
+
+
+function notifyLocationWatchError(error = {}) {
+  if (state.isAdmin || !state.currentUser) return;
+
+  const now = Date.now();
+  if (now - state.lastLocationWatchErrorToastAt < 45000) return;
+  state.lastLocationWatchErrorToastAt = now;
+
+  const message = error.code === 1
+    ? "ლოკაციის უფლება გამორთულია. კურიერის პინი რუკაზე ვერ განახლდება."
+    : error.code === 3
+      ? "ლოკაციის მიღება დაგვიანდა. GPS ან ინტერნეტი შეამოწმე."
+      : "ლოკაცია ვერ განისაზღვრა. GPS ჩართე და აპლიკაცია გახსნილი დატოვე.";
+  showToast(message);
 }
 
 
