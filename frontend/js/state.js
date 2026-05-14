@@ -15,6 +15,7 @@ const state = {
     showUnassigned: true,
     status: "all",
   },
+  adminMapCourierSearch: "",
   currentPosition: { lat: CONFIG.center[0], lng: CONFIG.center[1] },
   hasCurrentPosition: false,
   watchId: null,

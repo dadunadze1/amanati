@@ -597,8 +597,14 @@ function renderAdminMapPanel() {
       </section>
       <section class="admin-map-courier-grid admin-map-scroll-section">
         <div class="admin-map-courier-grid-head">
-          <strong>კურიერები</strong>
-          <small>მონიშნე კურიერები, რომ რუკაზე მხოლოდ მათი პინები გამოჩნდეს</small>
+          <div>
+            <strong>კურიერები</strong>
+            <small>მონიშნე კურიერები, რომ რუკაზე მხოლოდ მათი პინები გამოჩნდეს</small>
+          </div>
+          <label class="admin-map-courier-search" for="adminMapCourierSearch">
+            <span>ძებნა</span>
+            <input id="adminMapCourierSearch" type="search" autocomplete="off" placeholder="სახელი, ლოგინი ან ნომერი" value="${escapeAttr(state.adminMapCourierSearch || "")}">
+          </label>
         </div>
         ${renderAdminMapCourierList(couriers, pins)}
       </section>
@@ -620,6 +626,14 @@ function renderAdminMapPanel() {
 
 
 function bindAdminMapPanelEvents() {
+  const searchInput = document.getElementById("adminMapCourierSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      state.adminMapCourierSearch = searchInput.value;
+      applyAdminMapCourierSearch();
+    });
+    applyAdminMapCourierSearch();
+  }
   document.getElementById("adminMapAllCouriersToggle")?.addEventListener("change", adminMapToggleAllCouriers);
   document.getElementById("adminMapUnassignedToggle")?.addEventListener("change", adminMapToggleUnassigned);
   document.querySelectorAll("input[name='adminMapCourierFilter']").forEach((input) => {
@@ -674,7 +688,7 @@ function renderAdminMapCourierList(couriers, pins) {
     const normalized = normalizeUsername(courier.username);
     const isActive = filters.includeAllCouriers || selected.has(normalized);
     return `
-      <label class="admin-map-courier-card ${isActive ? "is-active" : ""}">
+      <label class="admin-map-courier-card ${isActive ? "is-active" : ""}" data-courier-search="${escapeAttr(getAdminMapCourierSearchText(courier))}">
         <input type="checkbox" name="adminMapCourierFilter" value="${escapeAttr(courier.username)}" ${isActive ? "checked" : ""}>
         <span class="admin-map-courier-main">
           <strong>${escapeHtml(userDisplayName(courier))}</strong>
@@ -702,8 +716,41 @@ function renderAdminMapCourierList(couriers, pins) {
         </span>
       </label>
       ${courierCards || "<p class=\"history-empty\">კურიერი ჯერ არ არის.</p>"}
+      <p class="history-empty admin-map-courier-empty" hidden>კურიერი ვერ მოიძებნა.</p>
     </div>
   `;
+}
+
+
+function getAdminMapCourierSearchText(courier) {
+  return normalizeAdminMapCourierSearch([
+    courier.username,
+    courier.firstName,
+    courier.lastName,
+    courier.phone,
+    userDisplayName(courier),
+  ].filter(Boolean).join(" "));
+}
+
+
+function normalizeAdminMapCourierSearch(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+
+function applyAdminMapCourierSearch() {
+  const query = normalizeAdminMapCourierSearch(state.adminMapCourierSearch);
+  const cards = [...document.querySelectorAll(".admin-map-courier-card[data-courier-search]")];
+  let visibleCount = 0;
+
+  cards.forEach((card) => {
+    const isVisible = !query || (card.dataset.courierSearch || "").includes(query);
+    card.hidden = !isVisible;
+    if (isVisible) visibleCount += 1;
+  });
+
+  const empty = document.querySelector(".admin-map-courier-empty");
+  if (empty) empty.hidden = !query || visibleCount > 0;
 }
 
 

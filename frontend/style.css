@@ -3528,13 +3528,46 @@ button,
 .admin-map-courier-grid-head {
   flex: 0 0 auto;
   display: grid;
-  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  align-items: end;
+  gap: 10px;
   padding: 0 2px;
 }
 
 .admin-map-courier-grid-head strong {
   color: #0f172a;
   font-size: 0.98rem;
+}
+
+.admin-map-courier-search {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-map-courier-search span {
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.admin-map-courier-search input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  outline: none;
+  padding: 8px 10px;
+}
+
+.admin-map-courier-search input:focus {
+  border-color: rgba(37, 99, 235, 0.72);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .admin-map-courier-list {
@@ -3579,6 +3612,10 @@ button,
   background: linear-gradient(180deg, var(--admin-map-surface), var(--admin-map-surface-muted));
   text-align: left;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.admin-map-courier-card[hidden] {
+  display: none;
 }
 
 .admin-map-courier-card .admin-map-card-metrics {
@@ -3636,6 +3673,10 @@ button,
 }
 
 @media (max-width: 720px) {
+  .admin-map-courier-grid-head {
+    grid-template-columns: 1fr;
+  }
+
   .admin-map-summary-grid,
   .admin-map-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
