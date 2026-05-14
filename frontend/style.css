@@ -181,6 +181,10 @@ button {
   text-underline-offset: 4px;
 }
 
+#showRegisterButton {
+  display: none !important;
+}
+
 .nearest-card {
   position: fixed;
   right: 18px;
