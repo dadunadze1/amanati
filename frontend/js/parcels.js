@@ -757,6 +757,10 @@ async function updatePinStatus(pinId, status, options = {}) {
     showToast("ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
     return;
   }
+  if (status === "failed" && !String(options.failureReason || "").trim()) {
+    openFailureReasonDialog(pinId);
+    return;
+  }
   if (!state.isAdmin && status === "delivered") {
     if (!state.hasCurrentPosition) {
       showToast("მდებარეობა ჯერ არ არის განსაზღვრული.");
@@ -788,6 +792,47 @@ async function updatePinStatus(pinId, status, options = {}) {
   });
   if (state.routePinId === pinId) clearActiveRoute();
   await refreshPins();
+}
+
+
+function openFailureReasonDialog(pinId) {
+  const body = `
+    <form id="failureReasonForm">
+      <label for="failureReasonInput">რატომ ვერ ჩაბარდა?</label>
+      <textarea id="failureReasonInput" rows="4" maxlength="240" required placeholder="მაგ: არ პასუხობს, მისამართზე არ იყო, ნომერი არასწორია"></textarea>
+      <p id="failureReasonMessage" class="form-message" role="alert"></p>
+    </form>
+  `;
+
+  showDialog("ვერ ჩაბარდა", body, [
+    { label: "შენახვა", variant: "primary", action: () => submitFailureReason(pinId) },
+    { label: "გაუქმება", variant: "secondary", action: closeDialog },
+  ]);
+
+  document.getElementById("failureReasonForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitFailureReason(pinId);
+  });
+  document.getElementById("failureReasonInput")?.focus();
+}
+
+
+async function submitFailureReason(pinId) {
+  const input = document.getElementById("failureReasonInput");
+  const message = document.getElementById("failureReasonMessage");
+  const failureReason = String(input?.value || "").trim();
+  if (!failureReason) {
+    if (message) message.textContent = "მიუთითეთ მიზეზი.";
+    input?.focus();
+    return;
+  }
+
+  try {
+    await updatePinStatus(pinId, "failed", { failureReason });
+    closeDialog();
+  } catch (error) {
+    if (message) message.textContent = error.message || STRINGS.serverFailed;
+  }
 }
 
 

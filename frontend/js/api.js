@@ -634,6 +634,7 @@ async function staticApi(path, options = {}) {
       parcel.completedAt = body.completedAt || now;
       parcel.deliveredAt = body.deliveredAt || parcel.completedAt;
       parcel.failedAt = "";
+      parcel.failureReason = "";
       Object.assign(parcel, normalizeStaticParcelFinance(parcel));
     }
     if (parcel.status === "failed") {

@@ -823,11 +823,13 @@ async function handleApi(request, response, url) {
     if (status === "delivered") {
       parcel.deliveredAt = now;
       parcel.failedAt = "";
+      parcel.failureReason = "";
       applyDeliveredFinance(parcel);
     }
     if (status === "failed") {
       parcel.failedAt = now;
       parcel.deliveredAt = "";
+      parcel.failureReason = String(body.failureReason || "").trim();
     }
     await writeDb(db);
     sendJson(response, 200, { parcel: publicParcel(db, parcel) });
