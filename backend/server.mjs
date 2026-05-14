@@ -843,6 +843,10 @@ async function handleApi(request, response, url) {
       if (!parcel.archivedAt && isCompletedParcel(parcel) && (!parcelIds || parcelIds.has(parcel.id)) && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))) {
         applyDeliveredFinance(parcel);
         parcel.archivedAt = now;
+        if (body.autoClosedDate) {
+          parcel.autoClosedAt = now;
+          parcel.autoClosedDate = String(body.autoClosedDate);
+        }
         parcel.updatedAt = now;
         archived += 1;
       }

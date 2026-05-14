@@ -83,6 +83,9 @@ function completeLogin(payload) {
   renderCourierMobileDashboard().catch(() => {});
   startLocationWatch();
   startCourierLocationServices();
+  runAutoDayClose(getPreviousDateKey()).catch((error) => {
+    console.warn("Auto day close failed", error);
+  });
   refreshPins();
   scheduleMapInvalidateSize();
   scheduleMidnightRefresh();

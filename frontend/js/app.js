@@ -645,5 +645,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
   await initializeMap();
   checkDayChange();
+  startDayChangeWatcher();
   initializeAuth();
 });

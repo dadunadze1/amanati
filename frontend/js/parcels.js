@@ -1166,6 +1166,66 @@ async function archiveDeliveredParcelsForDay(courierUsername) {
 }
 
 
+function getPreviousDateKey(dateKey = getTodayKey()) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() - 1);
+  return toDateKey(date);
+}
+
+
+function parcelCompletedDateKey(parcel) {
+  return toDateKey(new Date(parcel.deliveredAt || parcel.completedAt || parcel.updatedAt || parcel.createdAt));
+}
+
+
+async function runAutoDayClose(closeDate = getPreviousDateKey()) {
+  if (!state.currentUser || state.autoCloseInProgress) return { archived: 0 };
+
+  if (!closeDate) return { archived: 0 };
+  if (loadData(`deliveryAutoCloseDone:${closeDate}`)) return { archived: 0 };
+
+  state.autoCloseInProgress = true;
+  try {
+    if (isStaticDeploy() && typeof loadStaticBootstrap === "function") {
+      const store = await loadStaticBootstrap();
+      if (store?.settings?.lastAutoCloseDate === closeDate) {
+        saveData(`deliveryAutoCloseDone:${closeDate}`, true);
+        return { archived: 0 };
+      }
+    }
+
+    const pins = await getPins(isStaticDeploy() || state.isAdmin ? "" : state.currentUser);
+    const deliveredPins = pins.filter((pin) => (
+      isCompletedParcelStatus(pin)
+      && !pin.archivedAt
+      && parcelCompletedDateKey(pin) <= closeDate
+    ));
+    if (!deliveredPins.length) {
+      saveData(`deliveryAutoCloseDone:${closeDate}`, true);
+      return { archived: 0 };
+    }
+
+    const payload = await api("/api/parcels/archive", {
+      method: "POST",
+      body: {
+        status: "delivered",
+        autoClosedDate: closeDate,
+        parcelIds: deliveredPins.map((pin) => pin.id),
+      },
+    });
+    saveData(`deliveryAutoCloseDone:${closeDate}`, true);
+    if (payload.archived) showToast(`დღე ავტომატურად დაიხურა: ${payload.archived} ამანათი`);
+    return payload;
+  } catch (error) {
+    console.warn("Auto day close failed", error);
+    return { archived: 0 };
+  } finally {
+    state.autoCloseInProgress = false;
+  }
+}
+
+
 function getStoredParcelAddress(parcel) {
   return cleanStoredAddress(parcel?.address);
 }

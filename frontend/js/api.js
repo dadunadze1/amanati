@@ -666,6 +666,10 @@ async function staticApi(path, options = {}) {
         && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
       ) {
         parcel.archivedAt = now;
+        if (body.autoClosedDate) {
+          parcel.autoClosedAt = now;
+          parcel.autoClosedDate = body.autoClosedDate;
+        }
         parcel.updatedAt = now;
         parcel.completedAt = parcel.completedAt || parcel.deliveredAt || now;
         parcel.deliveredAt = parcel.deliveredAt || parcel.completedAt;
@@ -673,6 +677,10 @@ async function staticApi(path, options = {}) {
         archived += 1;
       }
     });
+    if (body.autoClosedDate) {
+      store.settings.lastAutoCloseDate = body.autoClosedDate;
+      store.settings.lastAutoCloseAt = now;
+    }
     saveStaticBootstrap();
     return { archived };
   }

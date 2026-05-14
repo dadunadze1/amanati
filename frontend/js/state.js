@@ -58,6 +58,7 @@ const state = {
   calendarDate: new Date(),
   activeDialogTitle: "",
   midnightTimer: null,
+  autoCloseInProgress: false,
   mode: "idle",
 };
 
@@ -111,6 +112,9 @@ function handleDayChange(oldDay, newDay) {
   state.selectedCourier = null;
   state.calendarDate = new Date();
 
+  runAutoDayClose(oldDay).catch((error) => {
+    console.warn("Auto day close failed", error);
+  });
   refreshPins().catch((error) => {
     showToast(error.message || STRINGS.serverFailed);
   });
@@ -119,7 +123,7 @@ function handleDayChange(oldDay, newDay) {
 
 function scheduleMidnightRefresh() {
   if (state.midnightTimer) window.clearTimeout(state.midnightTimer);
-  if (!state.currentUser || state.isAdmin) {
+  if (!state.currentUser) {
     state.midnightTimer = null;
     return;
   }
@@ -133,9 +137,9 @@ function scheduleMidnightRefresh() {
 
 async function handleMidnightRefresh() {
   state.midnightTimer = null;
-  if (!state.currentUser || state.isAdmin) return;
+  if (!state.currentUser) return;
 
-  await archiveDeliveredParcelsForDay(state.currentUser).catch(() => {});
+  await runAutoDayClose(getPreviousDateKey()).catch(() => {});
   await refreshPins();
   if (state.activeDialogTitle === "ჩემი დღე") await openTodayStats();
   scheduleMidnightRefresh();
