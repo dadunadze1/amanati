@@ -361,7 +361,7 @@ function bindAdminDrawerEvents() {
 
 function bindAdminDashboardScrollEvents() {
   let touchStartY = 0;
-  let lastTouchY = 0;
+  let touchEndY = 0;
 
   const shouldHandle = (target) => (
     state.isAdmin
@@ -387,17 +387,20 @@ function bindAdminDashboardScrollEvents() {
   document.addEventListener("touchstart", (event) => {
     if (!shouldHandle(event.target) || event.touches.length !== 1) return;
     touchStartY = event.touches[0].clientY;
-    lastTouchY = touchStartY;
+    touchEndY = touchStartY;
   }, { passive: true });
 
   document.addEventListener("touchmove", (event) => {
     if (!shouldHandle(event.target) || event.touches.length !== 1) return;
-    const currentY = event.touches[0].clientY;
-    const totalDelta = currentY - touchStartY;
-    const stepDelta = currentY - lastTouchY;
-    lastTouchY = currentY;
-    if (Math.abs(totalDelta) < 24 || Math.abs(stepDelta) < 4) return;
-    setCollapsed(stepDelta < 0);
+    touchEndY = event.touches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener("touchend", (event) => {
+    if (!shouldHandle(event.target)) return;
+    const endedAt = event.changedTouches[0]?.clientY ?? touchEndY;
+    const totalDelta = endedAt - touchStartY;
+    if (Math.abs(totalDelta) < 40) return;
+    setCollapsed(totalDelta > 0);
   }, { passive: true });
 }
 
