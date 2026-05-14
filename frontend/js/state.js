@@ -66,7 +66,7 @@ const state = {
   midnightTimer: null,
   autoCloseInProgress: false,
   retentionCleanupInProgress: false,
-  adminDashboardCollapsed: false,
+  adminDashboardHidden: false,
   mode: "idle",
 };
 

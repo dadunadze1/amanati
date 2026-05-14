@@ -37,7 +37,6 @@ function bindEvents() {
   bindCourierSheetEvents();
   bindCourierStatsSheetEvents();
   bindAdminDrawerEvents();
-  bindAdminDashboardScrollEvents();
   document.addEventListener("click", (event) => {
     const drawerToggle = event.target.closest("[data-admin-drawer-toggle]");
     if (drawerToggle) {
@@ -130,7 +129,9 @@ function renderActions() {
     ? [
         ["showAllAdminPins", "რუკა", "⌖", "ყველა პინის ჩვენება"],
         ["addParcel", "ამანათები", "+", "ახალი ამანათის დამატება"],
-        ["adminUsers", "კურიერები", "◎", "კურიერების მართვა"],
+        state.adminDashboardHidden
+          ? ["showAdminDashboard", "გახსნა", "▥", "შეჯამების ბარის გახსნა"]
+          : ["hideAdminDashboard", "დახურვა", "▤", "შეჯამების ბარის დახურვა"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
         ["parcelHistory", "ისტორია", "◷", "ამანათების ისტორია"],
         ["zoneManagement", "ზონები", "▧", "ზონების მართვა"],
@@ -359,52 +360,6 @@ function bindAdminDrawerEvents() {
 }
 
 
-function bindAdminDashboardScrollEvents() {
-  let touchStartY = 0;
-  let touchEndY = 0;
-
-  const shouldHandle = (target) => (
-    state.isAdmin
-    && isMobileViewport()
-    && els.adminDashboard
-    && !els.adminDashboard.hidden
-    && !target?.closest?.(".modal-overlay.active, #adminMobileDrawer, .right-panel:not([hidden]), .bottom-nav")
-  );
-
-  const setCollapsed = (collapsed) => {
-    if (!els.appShell || state.adminDashboardCollapsed === collapsed) return;
-    state.adminDashboardCollapsed = collapsed;
-    els.appShell.classList.toggle("admin-dashboard-collapsed", collapsed);
-    scheduleMapInvalidateSize(120);
-  };
-
-  document.addEventListener("wheel", (event) => {
-    if (!shouldHandle(event.target)) return;
-    if (Math.abs(event.deltaY) < 8) return;
-    setCollapsed(event.deltaY > 0);
-  }, { passive: true });
-
-  document.addEventListener("touchstart", (event) => {
-    if (!shouldHandle(event.target) || event.touches.length !== 1) return;
-    touchStartY = event.touches[0].clientY;
-    touchEndY = touchStartY;
-  }, { passive: true });
-
-  document.addEventListener("touchmove", (event) => {
-    if (!shouldHandle(event.target) || event.touches.length !== 1) return;
-    touchEndY = event.touches[0].clientY;
-  }, { passive: true });
-
-  document.addEventListener("touchend", (event) => {
-    if (!shouldHandle(event.target)) return;
-    const endedAt = event.changedTouches[0]?.clientY ?? touchEndY;
-    const totalDelta = endedAt - touchStartY;
-    if (Math.abs(totalDelta) < 40) return;
-    setCollapsed(totalDelta > 0);
-  }, { passive: true });
-}
-
-
 function openAdminDrawer() {
   if (!state.isAdmin || !els.adminMobileDrawer) return;
   closeActions();
@@ -447,8 +402,7 @@ async function renderAdminDashboard(pins = state.activePins) {
   }
 
   els.appShell?.classList.add("is-admin-dashboard");
-  els.appShell?.classList.toggle("admin-dashboard-collapsed", Boolean(state.adminDashboardCollapsed));
-  els.adminDashboard.hidden = false;
+  els.adminDashboard.hidden = Boolean(state.adminDashboardHidden);
 
   let courierCount = state.adminMapCouriers?.length || 0;
   let onlineCourierCount = 0;
@@ -483,6 +437,28 @@ async function renderAdminDashboard(pins = state.activePins) {
     </button>
   `).join("");
   scheduleMapInvalidateSize();
+}
+
+
+function showAdminDashboard() {
+  state.adminDashboardHidden = false;
+  if (els.adminDashboard) {
+    els.adminDashboard.hidden = false;
+  }
+  renderActions();
+  renderAdminDashboard().catch(() => {});
+  scheduleMapInvalidateSize(120);
+}
+
+
+function hideAdminDashboard() {
+  state.adminDashboardHidden = true;
+  if (els.adminDashboard) {
+    els.adminDashboard.hidden = true;
+  }
+  renderActions();
+  renderAdminDashboard().catch(() => {});
+  scheduleMapInvalidateSize(120);
 }
 
 
@@ -593,6 +569,8 @@ async function handleAction(action, value, sourceElement) {
     showAllAdminPins,
     hideAllAdminPins,
     showUnassignedAdminPins,
+    showAdminDashboard,
+    hideAdminDashboard,
     parcelHistorySearch: searchParcelHistory,
     focusHistoryParcel: () => focusHistoryParcelOnMap(value),
     focusStatsParcel: () => focusStatsParcelOnMap(value),
@@ -689,8 +667,8 @@ async function logout() {
   state.isAdmin = false;
   state.hasCurrentPosition = false;
   state.activePins = [];
-  state.adminDashboardCollapsed = false;
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open", "admin-dashboard-collapsed");
+  state.adminDashboardHidden = false;
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open");
   if (els.adminDashboard) {
     els.adminDashboard.hidden = true;
     els.adminDashboard.textContent = "";
