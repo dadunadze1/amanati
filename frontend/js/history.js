@@ -2,6 +2,9 @@
 
 
 
+let parcelHistorySearchTimer = null;
+
+
 async function openParcelHistorySearch() {
   const couriers = await getCouriers().catch(() => []);
   const courierOptions = couriers.map((courier) => `<option value="${escapeAttr(courier.username)}">${escapeHtml(userDisplayName(courier))}</option>`).join("");
@@ -20,7 +23,14 @@ async function openParcelHistorySearch() {
             <option value="failed">არ ჩაბარებული</option>
             <option value="pending">პროცესში</option>
           </select>
-          <input id="parcelHistoryDate" type="date" aria-label="თარიღის მიხედვით">
+          <label class="parcel-history-date-field" for="parcelHistoryDateFrom">
+            <span>დან</span>
+            <input id="parcelHistoryDateFrom" type="date" aria-label="თარიღიდან">
+          </label>
+          <label class="parcel-history-date-field" for="parcelHistoryDateTo">
+            <span>მდე</span>
+            <input id="parcelHistoryDateTo" type="date" aria-label="თარიღამდე">
+          </label>
           <select id="parcelHistoryCourier" aria-label="კურიერის მიხედვით">
             <option value="">ყველა კურიერი</option>
             ${courierOptions}
@@ -38,24 +48,35 @@ async function openParcelHistorySearch() {
     event.preventDefault();
     searchParcelHistory();
   });
-  ["parcelHistoryStatus", "parcelHistoryDate", "parcelHistoryCourier"].forEach((id) => {
+  document.getElementById("parcelHistoryQuery")?.addEventListener("input", scheduleParcelHistorySearch);
+  ["parcelHistoryStatus", "parcelHistoryDateFrom", "parcelHistoryDateTo", "parcelHistoryCourier"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", searchParcelHistory);
   });
   await searchParcelHistory();
 }
 
 
+function scheduleParcelHistorySearch() {
+  window.clearTimeout(parcelHistorySearchTimer);
+  parcelHistorySearchTimer = window.setTimeout(searchParcelHistory, 280);
+}
+
+
 async function searchParcelHistory() {
+  window.clearTimeout(parcelHistorySearchTimer);
   const query = document.getElementById("parcelHistoryQuery")?.value.trim() || "";
   const status = document.getElementById("parcelHistoryStatus")?.value || "";
-  const date = document.getElementById("parcelHistoryDate")?.value || "";
+  const dateFrom = document.getElementById("parcelHistoryDateFrom")?.value || "";
+  const dateTo = document.getElementById("parcelHistoryDateTo")?.value || "";
   const courier = document.getElementById("parcelHistoryCourier")?.value || "";
   const message = document.getElementById("parcelHistoryMessage");
   const results = document.getElementById("parcelHistoryResults");
   if (message) message.textContent = "";
   if (results) results.innerHTML = "<p class=\"history-empty\">ისტორია იტვირთება...</p>";
   try {
-    const parcels = (await searchParcels(query)).filter((parcel) => parcelMatchesHistoryFilters(parcel, { status, date, courier }));
+    const parcels = (await searchParcels(query))
+      .filter((parcel) => parcelMatchesHistoryFilters(parcel, { status, dateFrom, dateTo, courier }))
+      .sort(sortParcelHistoryRecords);
     state.historySearchResults = parcels;
     await renderParcelHistoryResults(parcels);
   } catch {
@@ -330,16 +351,38 @@ function historyDetail(label, value) {
 function parcelMatchesHistoryFilters(parcel, filters) {
   if (filters.status && parcel.status !== filters.status) return false;
   if (filters.courier && normalizeUsername(parcel.courierUsername) !== normalizeUsername(filters.courier)) return false;
-  if (filters.date && !parcelMatchesDate(parcel, filters.date)) return false;
+  if (!parcelMatchesDateRangeFilter(parcel, filters.dateFrom, filters.dateTo)) return false;
   return true;
 }
 
 
-function parcelMatchesDate(parcel, dateKey) {
-  const normalizedDateKey = normalizeDateKey(dateKey);
-  if (!normalizedDateKey) return false;
+function parcelMatchesDateRangeFilter(parcel, dateFrom, dateTo) {
+  const start = normalizeDateKey(dateFrom);
+  const end = normalizeDateKey(dateTo);
+  if (!start && !end) return true;
+
+  const rangeStart = start && end ? (start <= end ? start : end) : (start || end);
+  const rangeEnd = start && end ? (start <= end ? end : start) : (end || start);
+  return getParcelHistoryDateKeys(parcel).some((dateKey) => dateKey >= rangeStart && dateKey <= rangeEnd);
+}
+
+
+function getParcelHistoryDateKeys(parcel) {
   return [parcel.createdAt, parcel.assignedAt, parcel.completedAt, parcel.deliveredAt, parcel.failedAt, parcel.updatedAt, parcel.archivedAt]
-    .some((value) => normalizeDateKey(value) === normalizedDateKey);
+    .map(normalizeDateKey)
+    .filter(Boolean);
+}
+
+
+function sortParcelHistoryRecords(a, b) {
+  return getParcelHistorySortTime(b) - getParcelHistorySortTime(a);
+}
+
+
+function getParcelHistorySortTime(parcel) {
+  const value = parcel.updatedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || parcel.archivedAt || parcel.assignedAt || parcel.createdAt;
+  const time = Date.parse(value || "");
+  return Number.isFinite(time) ? time : 0;
 }
 
 

@@ -2546,8 +2546,20 @@ button.finance-card {
 
 .parcel-history-filters {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.parcel-history-date-field {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.parcel-history-date-field span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
 .parcel-history-summary {
@@ -6936,6 +6948,7 @@ button.finance-card:hover,
 .finance-toolbar input,
 .courier-stats-order-toolbar select,
 .parcel-history-search input,
+.parcel-history-filters input,
 .parcel-history-filters select,
 .zone-courier-controls select {
   min-height: var(--control-height);
@@ -6966,6 +6979,7 @@ button.finance-card:hover,
 .finance-toolbar input:focus,
 .courier-stats-order-toolbar select:focus,
 .parcel-history-search input:focus,
+.parcel-history-filters input:focus,
 .parcel-history-filters select:focus,
 .zone-courier-controls select:focus {
   border-color: var(--primary);
