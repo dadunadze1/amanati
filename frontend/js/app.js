@@ -95,6 +95,14 @@ function renderActions() {
       ],
     },
     {
+      label: "შეჯამება",
+      actions: [
+        state.adminDashboardHidden
+          ? ["showAdminDashboard", "გახსნა", "▥", "შეჯამების ბარის გახსნა"]
+          : ["hideAdminDashboard", "დახურვა", "▤", "შეჯამების ბარის დახურვა"],
+      ],
+    },
+    {
       label: "ამანათები",
       actions: [
         ["addParcel", "დამატება", "+", "ახალი ამანათის დამატება"],
