@@ -24,6 +24,16 @@ function bindEvents() {
   els.registerForm.addEventListener("submit", handleRegistration);
   els.showRegisterButton?.addEventListener("click", () => switchModal("register"));
   els.backToLoginButton.addEventListener("click", () => switchModal("login"));
+  document.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-password-toggle]");
+    if (!toggle) return;
+    const input = document.getElementById(toggle.dataset.passwordToggle);
+    if (!input) return;
+    const reveal = input.type === "password";
+    input.type = reveal ? "text" : "password";
+    toggle.classList.toggle("is-visible", reveal);
+    toggle.setAttribute("aria-label", reveal ? "პაროლის დამალვა" : "პაროლის ჩვენება");
+  });
   els.menuButton.addEventListener("click", () => {
     collapseSelectedParcelCard();
     collapseDeliveredPinLabels();
