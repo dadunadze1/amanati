@@ -1094,11 +1094,15 @@ async function drawRouteToPin(origin, pin) {
     showToast("მარშრუტი რუკაზე სწორი ხაზით გამოჩნდა.");
   }
 
-  state.routeLayer = L.polyline(latLngs, {
-    color: "#24566f",
-    weight: 5,
-    opacity: 0.85,
-  }).addTo(state.map);
+  state.routeLayer = typeof buildPremiumRouteLayer === "function"
+    ? buildPremiumRouteLayer(latLngs).addTo(state.map)
+    : L.polyline(latLngs, {
+      color: "#2563eb",
+      weight: 6,
+      opacity: 0.95,
+      lineCap: "round",
+      lineJoin: "round",
+    }).addTo(state.map);
   state.routePinId = pin.id;
   state.map.fitBounds(state.routeLayer.getBounds(), { padding: [38, 38], maxZoom: 17 });
   renderSelectedParcelCard();

@@ -67,45 +67,22 @@ function renderSinglePinMarker(pin) {
   if (!pin) return;
   const isSelected = pin.id && pin.id === state.selectedPinId;
   if (isSelected) {
-    addParcelOverlay(createCircleMarker(pin, {
-      radius: 18,
-      fillColor: getStatusColor(pin.status),
-      color: "#2563eb",
-      weight: 2,
-      fillOpacity: 0.12,
-      opacity: 0.62,
-      className: "selected-pin-pulse",
+    addParcelOverlay(createPremiumParcelPinMarker(pin, {
+      pulse: true,
+      selected: true,
+      interactive: false,
+      zIndexOffset: 100,
     }));
   }
-  const marker = createCircleMarker(pin, {
-    radius: isSelected ? 12 : 9,
-    fillColor: getStatusColor(pin.status),
-    color: isSelected ? "#2563eb" : "#fff",
-    weight: isSelected ? 4 : 2,
-    fillOpacity: 0.92,
-    className: `${isSelected ? "selected-pin-marker" : "dispatch-pin-marker"} dispatch-pin-status-${pin.status || "pending"}`,
+  const marker = createPremiumParcelPinMarker(pin, {
+    selected: isSelected,
+    interactive: true,
+    zIndexOffset: isSelected ? 220 : 120,
   });
 
   addParcelOverlay(marker);
   marker.on("click", (event) => {
     handlePinMarkerClick(pin, event);
-  });
-  marker.on("mouseover", () => {
-    if (pin.id === state.selectedPinId) return;
-    marker.setRadius?.(11);
-    marker.setStyle?.({
-      weight: 3,
-      fillOpacity: 1,
-    });
-    marker.bringToFront?.();
-  });
-  marker.on("mouseout", () => {
-    if (pin.id === state.selectedPinId) return;
-    marker.setRadius?.(9);
-    marker.setStyle?.({
-      weight: 2,
-      fillOpacity: 0.92,
-    });
   });
   if (isSelected) marker.bringToFront?.();
   renderPinLabel(pin);
@@ -320,6 +297,161 @@ function createCircleMarker(coords, options) {
     opacity: options.opacity ?? 1,
     weight: options.weight || 2,
     className: options.className || "",
+  }).addTo(state.map);
+}
+
+
+function createPremiumParcelPinMarker(pin, options = {}) {
+  const kind = getPremiumPinKind(pin?.status);
+  const badge = getPremiumPinBadge(pin);
+  const icon = buildPremiumMapPinIcon(kind, {
+    badge,
+    selected: Boolean(options.selected),
+    pulse: Boolean(options.pulse),
+    live: false,
+  });
+
+  return L.marker(toLeafletLatLng(pin), {
+    interactive: options.interactive !== false,
+    bubblingMouseEvents: false,
+    keyboard: false,
+    zIndexOffset: options.zIndexOffset || 0,
+    icon,
+  }).addTo(state.map);
+}
+
+
+function createPremiumLiveLocationMarker(coords, options = {}) {
+  return L.marker(toLeafletLatLng(coords), {
+    interactive: options.interactive !== false,
+    bubblingMouseEvents: false,
+    keyboard: false,
+    zIndexOffset: options.zIndexOffset || 0,
+    icon: buildPremiumMapPinIcon("live", {
+      badge: options.badge || "",
+      selected: Boolean(options.selected),
+      pulse: Boolean(options.pulse ?? true),
+      live: true,
+    }),
+  }).addTo(state.map);
+}
+
+
+function getPremiumPinKind(status) {
+  if (status === "delivered") return "delivered";
+  if (status === "failed") return "failed";
+  return "pending";
+}
+
+
+function getPremiumPinBadge(pin) {
+  const index = Array.isArray(state.activePins) ? state.activePins.findIndex((item) => item?.id === pin?.id) : -1;
+  if (index < 0) return "";
+  const value = index + 1;
+  return value <= 99 ? String(value) : "";
+}
+
+
+function buildPremiumMapPinIcon(kind, options = {}) {
+  const classes = [
+    "premium-map-pin",
+    `premium-map-pin--${kind}`,
+    options.selected ? "is-selected" : "",
+    options.pulse ? "is-pulse" : "",
+    options.live ? "is-live" : "",
+  ].filter(Boolean).join(" ");
+
+  const badge = options.badge ? `<span class="premium-map-pin__badge">${escapeHtml(options.badge)}</span>` : "";
+  const pulse = options.pulse ? "<span class=\"premium-map-pin__pulse\" aria-hidden=\"true\"></span>" : "";
+  const glyph = getPremiumMapPinGlyph(kind);
+
+  return L.divIcon({
+    className: classes,
+    html: `
+      <span class="premium-map-pin__shell">
+        ${pulse}
+        <svg class="premium-map-pin__svg" viewBox="0 0 64 84" aria-hidden="true" focusable="false">
+          <path class="premium-map-pin__shadow" d="M32 3C20 3 10 13 10 25.5c0 18.4 22 41.5 22 41.5s22-23.1 22-41.5C54 13 44 3 32 3Z"></path>
+          <path class="premium-map-pin__body" d="M32 3C20 3 10 13 10 25.5c0 18.4 22 41.5 22 41.5s22-23.1 22-41.5C54 13 44 3 32 3Z"></path>
+          <circle class="premium-map-pin__core" cx="32" cy="25.5" r="14.8"></circle>
+          <g class="premium-map-pin__glyph">${glyph}</g>
+        </svg>
+        ${badge}
+      </span>
+    `,
+    iconSize: options.live ? [58, 78] : [52, 72],
+    iconAnchor: options.live ? [29, 68] : [26, 62],
+  });
+}
+
+
+function getPremiumMapPinGlyph(kind) {
+  if (kind === "delivered") {
+    return `
+      <path d="m24 25.5 5.2 5.2 10.8-11.2" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    `;
+  }
+  if (kind === "failed") {
+    return `
+      <rect x="22.2" y="20.2" width="19.6" height="11.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="2.7"></rect>
+      <path d="M23 22.5h18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+      <path d="M26.5 20.2v-2.3h11v2.3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    `;
+  }
+  if (kind === "live") {
+    return `
+      <path d="M21 24.8a3.3 3.3 0 0 1 3.3-3.3h3.2l2-3.7h4.2l1.5 3.3h4.7a3 3 0 0 1 2.8 2.1l1.2 4.3H47a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1-2.6-2.6H25.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2h1.4l1.1-6.5H21Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"></path>
+      <circle cx="36.5" cy="18.2" r="1.9" fill="currentColor"></circle>
+      <path d="M31.4 18.6h4.7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"></path>
+    `;
+  }
+  return `
+    <path d="M32 14.2a11.5 11.5 0 1 0 11.5 11.5A11.5 11.5 0 0 0 32 14.2Z" fill="none" stroke="currentColor" stroke-width="2.4"></path>
+    <path d="M32 19.2v6.9l4.4 3.4" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"></path>
+  `;
+}
+
+
+function buildPremiumRouteLayer(latLngs) {
+  const shadowLine = L.polyline(latLngs, {
+    color: "#1d4ed8",
+    weight: 16,
+    opacity: 0.12,
+    lineCap: "round",
+    lineJoin: "round",
+    className: "premium-route-line premium-route-line--shadow",
+  });
+  const glowLine = L.polyline(latLngs, {
+    color: "#2563eb",
+    weight: 10,
+    opacity: 0.26,
+    lineCap: "round",
+    lineJoin: "round",
+    className: "premium-route-line premium-route-line--glow",
+  });
+  const mainLine = L.polyline(latLngs, {
+    color: "#2563eb",
+    weight: 6,
+    opacity: 0.98,
+    lineCap: "round",
+    lineJoin: "round",
+    className: "premium-route-line premium-route-line--main",
+  });
+  return L.layerGroup([shadowLine, glowLine, mainLine]);
+}
+
+
+function createPremiumLocationPulseMarker(coords) {
+  return L.marker(toLeafletLatLng(coords), {
+    interactive: false,
+    bubblingMouseEvents: false,
+    keyboard: false,
+    icon: L.divIcon({
+      className: "courier-location-pulse-icon",
+      html: '<span class="courier-location-pulse"></span>',
+      iconSize: [72, 72],
+      iconAnchor: [36, 36],
+    }),
   }).addTo(state.map);
 }
 
@@ -1094,12 +1226,10 @@ function startLocationWatch() {
     state.hasCurrentPosition = true;
 
     if (!state.locationMarker) {
-      state.locationMarker = createCircleMarker(state.currentPosition, {
-        radius: 8,
-        fillColor: "#24566f",
-        color: "#fff",
-        weight: 2,
-        fillOpacity: 1,
+      state.locationMarker = createPremiumLiveLocationMarker(state.currentPosition, {
+        selected: true,
+        pulse: true,
+        zIndexOffset: 520,
       });
     } else {
       setMarkerPosition(state.locationMarker, state.currentPosition);
@@ -1249,13 +1379,10 @@ function renderCourierLocationMarkers() {
 
     const username = normalizeUsername(location.username);
     const isSelected = username && state.selectedCourierLocationUsername === username;
-    const marker = createCircleMarker(coords, {
-      radius: 8,
-      fillColor,
-      color: "#ffffff",
-      weight: 3,
-      fillOpacity: 0.95,
-      className: "courier-location-marker courier-location-marker--online",
+    const marker = createPremiumLiveLocationMarker(coords, {
+      selected: isSelected,
+      pulse: true,
+      zIndexOffset: isSelected ? 520 : 320,
     });
     marker.on("click", (event) => {
       stopMapClick(event);
@@ -1263,6 +1390,7 @@ function renderCourierLocationMarkers() {
       renderCourierLocationMarkers();
     });
     addCourierLocationOverlay(marker);
+    addCourierLocationOverlay(createPremiumLocationPulseMarker(coords));
 
     if (!isSelected) return;
 
