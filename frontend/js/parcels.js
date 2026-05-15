@@ -1076,7 +1076,7 @@ function showGoogleMapsRoutePrompt(origin, pin) {
       <span>გსურთ GOOGLE MAP მარშრუტის დაგეგმვა?</span>
     </div>
   `, [
-    { label: "კი", variant: "primary", action: () => { window.open(buildGoogleMapsRouteUrl(origin, pin), "_blank", "noopener"); closeDialog(); } },
+    { label: "კი", variant: "primary", action: () => { openGoogleMapsRouteExternally(origin, pin); closeDialog(); } },
     { label: "არა", variant: "secondary", action: closeDialog },
   ]);
 }
@@ -1104,8 +1104,41 @@ async function drawRouteToPin(origin, pin) {
       lineJoin: "round",
     }).addTo(state.map);
   state.routePinId = pin.id;
-  state.map.fitBounds(state.routeLayer.getBounds(), { padding: [38, 38], maxZoom: 17 });
+  fitRouteLayerBounds(state.routeLayer);
   renderSelectedParcelCard();
+}
+
+
+function fitRouteLayerBounds(routeLayer) {
+  if (!state.map || !routeLayer) return;
+
+  let bounds = null;
+  if (typeof routeLayer.getBounds === "function") {
+    bounds = routeLayer.getBounds();
+  } else if (typeof routeLayer.eachLayer === "function" && window.L?.featureGroup) {
+    bounds = L.featureGroup(routeLayer.getLayers?.() || []).getBounds();
+  } else if (routeLayer._layers && window.L?.featureGroup) {
+    bounds = L.featureGroup(Object.values(routeLayer._layers)).getBounds();
+  }
+
+  if (!bounds || (typeof bounds.isValid === "function" && !bounds.isValid())) return;
+  state.map.fitBounds(bounds, { padding: [38, 38], maxZoom: 17 });
+}
+
+
+function openGoogleMapsRouteExternally(origin, pin) {
+  const url = buildGoogleMapsRouteUrl(origin, pin);
+  if (!url) return;
+
+  const appLauncher = window.Capacitor?.Plugins?.AppLauncher;
+  if (appLauncher?.openUrl) {
+    appLauncher.openUrl({ url }).catch(() => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 

@@ -2747,33 +2747,47 @@ button.finance-card {
   position: absolute;
   width: 0;
   height: 0;
+  z-index: 690;
   pointer-events: auto;
 }
 
 .pin-label-card {
   position: absolute;
   left: 0;
-  bottom: 16px;
+  bottom: 72px;
   transform: translateX(-50%);
   width: max-content;
-  max-width: 220px;
+  max-width: min(240px, calc(100vw - 34px));
   display: grid;
-  gap: 2px;
-  padding: 6px 8px;
+  gap: 3px;
+  padding: 8px 10px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
   cursor: pointer;
   font-size: 0.76rem;
   line-height: 1.15;
-  text-align: center;
+  text-align: left;
   pointer-events: auto;
 }
 
 .pin-label-card * {
   pointer-events: auto;
+}
+
+.pin-label-card::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .pin-label-card strong,
@@ -2785,6 +2799,11 @@ button.finance-card {
 
 .pin-label-card strong {
   font-weight: 700;
+}
+
+.pin-label-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .pin-label-payment {
@@ -9604,4 +9623,16 @@ button.finance-card:hover,
   fill: #ffffff;
   stroke: #ffffff;
   transform: translateY(-0.5px);
+}
+
+@media (max-width: 1180px) {
+  .pin-label-icon {
+    z-index: 760;
+  }
+
+  .pin-label-card {
+    bottom: 78px;
+    max-width: min(220px, calc(100vw - 28px));
+    padding: 8px 10px;
+  }
 }
