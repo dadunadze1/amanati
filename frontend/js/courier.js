@@ -79,14 +79,14 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
   const nearestDistance = nearest && state.hasCurrentPosition ? distanceInMeters(state.currentPosition, nearest) : NaN;
   const statusLabel = escapeHtml(status.label);
   const todayPay = escapeHtml(formatMoney(todayStats.courierPay || 0));
-  const pendingPins = sortedPins.filter((pin) => pin.status === "pending");
-  const activeDeliveryPins = sortedPins.filter((pin) => pin.status !== "pending");
-  const cards = (await Promise.all([...pendingPins, ...activeDeliveryPins].map(renderCourierMobileOrderCard))).join("");
+  const isCompactMobile = Boolean(window.matchMedia?.("(max-width: 960px)")?.matches);
   const primaryTitle = nearest ? (nearest.fullName || "აქტიური შეკვეთა") : "აქტიური შეკვეთა არ არის";
   const primaryAddress = nearest ? await resolveParcelAddress(nearest) : "შეკვეთა არ არის";
   const primaryDistance = Number.isFinite(nearestDistance) ? formatDistance(nearestDistance) : "—";
   const primaryEta = Number.isFinite(nearestDistance) ? estimateCourierEta(nearestDistance) : "GPS";
   const primaryPhone = nearest?.phone ? formatPhoneHref(nearest.phone) : "";
+  const primaryCard = nearest ? await renderCourierMobileOrderCard(nearest) : "";
+  const cards = isCompactMobile ? primaryCard : (await Promise.all(sortedPins.map(renderCourierMobileOrderCard))).join("");
 
   els.courierOrdersSheet.innerHTML = `
     <div class="courier-sheet-shell">
@@ -146,7 +146,7 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
           <strong>დღეს</strong>
         </div>
       </div>
-      <div class="courier-orders-list">
+      <div class="courier-orders-list${isCompactMobile ? " courier-orders-list--compact" : ""}">
         ${cards || `<div class="courier-empty-state">აქტიური შეკვეთა არ არის.</div>`}
       </div>
     </div>
@@ -260,6 +260,12 @@ async function renderCourierMobileOrderCard(pin) {
             ${renderCourierDetailLine("ETA", `${eta} / ${Number.isFinite(distance) ? formatDistance(distance) : "GPS"}`)}
           </div>
         `)}
+        ${renderCourierAccordionRow("status", "Status", status, `
+          <div class="courier-accordion-detail">
+            ${renderCourierDetailLine("მიმდინარე", status)}
+            ${renderCourierDetailLine("დისტანცია", Number.isFinite(distance) ? formatDistance(distance) : "GPS")}
+          </div>
+        `)}
       </div>
 
       <div class="courier-order-actions">
@@ -368,6 +374,12 @@ function renderCourierSectionIcon(kind) {
         <rect x="4" y="6" width="16" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"></rect>
         <path d="M4 10h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
         <path d="M8 15h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+      </svg>
+    `,
+    status: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+        <path d="M12 8.8v3.9l2.6 1.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path>
       </svg>
     `,
   };

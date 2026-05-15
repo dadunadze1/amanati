@@ -66,16 +66,9 @@ function renderParcelMarkers(pins) {
 function renderSinglePinMarker(pin) {
   if (!pin) return;
   const isSelected = pin.id && pin.id === state.selectedPinId;
-  if (isSelected) {
-    addParcelOverlay(createPremiumParcelPinMarker(pin, {
-      pulse: true,
-      selected: true,
-      interactive: false,
-      zIndexOffset: 100,
-    }));
-  }
   const marker = createPremiumParcelPinMarker(pin, {
     selected: isSelected,
+    pulse: isSelected,
     interactive: true,
     zIndexOffset: isSelected ? 220 : 120,
   });
@@ -379,8 +372,8 @@ function buildPremiumMapPinIcon(kind, options = {}) {
         ${badge}
       </span>
     `,
-    iconSize: options.live ? [58, 78] : [52, 72],
-    iconAnchor: options.live ? [29, 68] : [26, 62],
+    iconSize: options.live ? [62, 82] : [56, 76],
+    iconAnchor: options.live ? [31, 72] : [28, 66],
   });
 }
 
@@ -388,26 +381,26 @@ function buildPremiumMapPinIcon(kind, options = {}) {
 function getPremiumMapPinGlyph(kind) {
   if (kind === "delivered") {
     return `
-      <path d="m24 25.5 5.2 5.2 10.8-11.2" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path d="m22.8 25.6 4.8 4.8 12.2-12.6" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"></path>
     `;
   }
   if (kind === "failed") {
     return `
-      <rect x="22.2" y="20.2" width="19.6" height="11.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="2.7"></rect>
-      <path d="M23 22.5h18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
-      <path d="M26.5 20.2v-2.3h11v2.3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <rect x="21.4" y="19.6" width="21.2" height="13.1" rx="3.2" fill="none" stroke="currentColor" stroke-width="3"></rect>
+      <path d="M22.4 22.6h19.1" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"></path>
+      <path d="M26.1 19.6v-2.5h11.6v2.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
     `;
   }
   if (kind === "live") {
     return `
-      <path d="M21 24.8a3.3 3.3 0 0 1 3.3-3.3h3.2l2-3.7h4.2l1.5 3.3h4.7a3 3 0 0 1 2.8 2.1l1.2 4.3H47a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1-2.6-2.6H25.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2h1.4l1.1-6.5H21Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"></path>
-      <circle cx="36.5" cy="18.2" r="1.9" fill="currentColor"></circle>
-      <path d="M31.4 18.6h4.7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"></path>
+      <path d="M20.9 24.8a3.4 3.4 0 0 1 3.4-3.4h3.1l2.1-3.8h4.4l1.5 3.4h4.8a3.1 3.1 0 0 1 2.9 2.2l1.2 4.5H47a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1-2.7-2.7H25.2a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4h1.5l1.1-6.6H20.9Z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"></path>
+      <circle cx="36.9" cy="18.1" r="2.1" fill="currentColor"></circle>
+      <path d="M31.2 18.6h5.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path>
     `;
   }
   return `
-    <path d="M32 14.2a11.5 11.5 0 1 0 11.5 11.5A11.5 11.5 0 0 0 32 14.2Z" fill="none" stroke="currentColor" stroke-width="2.4"></path>
-    <path d="M32 19.2v6.9l4.4 3.4" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M32 14.2a11.5 11.5 0 1 0 11.5 11.5A11.5 11.5 0 0 0 32 14.2Z" fill="none" stroke="currentColor" stroke-width="2.6"></path>
+    <path d="M32 18.8v7.2l4.7 3.6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
   `;
 }
 
@@ -1390,7 +1383,6 @@ function renderCourierLocationMarkers() {
       renderCourierLocationMarkers();
     });
     addCourierLocationOverlay(marker);
-    addCourierLocationOverlay(createPremiumLocationPulseMarker(coords));
 
     if (!isSelected) return;
 
