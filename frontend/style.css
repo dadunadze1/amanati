@@ -8244,9 +8244,7 @@ button.finance-card:hover,
 #authModal.modal-overlay,
 #setupModal.modal-overlay {
   padding: 24px;
-  background:
-    linear-gradient(180deg, rgba(248, 250, 255, 0.16), rgba(248, 250, 255, 0.08)),
-    url("./assets/auth/login-bg.png") center bottom / cover no-repeat;
+  background: url("./assets/auth/login-bg.png") center bottom / cover no-repeat;
   backdrop-filter: none;
 }
 
@@ -8259,16 +8257,16 @@ button.finance-card:hover,
 
 #authModal .auth-card,
 #setupModal .auth-card {
-  width: min(210px, calc(100vw - 20px));
-  max-width: 210px;
-  min-height: min(380px, calc(100dvh - 20px));
-  padding: 14px 12px 14px;
-  gap: 6px;
+  width: min(420px, calc(100vw - 28px));
+  max-width: 420px;
+  min-height: min(620px, calc(100dvh - 28px));
+  padding: 28px 24px 28px;
+  gap: 10px;
   overflow: auto;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 18px;
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+  border-radius: 26px;
+  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.16);
   text-align: left;
 }
 
@@ -8282,8 +8280,8 @@ button.finance-card:hover,
 
 #authModal .auth-brand-mark,
 #setupModal .auth-brand-mark {
-  width: 48px;
-  height: 48px;
+  width: 74px;
+  height: 74px;
   display: block;
 }
 
@@ -8299,23 +8297,23 @@ button.finance-card:hover,
 #authModal .auth-brand-copy strong,
 #setupModal .auth-brand-copy strong {
   line-height: 0.95;
-  font-size: 0.98rem;
+  font-size: 1.42rem;
   font-weight: 900;
 }
 
 #authModal .auth-brand-copy span,
 #setupModal .auth-brand-copy span {
   color: #1d62f0;
-  font-size: 0.7rem;
+  font-size: 0.9rem;
   font-weight: 900;
   letter-spacing: 0;
 }
 
 #authModal .auth-card > h1,
 #setupModal .auth-card > h1 {
-  margin: 0 0 4px;
+  margin: 4px 0 8px;
   color: #0b1f4f;
-  font-size: 0.8rem;
+  font-size: 1.24rem;
   font-weight: 900;
   line-height: 1.1;
   text-align: center;
@@ -8324,9 +8322,9 @@ button.finance-card:hover,
 
 #authModal .auth-card > label,
 #setupModal .auth-card > label {
-  margin-top: 2px;
+  margin-top: 4px;
   color: #667085;
-  font-size: 0.64rem;
+  font-size: 0.84rem;
   font-weight: 800;
   line-height: 1.1;
 }
@@ -8338,14 +8336,14 @@ button.finance-card:hover,
 
 #authModal .auth-field input,
 #setupModal .auth-field input {
-  min-height: 34px;
-  padding-left: 34px;
-  padding-right: 30px;
+  min-height: 46px;
+  padding-left: 50px;
+  padding-right: 42px;
   background: #fff;
   border-color: #d6dbe6;
-  border-radius: 10px;
+  border-radius: 14px;
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02), inset 0 1px 1px rgba(15, 23, 42, 0.02);
-  font-size: 0.76rem;
+  font-size: 0.92rem;
 }
 
 #authModal .auth-field input::placeholder,
@@ -8363,9 +8361,9 @@ button.finance-card:hover,
 #setupModal .auth-field-icon {
   position: absolute;
   top: 50%;
-  left: 10px;
-  width: 12px;
-  height: 12px;
+  left: 14px;
+  width: 18px;
+  height: 18px;
   display: grid;
   place-items: center;
   color: #0b1f4f;
@@ -8375,17 +8373,17 @@ button.finance-card:hover,
 
 #authModal .auth-field-icon svg,
 #setupModal .auth-field-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 18px;
+  height: 18px;
 }
 
 #authModal .auth-password-toggle,
 #setupModal .auth-password-toggle {
   position: absolute;
   top: 50%;
-  right: 9px;
-  width: 16px;
-  height: 16px;
+  right: 14px;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -8404,8 +8402,8 @@ button.finance-card:hover,
 
 #authModal .auth-password-toggle-icon,
 #setupModal .auth-password-toggle-icon {
-  width: 12px;
-  height: 12px;
+  width: 18px;
+  height: 18px;
 }
 
 #authModal .auth-password-toggle-icon--hide,
@@ -8422,13 +8420,13 @@ button.finance-card:hover,
 
 #authModal .auth-submit,
 #setupModal .auth-submit {
-  min-height: 34px;
-  margin-top: 6px;
+  min-height: 46px;
+  margin-top: 14px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 14px;
   background: linear-gradient(90deg, #1d62f0, #245ef7 58%, #1a53df);
-  box-shadow: 0 8px 14px rgba(29, 98, 240, 0.2);
-  font-size: 0.74rem;
+  box-shadow: 0 12px 20px rgba(29, 98, 240, 0.24);
+  font-size: 0.98rem;
   font-weight: 900;
 }
 
@@ -8441,10 +8439,10 @@ button.finance-card:hover,
 
 #authModal .form-message,
 #setupModal .form-message {
-  min-height: 12px;
+  min-height: 16px;
   margin: 2px 0 0;
   color: var(--danger);
-  font-size: 0.62rem;
+  font-size: 0.78rem;
   font-weight: 700;
   text-align: center;
 }
@@ -8460,52 +8458,52 @@ button.finance-card:hover,
 
   #authModal .auth-card,
   #setupModal .auth-card {
-    width: min(210px, calc(100vw - 20px));
-    min-height: min(380px, calc(100dvh - 20px));
-    max-height: calc(100dvh - 28px);
-    padding: 12px 10px 12px;
-    border-radius: 14px;
+    width: min(420px, calc(100vw - 24px));
+    min-height: min(620px, calc(100dvh - 24px));
+    max-height: calc(100dvh - 24px);
+    padding: 22px 18px 22px;
+    border-radius: 22px;
   }
 
   #authModal .auth-brand-mark,
   #setupModal .auth-brand-mark {
-    width: 42px;
-    height: 42px;
+    width: 64px;
+    height: 64px;
   }
 
   #authModal .auth-brand-copy strong,
   #setupModal .auth-brand-copy strong {
-    font-size: 0.9rem;
+    font-size: 1.18rem;
   }
 
   #authModal .auth-card > h1,
   #setupModal .auth-card > h1 {
-    font-size: 0.74rem;
+    font-size: 1.02rem;
   }
 
   #authModal .auth-card > label,
   #setupModal .auth-card > label {
-    font-size: 0.6rem;
+    font-size: 0.76rem;
   }
 
   #authModal .auth-field input,
   #setupModal .auth-field input {
-    min-height: 32px;
-    padding-left: 30px;
-    padding-right: 26px;
-    border-radius: 8px;
-    font-size: 0.72rem;
+    min-height: 42px;
+    padding-left: 44px;
+    padding-right: 38px;
+    border-radius: 12px;
+    font-size: 0.88rem;
   }
 
   #authModal .auth-field-icon,
   #setupModal .auth-field-icon {
-    left: 8px;
+    left: 12px;
   }
 
   #authModal .auth-submit,
   #setupModal .auth-submit {
-    min-height: 32px;
-    margin-top: 6px;
-    border-radius: 8px;
+    min-height: 42px;
+    margin-top: 12px;
+    border-radius: 12px;
   }
 }
