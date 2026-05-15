@@ -14,11 +14,13 @@ async function initializeAuth() {
         return;
       }
       showModal(bootstrap.hasAdmin ? els.authModal : els.setupModal);
+      document.body.classList.remove("auth-loading");
       return;
     }
     hideModal(els.setupModal);
     hideModal(els.authModal);
     showModal(bootstrap.hasAdmin ? els.authModal : els.setupModal);
+    document.body.classList.remove("auth-loading");
   } catch (error) {
     if (isStaticDeploy()) {
       console.warn("Static mode enabled", error);
@@ -29,9 +31,12 @@ async function initializeAuth() {
         return;
       }
       showModal(els.authModal);
+      document.body.classList.remove("auth-loading");
       return;
     }
     setMessage(els.loginError, error.message || STRINGS.serverFailed, true);
+    showModal(els.authModal);
+    document.body.classList.remove("auth-loading");
   }
 }
 
@@ -68,6 +73,7 @@ async function handleLogin(event) {
 
 
 function completeLogin(payload) {
+  document.body.classList.remove("auth-loading");
   state.authToken = payload.token;
   state.currentUser = payload.user.username;
   state.currentUserProfile = payload.user;
