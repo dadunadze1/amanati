@@ -59,9 +59,9 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
   }
 
   els.appShell?.classList.add("is-courier-mobile");
-  els.courierDashboard.hidden = false;
-  els.courierOrdersSheet.hidden = true;
-  els.courierOrdersSheet.textContent = "";
+  els.courierDashboard.hidden = true;
+  els.courierDashboard.textContent = "";
+  els.courierOrdersSheet.hidden = false;
   els.courierOrdersSheet.classList.remove("is-expanded");
 
   const activePins = Array.isArray(pins) ? pins : [];
@@ -73,33 +73,86 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
     delivered: activePins.filter((pin) => pin.status === "delivered").length,
   }));
   const pending = activePins.filter((pin) => pin.status === "pending").length;
+  const deliveredToday = todayStats.delivered || 0;
   const status = getCourierPresenceStatus(activePins);
   const nearest = sortedPins.find((pin) => pin.status === "pending") || sortedPins[0];
   const nearestDistance = nearest && state.hasCurrentPosition ? distanceInMeters(state.currentPosition, nearest) : NaN;
+  const statusLabel = escapeHtml(status.label);
+  const todayPay = escapeHtml(formatMoney(todayStats.courierPay || 0));
+  const pendingPins = sortedPins.filter((pin) => pin.status === "pending");
+  const activeDeliveryPins = sortedPins.filter((pin) => pin.status !== "pending");
+  const cards = (await Promise.all([...pendingPins, ...activeDeliveryPins].map(renderCourierMobileOrderCard))).join("");
+  const primaryTitle = nearest ? (nearest.fullName || "აქტიური შეკვეთა") : "აქტიური შეკვეთა არ არის";
+  const primaryAddress = nearest ? await resolveParcelAddress(nearest) : "შეკვეთა არ არის";
+  const primaryDistance = Number.isFinite(nearestDistance) ? formatDistance(nearestDistance) : "—";
+  const primaryEta = Number.isFinite(nearestDistance) ? estimateCourierEta(nearestDistance) : "GPS";
+  const primaryPhone = nearest?.phone ? formatPhoneHref(nearest.phone) : "";
 
-  els.courierDashboard.innerHTML = `
-    <div class="courier-status-row">
-      <button class="courier-online-toggle courier-status-${escapeAttr(status.key)}" type="button" data-courier-presence-toggle data-mode="${escapeAttr(status.key)}">
-        <span aria-hidden="true"></span>
-        <strong>${escapeHtml(status.label)}</strong>
+  els.courierOrdersSheet.innerHTML = `
+    <div class="courier-sheet-shell">
+      <button class="courier-sheet-handle" type="button" data-courier-sheet-toggle aria-label="შეკვეთების პანელის გაშლა">
+        <span></span>
       </button>
-      <div class="courier-day-pill">
-        <span>დღეს</span>
-        <strong>${escapeHtml(formatMoney(todayStats.courierPay || 0))}</strong>
+      <div class="courier-sheet-header">
+        <div class="courier-sheet-person">
+          <span class="courier-sheet-avatar courier-sheet-avatar--${escapeAttr(nearest?.status || "pending")}" aria-hidden="true">
+            ${renderCourierAvatarIcon()}
+          </span>
+          <div class="courier-sheet-copy">
+            <div class="courier-sheet-name-row">
+              <strong>${escapeHtml(primaryTitle)}</strong>
+              <span class="courier-sheet-badge">${activePins.length} შეკვეთა</span>
+            </div>
+            <div class="courier-sheet-meta">
+              <span class="courier-sheet-meta-primary">${escapeHtml(primaryEta)} ETA</span>
+              <span class="courier-sheet-meta-secondary">${escapeHtml(primaryDistance)}</span>
+            </div>
+            <div class="courier-sheet-address">${escapeHtml(primaryAddress)}</div>
+          </div>
+        </div>
+        <div class="courier-sheet-actions">
+          <button class="courier-sheet-square-action courier-sheet-square-action--route" type="button" data-action="routeCourierPin" data-value="${escapeAttr(nearest?.id || "")}"${nearest ? "" : " disabled"}>
+            ${renderCourierActionIcon("route")}
+            <span>Route</span>
+          </button>
+          ${primaryPhone ? `
+            <a class="courier-sheet-square-action courier-sheet-square-action--call" href="${escapeAttr(primaryPhone)}">
+              ${renderCourierActionIcon("call")}
+              <span>Call</span>
+            </a>
+          ` : `
+            <button class="courier-sheet-square-action courier-sheet-square-action--call" type="button" disabled>
+              ${renderCourierActionIcon("call")}
+              <span>Call</span>
+            </button>
+          `}
+        </div>
       </div>
-      <div class="courier-day-pill">
-        <span>აქტიური</span>
-        <strong>${pending}</strong>
+      <div class="courier-sheet-toolbar">
+        <button class="courier-sheet-pill courier-status-${escapeAttr(status.key)}" type="button" data-courier-presence-toggle data-mode="${escapeAttr(status.key)}">
+          <span class="courier-sheet-pill-dot"></span>
+          <strong>${statusLabel}</strong>
+        </button>
+        <button class="courier-sheet-pill" type="button" data-action="nearestParcel">
+          <span class="courier-sheet-pill-kpi">${pending}</span>
+          <strong>აქტიური</strong>
+        </button>
+        <div class="courier-sheet-pill courier-sheet-pill--static">
+          <span class="courier-sheet-pill-kpi">${deliveredToday}</span>
+          <strong>ჩაბარდა</strong>
+        </div>
+        <div class="courier-sheet-pill courier-sheet-pill--static">
+          <span class="courier-sheet-pill-kpi">${todayPay}</span>
+          <strong>დღეს</strong>
+        </div>
+      </div>
+      <div class="courier-orders-list">
+        ${cards || `<div class="courier-empty-state">აქტიური შეკვეთა არ არის.</div>`}
       </div>
     </div>
-    <button class="courier-mini-route" type="button" data-courier-current-order>
-      <span>${nearest ? "შემდეგი მისამართი" : "შეკვეთა არ არის"}</span>
-      <strong>${escapeHtml(nearest ? getParcelAddress(nearest) : "აქტიური შეკვეთა არ არის")}</strong>
-      <small>${Number.isFinite(nearestDistance) ? `${escapeHtml(formatDistance(nearestDistance))} / ETA ${estimateCourierEta(nearestDistance)}` : "GPS ლოკაციას ველოდებით"}</small>
-    </button>
   `;
-  els.courierDashboard.querySelector("[data-courier-current-order]")?.addEventListener("click", openNearestCurrentCourierOrder);
 
+  if (els.courierDashboard) els.courierDashboard.hidden = true;
   scheduleMapInvalidateSize();
 }
 
@@ -170,26 +223,164 @@ async function renderCourierMobileOrderCard(pin) {
   const address = await resolveParcelAddress(pin);
   const payment = getPaymentAmount(pin);
   const distance = state.hasCurrentPosition ? distanceInMeters(state.currentPosition, pin) : NaN;
+  const eta = Number.isFinite(distance) ? estimateCourierEta(distance) : "GPS";
+  const status = getStatusLabel(pin.status);
+  const title = pin.fullName || "უსახელო შეკვეთა";
+  const paymentLabel = payment > 0 ? formatMoney(payment) : "ქეში არ არის";
+  const deliveryDistance = Number.isFinite(distance) ? `${formatDistance(distance)} · ETA ${eta}` : "GPS ლოკაციას ველოდებით";
   return `
     <article class="courier-mobile-order-card status-${escapeAttr(pin.status)}">
-      <div class="courier-order-topline">
-        <span class="courier-order-status">${escapeHtml(getStatusLabel(pin.status))}</span>
-        <strong class="courier-order-amount">${payment > 0 ? escapeHtml(formatMoney(payment)) : "ქეში არ არის"}</strong>
+      <div class="courier-order-card-head">
+        <div class="courier-order-card-head-copy">
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(address || STRINGS.addressMissing)}</span>
+        </div>
+        <div class="courier-order-badges">
+          <span class="courier-order-status">${escapeHtml(status)}</span>
+          <span class="courier-order-amount">${escapeHtml(paymentLabel)}</span>
+        </div>
       </div>
-      <h3>${escapeHtml(address || STRINGS.addressMissing)}</h3>
-      <div class="courier-order-meta">
-        <span class="courier-order-client">${escapeHtml(pin.fullName || "უსახელო")}</span>
-        <span>${Number.isFinite(distance) ? `${escapeHtml(formatDistance(distance))} / ETA ${estimateCourierEta(distance)}` : "GPS ელოდება"}</span>
+
+      <div class="courier-accordion-list">
+        ${renderCourierAccordionRow("pickup", "Pickup", "მომზადება და აღება", `
+          <div class="courier-accordion-detail">
+            ${renderCourierDetailLine("მიმღები", title)}
+            ${renderCourierDetailLine("ტელეფონი", pin.phone || "ტელეფონი არ არის")}
+          </div>
+        `)}
+        ${renderCourierAccordionRow("delivery", "Delivery", deliveryDistance, `
+          <div class="courier-accordion-detail">
+            ${renderCourierDetailLine("მისამართი", address || STRINGS.addressMissing)}
+            ${renderCourierDetailLine("სტატუსი", status)}
+          </div>
+        `)}
+        ${renderCourierAccordionRow("payment", "Payment", paymentLabel, `
+          <div class="courier-accordion-detail">
+            ${renderCourierDetailLine("ქეში", paymentLabel)}
+            ${renderCourierDetailLine("ETA", `${eta} / ${Number.isFinite(distance) ? formatDistance(distance) : "GPS"}`)}
+          </div>
+        `)}
       </div>
-      <div class="courier-quick-actions">
-        <button type="button" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">მიღება</button>
-        <button type="button" data-action="routeCourierPin" data-value="${escapeAttr(pin.id)}">გზაში</button>
-        <button class="is-success" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">ჩაბარდა</button>
-        <button class="is-danger" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">ვერ</button>
-        <a href="${escapeAttr(formatPhoneHref(pin.phone))}">ზარი</a>
-        <button type="button" data-action="routeCourierPin" data-value="${escapeAttr(pin.id)}">ნავიგაცია</button>
+
+      <div class="courier-order-actions">
+        <button type="button" class="courier-order-action courier-order-action--ghost" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">
+          ${renderCourierActionIcon("map")}
+          <span>რუკა</span>
+        </button>
+        <button type="button" class="courier-order-action courier-order-action--primary" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">
+          ${renderCourierActionIcon("done")}
+          <span>ჩაბარდა</span>
+        </button>
+        <button type="button" class="courier-order-action courier-order-action--danger" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">
+          ${renderCourierActionIcon("failed")}
+          <span>ვერ</span>
+        </button>
       </div>
     </article>
+  `;
+}
+
+
+function renderCourierAvatarIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 12.5a4.25 4.25 0 1 0-4.25-4.25A4.25 4.25 0 0 0 12 12.5Z" fill="currentColor" opacity="0.18"></path>
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></path>
+      <path d="M12 12.2a2.9 2.9 0 1 0-2.9-2.9A2.9 2.9 0 0 0 12 12.2Z" fill="currentColor"></path>
+    </svg>
+  `;
+}
+
+
+function renderCourierActionIcon(kind) {
+  const icons = {
+    route: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 18h7l9-12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path>
+        <circle cx="4.5" cy="18" r="1.7" fill="currentColor"></circle>
+        <circle cx="12" cy="10" r="1.7" fill="currentColor"></circle>
+        <circle cx="19.5" cy="6" r="1.7" fill="currentColor"></circle>
+      </svg>
+    `,
+    call: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M7.5 4.5h3l1.1 4.1-2 1.9a14.7 14.7 0 0 0 5 5l1.9-2 4.1 1.1v3a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 5 6.1 1.5 1.5 0 0 1 6.5 4.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+      </svg>
+    `,
+    map: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m3.5 7 5-2 7 2 5-2v12l-5 2-7-2-5 2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+        <path d="M8.5 5v12M15.5 7v12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+      </svg>
+    `,
+    done: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m5 12 4 4 10-10" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    `,
+    failed: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M7 7 17 17M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"></path>
+      </svg>
+    `,
+  };
+  return icons[kind] || icons.map;
+}
+
+
+function renderCourierAccordionRow(kind, title, subtitle, body) {
+  return `
+    <div class="courier-accordion-item courier-accordion-item--${escapeAttr(kind)}">
+      <button class="courier-accordion-toggle" type="button" data-courier-accordion-toggle aria-expanded="false">
+        <span class="courier-accordion-icon courier-accordion-icon--${escapeAttr(kind)}" aria-hidden="true">
+          ${renderCourierSectionIcon(kind)}
+        </span>
+        <span class="courier-accordion-copy">
+          <strong>${escapeHtml(title)}</strong>
+          <small>${escapeHtml(subtitle)}</small>
+        </span>
+        <span class="courier-accordion-chevron" aria-hidden="true">⌄</span>
+      </button>
+      <div class="courier-accordion-panel" hidden>
+        ${body}
+      </div>
+    </div>
+  `;
+}
+
+
+function renderCourierSectionIcon(kind) {
+  const icons = {
+    pickup: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M7 19V8l5-3 5 3v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+        <path d="M9 19v-5h6v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+      </svg>
+    `,
+    delivery: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 21s6-4.8 6-10a6 6 0 1 0-12 0c0 5.2 6 10 6 10Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+        <circle cx="12" cy="11" r="2.1" fill="currentColor"></circle>
+      </svg>
+    `,
+    payment: `
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="4" y="6" width="16" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"></rect>
+        <path d="M4 10h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+        <path d="M8 15h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+      </svg>
+    `,
+  };
+  return icons[kind] || icons.payment;
+}
+
+
+function renderCourierDetailLine(label, value) {
+  return `
+    <div class="courier-accordion-detail-line">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
   `;
 }
 
