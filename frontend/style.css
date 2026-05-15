@@ -8259,16 +8259,16 @@ button.finance-card:hover,
 
 #authModal .auth-card,
 #setupModal .auth-card {
-  width: min(900px, calc(100vw - 48px));
-  max-width: 900px;
-  min-height: min(1060px, calc(100dvh - 48px));
-  padding: 38px 72px 46px;
-  gap: 16px;
+  width: min(430px, calc(100vw - 28px));
+  max-width: 430px;
+  min-height: min(760px, calc(100dvh - 28px));
+  padding: 26px 24px 28px;
+  gap: 12px;
   overflow: auto;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 34px;
-  box-shadow: 0 30px 84px rgba(15, 23, 42, 0.18);
+  border-radius: 28px;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.18);
   text-align: left;
 }
 
@@ -8282,8 +8282,8 @@ button.finance-card:hover,
 
 #authModal .auth-brand-mark,
 #setupModal .auth-brand-mark {
-  width: 104px;
-  height: 104px;
+  width: 86px;
+  height: 86px;
   display: block;
 }
 
@@ -8299,34 +8299,34 @@ button.finance-card:hover,
 #authModal .auth-brand-copy strong,
 #setupModal .auth-brand-copy strong {
   line-height: 0.95;
-  font-size: 1.95rem;
+  font-size: 1.6rem;
   font-weight: 900;
 }
 
 #authModal .auth-brand-copy span,
 #setupModal .auth-brand-copy span {
   color: #1d62f0;
-  font-size: 1.1rem;
+  font-size: 0.98rem;
   font-weight: 900;
   letter-spacing: 0;
 }
 
 #authModal .auth-card > h1,
 #setupModal .auth-card > h1 {
-  margin: 10px 0 14px;
+  margin: 2px 0 6px;
   color: #0b1f4f;
-  font-size: 2.1rem;
+  font-size: 1.38rem;
   font-weight: 900;
-  line-height: 1.08;
+  line-height: 1.1;
   text-align: center;
   border: 0;
 }
 
 #authModal .auth-card > label,
 #setupModal .auth-card > label {
-  margin-top: 8px;
+  margin-top: 4px;
   color: #667085;
-  font-size: 1.08rem;
+  font-size: 0.88rem;
   font-weight: 800;
   line-height: 1.1;
 }
@@ -8338,14 +8338,14 @@ button.finance-card:hover,
 
 #authModal .auth-field input,
 #setupModal .auth-field input {
-  min-height: 58px;
-  padding-left: 68px;
-  padding-right: 62px;
+  min-height: 48px;
+  padding-left: 54px;
+  padding-right: 48px;
   background: #fff;
   border-color: #d6dbe6;
-  border-radius: 18px;
+  border-radius: 14px;
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02), inset 0 1px 1px rgba(15, 23, 42, 0.02);
-  font-size: 1.08rem;
+  font-size: 0.96rem;
 }
 
 #authModal .auth-field input::placeholder,
@@ -8363,9 +8363,9 @@ button.finance-card:hover,
 #setupModal .auth-field-icon {
   position: absolute;
   top: 50%;
-  left: 20px;
-  width: 24px;
-  height: 24px;
+  left: 16px;
+  width: 18px;
+  height: 18px;
   display: grid;
   place-items: center;
   color: #0b1f4f;
@@ -8375,17 +8375,17 @@ button.finance-card:hover,
 
 #authModal .auth-field-icon svg,
 #setupModal .auth-field-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
 }
 
 #authModal .auth-password-toggle,
 #setupModal .auth-password-toggle {
   position: absolute;
   top: 50%;
-  right: 18px;
-  width: 28px;
-  height: 28px;
+  right: 14px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -8404,8 +8404,8 @@ button.finance-card:hover,
 
 #authModal .auth-password-toggle-icon,
 #setupModal .auth-password-toggle-icon {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
 }
 
 #authModal .auth-password-toggle-icon--hide,
@@ -8422,13 +8422,13 @@ button.finance-card:hover,
 
 #authModal .auth-submit,
 #setupModal .auth-submit {
-  min-height: 60px;
-  margin-top: 32px;
+  min-height: 48px;
+  margin-top: 16px;
   border: 0;
-  border-radius: 18px;
+  border-radius: 14px;
   background: linear-gradient(90deg, #1d62f0, #245ef7 58%, #1a53df);
-  box-shadow: 0 14px 28px rgba(29, 98, 240, 0.3);
-  font-size: 1.1rem;
+  box-shadow: 0 12px 20px rgba(29, 98, 240, 0.28);
+  font-size: 0.98rem;
   font-weight: 900;
 }
 
@@ -8441,10 +8441,10 @@ button.finance-card:hover,
 
 #authModal .form-message,
 #setupModal .form-message {
-  min-height: 24px;
+  min-height: 20px;
   margin: 2px 0 0;
   color: var(--danger);
-  font-size: 0.92rem;
+  font-size: 0.8rem;
   font-weight: 700;
   text-align: center;
 }
@@ -8460,52 +8460,52 @@ button.finance-card:hover,
 
   #authModal .auth-card,
   #setupModal .auth-card {
-    width: 100%;
-    min-height: calc(100dvh - 28px);
+    width: min(430px, calc(100vw - 28px));
+    min-height: min(760px, calc(100dvh - 28px));
     max-height: calc(100dvh - 28px);
-    padding: 28px 18px 22px;
-    border-radius: 28px;
+    padding: 22px 18px 20px;
+    border-radius: 24px;
   }
 
   #authModal .auth-brand-mark,
   #setupModal .auth-brand-mark {
-    width: 84px;
-    height: 84px;
+    width: 74px;
+    height: 74px;
   }
 
   #authModal .auth-brand-copy strong,
   #setupModal .auth-brand-copy strong {
-    font-size: 1.72rem;
+    font-size: 1.42rem;
   }
 
   #authModal .auth-card > h1,
   #setupModal .auth-card > h1 {
-    font-size: 1.7rem;
+    font-size: 1.22rem;
   }
 
   #authModal .auth-card > label,
   #setupModal .auth-card > label {
-    font-size: 0.98rem;
+    font-size: 0.84rem;
   }
 
   #authModal .auth-field input,
   #setupModal .auth-field input {
-    min-height: 54px;
-    padding-left: 62px;
-    padding-right: 58px;
-    border-radius: 16px;
-    font-size: 1rem;
+    min-height: 46px;
+    padding-left: 48px;
+    padding-right: 42px;
+    border-radius: 12px;
+    font-size: 0.92rem;
   }
 
   #authModal .auth-field-icon,
   #setupModal .auth-field-icon {
-    left: 17px;
+    left: 14px;
   }
 
   #authModal .auth-submit,
   #setupModal .auth-submit {
-    min-height: 54px;
-    margin-top: 24px;
-    border-radius: 16px;
+    min-height: 46px;
+    margin-top: 14px;
+    border-radius: 12px;
   }
 }
