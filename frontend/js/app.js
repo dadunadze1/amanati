@@ -242,25 +242,15 @@ function renderAdminMobileDrawer(adminActionGroups, renderActionButton) {
 function bindCourierSheetEvents() {
   document.addEventListener("click", (event) => {
     const toggle = event.target.closest("[data-courier-sheet-toggle]");
+    if (toggle && event.target.closest(".app-shell.is-courier-mobile")) return;
     if (!toggle || !els.courierOrdersSheet) return;
     els.courierOrdersSheet.classList.toggle("is-expanded");
-  });
-
-  document.addEventListener("click", (event) => {
-    const accordionToggle = event.target.closest("[data-courier-accordion-toggle]");
-    if (!accordionToggle) return;
-    const accordionItem = accordionToggle.closest(".courier-accordion-item");
-    if (!accordionItem) return;
-    const nextOpen = !accordionItem.classList.contains("is-open");
-    accordionItem.classList.toggle("is-open", nextOpen);
-    accordionToggle.setAttribute("aria-expanded", String(nextOpen));
-    const panel = accordionItem.querySelector(".courier-accordion-panel");
-    if (panel) panel.hidden = !nextOpen;
   });
 
   let startY = 0;
   let dragging = false;
   document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".app-shell.is-courier-mobile")) return;
     if (!event.target.closest(".courier-sheet-handle")) return;
     startY = event.clientY;
     dragging = true;
@@ -562,10 +552,10 @@ async function handleAction(action, value, sourceElement) {
     courierRoute: openCourierRoute,
     courierStatusPanel: openCourierStatusPanel,
     routeCourierPin: async () => {
-      await routeSelectedParcel(value);
+      openParcelTab(value, { focus: true });
+      await routeSelectedParcel();
       await renderCourierMobileDashboard().catch(() => {});
     },
-    focusCourierPin: () => focusCourierPin(value),
     today: openTodayStats,
     courierDay: openTodayStats,
     history: () => openCalendar(state.currentUser, "ჩემი ისტორია"),

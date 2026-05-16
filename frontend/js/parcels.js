@@ -1054,23 +1054,15 @@ function focusSelectedParcel() {
 }
 
 
-function focusCourierPin(pinId = state.selectedPinId) {
-  const pin = state.activePins.find((item) => item.id === pinId);
-  if (!pin) return;
-  setMapView(pin, Math.max(getMapZoom(), 17));
-}
-
-
-async function routeSelectedParcel(pinId = state.selectedPinId) {
+async function routeSelectedParcel() {
   if (state.isAdmin) return;
-  const pin = state.activePins.find((item) => item.id === pinId);
+  const pin = state.activePins.find((item) => item.id === state.selectedPinId);
   if (!pin) return;
   if (!state.hasCurrentPosition) {
     showToast("მდებარეობა ჯერ არ არის განსაზღვრული.");
     return;
   }
 
-  state.selectedPinId = pin.id;
   const origin = state.currentPosition || { lat: CONFIG.center[0], lng: CONFIG.center[1] };
   await drawRouteToPin(origin, pin);
   showGoogleMapsRoutePrompt(origin, pin);
@@ -1084,7 +1076,7 @@ function showGoogleMapsRoutePrompt(origin, pin) {
       <span>გსურთ GOOGLE MAP მარშრუტის დაგეგმვა?</span>
     </div>
   `, [
-    { label: "კი", variant: "primary", action: () => { openGoogleMapsRouteExternally(origin, pin); closeDialog(); } },
+    { label: "კი", variant: "primary", action: () => { window.open(buildGoogleMapsRouteUrl(origin, pin), "_blank", "noopener"); closeDialog(); } },
     { label: "არა", variant: "secondary", action: closeDialog },
   ]);
 }
@@ -1102,51 +1094,14 @@ async function drawRouteToPin(origin, pin) {
     showToast("მარშრუტი რუკაზე სწორი ხაზით გამოჩნდა.");
   }
 
-  state.routeLayer = typeof buildPremiumRouteLayer === "function"
-    ? buildPremiumRouteLayer(latLngs).addTo(state.map)
-    : L.polyline(latLngs, {
-      color: "#2563eb",
-      weight: 6,
-      opacity: 0.95,
-      lineCap: "round",
-      lineJoin: "round",
-    }).addTo(state.map);
+  state.routeLayer = L.polyline(latLngs, {
+    color: "#24566f",
+    weight: 5,
+    opacity: 0.85,
+  }).addTo(state.map);
   state.routePinId = pin.id;
-  fitRouteLayerBounds(state.routeLayer);
+  state.map.fitBounds(state.routeLayer.getBounds(), { padding: [38, 38], maxZoom: 17 });
   renderSelectedParcelCard();
-}
-
-
-function fitRouteLayerBounds(routeLayer) {
-  if (!state.map || !routeLayer) return;
-
-  let bounds = null;
-  if (typeof routeLayer.getBounds === "function") {
-    bounds = routeLayer.getBounds();
-  } else if (typeof routeLayer.eachLayer === "function" && window.L?.featureGroup) {
-    bounds = L.featureGroup(routeLayer.getLayers?.() || []).getBounds();
-  } else if (routeLayer._layers && window.L?.featureGroup) {
-    bounds = L.featureGroup(Object.values(routeLayer._layers)).getBounds();
-  }
-
-  if (!bounds || (typeof bounds.isValid === "function" && !bounds.isValid())) return;
-  state.map.fitBounds(bounds, { padding: [38, 38], maxZoom: 17 });
-}
-
-
-function openGoogleMapsRouteExternally(origin, pin) {
-  const url = buildGoogleMapsRouteUrl(origin, pin);
-  if (!url) return;
-
-  const appLauncher = window.Capacitor?.Plugins?.AppLauncher;
-  if (appLauncher?.openUrl) {
-    appLauncher.openUrl({ url }).catch(() => {
-      window.open(url, "_blank", "noopener,noreferrer");
-    });
-    return;
-  }
-
-  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 
