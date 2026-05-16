@@ -9534,6 +9534,10 @@ button.finance-card:hover,
     -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   }
 
+  .app-shell.is-courier-mobile .nearest-card {
+    display: none !important;
+  }
+
   .app-shell.is-courier-mobile .courier-orders-sheet.is-expanded {
     max-height: min(74dvh, 720px) !important;
   }
@@ -9543,6 +9547,70 @@ button.finance-card:hover,
     gap: 8px;
     height: 100%;
     padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card.nearest-card {
+    position: static;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    padding: 10px;
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 22px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+    overflow: hidden;
+    transform: none;
+    backdrop-filter: blur(18px);
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-card-body {
+    max-height: calc(44dvh - 90px);
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-card-header {
+    align-items: flex-start;
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-card-actions {
+    gap: 6px;
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-icon-button {
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px 8px;
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-detail-section {
+    display: grid;
+    gap: 7px;
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-detail-section h3 {
+    margin: 0;
+  }
+
+  .app-shell.is-courier-mobile .courier-mobile-status-actions,
+  .app-shell.is-courier-mobile .courier-selected-card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .app-shell.is-courier-mobile .courier-mobile-status-actions {
+    margin-top: 2px;
+  }
+
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-detail strong,
+  .app-shell.is-courier-mobile .courier-selected-card .nearest-detail a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .app-shell.is-courier-mobile .courier-sheet-header {

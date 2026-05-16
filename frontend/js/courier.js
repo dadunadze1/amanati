@@ -79,76 +79,25 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
   const nearestDistance = nearest && state.hasCurrentPosition ? distanceInMeters(state.currentPosition, nearest) : NaN;
   const statusLabel = escapeHtml(status.label);
   const todayPay = escapeHtml(formatMoney(todayStats.courierPay || 0));
-  const isCompactMobile = Boolean(window.matchMedia?.("(max-width: 960px)")?.matches);
-  const primaryTitle = nearest ? (nearest.fullName || "აქტიური შეკვეთა") : "აქტიური შეკვეთა არ არის";
-  const primaryAddress = nearest ? await resolveParcelAddress(nearest) : "შეკვეთა არ არის";
-  const primaryDistance = Number.isFinite(nearestDistance) ? formatDistance(nearestDistance) : "—";
-  const primaryEta = Number.isFinite(nearestDistance) ? estimateCourierEta(nearestDistance) : "GPS";
-  const primaryPhone = nearest?.phone ? formatPhoneHref(nearest.phone) : "";
-  const primaryCard = nearest ? await renderCourierMobileOrderCard(nearest) : "";
-  const cards = isCompactMobile ? primaryCard : (await Promise.all(sortedPins.map(renderCourierMobileOrderCard))).join("");
+  const routeActive = nearest ? state.routePinId === nearest.id : false;
+  const selectedCard = nearest
+    ? await renderCourierMobileDetailCard(nearest, {
+      pending,
+      deliveredToday,
+      routeActive,
+      status,
+      todayPay,
+      totalOrders: activePins.length,
+      nearestDistance,
+    })
+    : `<div class="courier-empty-state">აქტიური შეკვეთა არ არის.</div>`;
 
   els.courierOrdersSheet.innerHTML = `
     <div class="courier-sheet-shell">
       <button class="courier-sheet-handle" type="button" data-courier-sheet-toggle aria-label="შეკვეთების პანელის გაშლა">
         <span></span>
       </button>
-      <div class="courier-sheet-header">
-        <div class="courier-sheet-person">
-          <span class="courier-sheet-avatar courier-sheet-avatar--${escapeAttr(nearest?.status || "pending")}" aria-hidden="true">
-            ${renderCourierAvatarIcon()}
-          </span>
-          <div class="courier-sheet-copy">
-            <div class="courier-sheet-name-row">
-              <strong>${escapeHtml(primaryTitle)}</strong>
-              <span class="courier-sheet-badge">${activePins.length} შეკვეთა</span>
-            </div>
-            <div class="courier-sheet-meta">
-              <span class="courier-sheet-meta-primary">${escapeHtml(primaryEta)} ETA</span>
-              <span class="courier-sheet-meta-secondary">${escapeHtml(primaryDistance)}</span>
-            </div>
-            <div class="courier-sheet-address">${escapeHtml(primaryAddress)}</div>
-          </div>
-        </div>
-        <div class="courier-sheet-actions">
-          <button class="courier-sheet-square-action courier-sheet-square-action--route" type="button" data-action="routeCourierPin" data-value="${escapeAttr(nearest?.id || "")}"${nearest ? "" : " disabled"}>
-            ${renderCourierActionIcon("route")}
-            <span>Route</span>
-          </button>
-          ${primaryPhone ? `
-            <a class="courier-sheet-square-action courier-sheet-square-action--call" href="${escapeAttr(primaryPhone)}">
-              ${renderCourierActionIcon("call")}
-              <span>Call</span>
-            </a>
-          ` : `
-            <button class="courier-sheet-square-action courier-sheet-square-action--call" type="button" disabled>
-              ${renderCourierActionIcon("call")}
-              <span>Call</span>
-            </button>
-          `}
-        </div>
-      </div>
-      <div class="courier-sheet-toolbar">
-        <button class="courier-sheet-pill courier-status-${escapeAttr(status.key)}" type="button" data-courier-presence-toggle data-mode="${escapeAttr(status.key)}">
-          <span class="courier-sheet-pill-dot"></span>
-          <strong>${statusLabel}</strong>
-        </button>
-        <button class="courier-sheet-pill" type="button" data-action="nearestParcel">
-          <span class="courier-sheet-pill-kpi">${pending}</span>
-          <strong>აქტიური</strong>
-        </button>
-        <div class="courier-sheet-pill courier-sheet-pill--static">
-          <span class="courier-sheet-pill-kpi">${deliveredToday}</span>
-          <strong>ჩაბარდა</strong>
-        </div>
-        <div class="courier-sheet-pill courier-sheet-pill--static">
-          <span class="courier-sheet-pill-kpi">${todayPay}</span>
-          <strong>დღეს</strong>
-        </div>
-      </div>
-      <div class="courier-orders-list${isCompactMobile ? " courier-orders-list--compact" : ""}">
-        ${cards || `<div class="courier-empty-state">აქტიური შეკვეთა არ არის.</div>`}
-      </div>
+      ${selectedCard}
     </div>
   `;
 
@@ -269,7 +218,7 @@ async function renderCourierMobileOrderCard(pin) {
       </div>
 
       <div class="courier-order-actions">
-        <button type="button" class="courier-order-action courier-order-action--ghost" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">
+        <button type="button" class="courier-order-action courier-order-action--ghost" data-action="focusCourierPin" data-value="${escapeAttr(pin.id)}">
           ${renderCourierActionIcon("map")}
           <span>რუკა</span>
         </button>
@@ -281,6 +230,104 @@ async function renderCourierMobileOrderCard(pin) {
           ${renderCourierActionIcon("failed")}
           <span>ვერ</span>
         </button>
+      </div>
+    </article>
+  `;
+}
+
+
+async function renderCourierMobileDetailCard(pin, context = {}) {
+  const address = await resolveParcelAddress(pin);
+  const payment = getPaymentAmount(pin);
+  const distance = Number.isFinite(context.nearestDistance) ? context.nearestDistance : (state.hasCurrentPosition ? distanceInMeters(state.currentPosition, pin) : NaN);
+  const eta = Number.isFinite(distance) ? estimateCourierEta(distance) : "GPS";
+  const statusText = getStatusLabel(pin.status);
+  const routeActive = Boolean(context.routeActive);
+  const phoneHref = pin.phone ? formatPhoneHref(pin.phone) : "";
+  const failureReason = pin.status === "failed" ? parcelFailureReason(pin) : "";
+  const totalOrders = Number.isFinite(context.totalOrders) ? context.totalOrders : 0;
+
+  return `
+    <article class="nearest-card courier-selected-card status-${escapeAttr(pin.status)}">
+      <div class="nearest-card-header">
+        <strong>${escapeHtml(pin.fullName || "აქტიური შეკვეთა")}</strong>
+        <div class="nearest-card-actions">
+          <button class="nearest-icon-button" type="button" data-action="focusCourierPin" data-value="${escapeAttr(pin.id)}" aria-label="ამანათის რუკაზე ჩვენება">რუკა</button>
+          <button class="nearest-icon-button" type="button" data-action="routeCourierPin" data-value="${escapeAttr(pin.id)}" aria-label="მარშრუტის დაგეგმვა">მარშრუტი</button>
+          ${routeActive ? `<button class="nearest-icon-button route-clear-button" type="button" data-action="clearSelectedRoute" aria-label="მარშრუტის გაუქმება">×</button>` : ""}
+          <button class="nearest-icon-button" type="button" data-courier-sheet-toggle aria-label="დეტალების დახურვა">-</button>
+        </div>
+      </div>
+      <div class="nearest-card-body">
+        <section class="nearest-detail-section">
+          <h3>კლიენტი</h3>
+          <div class="nearest-detail">
+            <span>მიმღები</span>
+            <strong>${escapeHtml(pin.fullName || "უსახელო შეკვეთა")}</strong>
+          </div>
+          <div class="nearest-detail">
+            <span>ტელეფონი</span>
+            ${phoneHref ? `<a class="call-link" href="${escapeAttr(phoneHref)}" aria-label="მიმღებთან დარეკვა">დარეკვა</a>` : `<strong>ტელეფონი არ არის</strong>`}
+          </div>
+        </section>
+        <section class="nearest-detail-section">
+          <h3>შეკვეთა</h3>
+          <div class="nearest-detail">
+            <span>მისამართი</span>
+            <strong>${escapeHtml(address || STRINGS.addressMissing)}</strong>
+          </div>
+          <div class="nearest-detail">
+            <span>დისტანცია</span>
+            <strong>${Number.isFinite(distance) ? formatDistance(distance) : "GPS"}</strong>
+          </div>
+          <div class="nearest-detail">
+            <span>ETA</span>
+            <strong>${escapeHtml(eta)}</strong>
+          </div>
+        </section>
+        <section class="nearest-detail-section">
+          <h3>სტატუსი</h3>
+          <div class="nearest-detail">
+            <span>სტატუსი</span>
+            <strong class="status-${escapeAttr(pin.status)}">${escapeHtml(statusText)}</strong>
+          </div>
+          <div class="courier-mobile-status-actions">
+            <button class="nearest-status-button delivered" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">ჩაბარდა</button>
+            <button class="nearest-status-button failed" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">ვერ ჩაბარდა</button>
+          </div>
+          ${failureReason ? `
+            <div class="nearest-detail">
+              <span>მიზეზი</span>
+              <strong>${escapeHtml(failureReason)}</strong>
+            </div>
+          ` : ""}
+        </section>
+        <section class="nearest-detail-section">
+          <h3>მარშრუტი</h3>
+          <div class="nearest-detail">
+            <span>აქტიური</span>
+            <strong>${routeActive ? "კი" : "არა"}</strong>
+          </div>
+          <div class="nearest-detail">
+            <span>შეკვეთები</span>
+            <strong>${totalOrders}</strong>
+          </div>
+          <div class="nearest-card-actions courier-selected-card-actions">
+            <button class="nearest-icon-button" type="button" data-action="routeCourierPin" data-value="${escapeAttr(pin.id)}">რუკა + მარშრუტი</button>
+            ${routeActive ? `<button class="nearest-icon-button route-clear-button" type="button" data-action="clearSelectedRoute">გაუქმება</button>` : ""}
+          </div>
+        </section>
+        <section class="nearest-detail-section">
+          <h3>თანხა</h3>
+          <div class="nearest-detail">
+            <span>ქეში</span>
+            <strong>${payment > 0 ? escapeHtml(formatMoney(payment)) : "ქეში არ არის"}</strong>
+          </div>
+          <div class="nearest-detail">
+            <span>საფეხური</span>
+            <strong>${context.status?.label ? escapeHtml(context.status.label) : "აქტიური"}</strong>
+          </div>
+        </section>
       </div>
     </article>
   `;

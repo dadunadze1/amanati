@@ -562,10 +562,10 @@ async function handleAction(action, value, sourceElement) {
     courierRoute: openCourierRoute,
     courierStatusPanel: openCourierStatusPanel,
     routeCourierPin: async () => {
-      openParcelTab(value, { focus: true });
-      await routeSelectedParcel();
+      await routeSelectedParcel(value);
       await renderCourierMobileDashboard().catch(() => {});
     },
+    focusCourierPin: () => focusCourierPin(value),
     today: openTodayStats,
     courierDay: openTodayStats,
     history: () => openCalendar(state.currentUser, "ჩემი ისტორია"),

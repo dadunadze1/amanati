@@ -1054,15 +1054,23 @@ function focusSelectedParcel() {
 }
 
 
-async function routeSelectedParcel() {
+function focusCourierPin(pinId = state.selectedPinId) {
+  const pin = state.activePins.find((item) => item.id === pinId);
+  if (!pin) return;
+  setMapView(pin, Math.max(getMapZoom(), 17));
+}
+
+
+async function routeSelectedParcel(pinId = state.selectedPinId) {
   if (state.isAdmin) return;
-  const pin = state.activePins.find((item) => item.id === state.selectedPinId);
+  const pin = state.activePins.find((item) => item.id === pinId);
   if (!pin) return;
   if (!state.hasCurrentPosition) {
     showToast("მდებარეობა ჯერ არ არის განსაზღვრული.");
     return;
   }
 
+  state.selectedPinId = pin.id;
   const origin = state.currentPosition || { lat: CONFIG.center[0], lng: CONFIG.center[1] };
   await drawRouteToPin(origin, pin);
   showGoogleMapsRoutePrompt(origin, pin);
