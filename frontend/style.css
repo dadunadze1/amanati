@@ -9670,3 +9670,898 @@ textarea {
     font-size: 1.7rem;
   }
 }
+
+/* 2026 operations UI refresh: admin and courier only. Login/setup and partner surfaces are intentionally untouched. */
+body:has(.app-shell.is-admin-dashboard),
+body:has(.app-shell.is-courier-mobile),
+.app-shell.is-admin-dashboard,
+.app-shell.is-courier-mobile {
+  --ops-bg: #edf1f3;
+  --ops-surface: rgba(255, 255, 255, 0.96);
+  --ops-surface-solid: #ffffff;
+  --ops-surface-muted: #f4f6f8;
+  --ops-line: #d7dde3;
+  --ops-line-strong: #b9c3cc;
+  --ops-text: #18222d;
+  --ops-muted: #64717f;
+  --ops-faint: #8b97a4;
+  --ops-primary: #155eef;
+  --ops-primary-soft: #e9f0ff;
+  --ops-green: #12805c;
+  --ops-green-soft: #e8f6ef;
+  --ops-amber: #b25e09;
+  --ops-amber-soft: #fff3df;
+  --ops-red: #be3232;
+  --ops-red-soft: #fff0f0;
+  --ops-radius: 8px;
+  --ops-control: 42px;
+  --ops-shadow: 0 18px 50px rgba(24, 34, 45, 0.14);
+  --ops-shadow-soft: 0 8px 24px rgba(24, 34, 45, 0.09);
+  color: var(--ops-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+}
+
+.app-shell.is-admin-dashboard button,
+.app-shell.is-admin-dashboard input,
+.app-shell.is-admin-dashboard select,
+.app-shell.is-admin-dashboard textarea,
+.app-shell.is-courier-mobile button,
+.app-shell.is-courier-mobile input,
+.app-shell.is-courier-mobile select,
+.app-shell.is-courier-mobile textarea,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) input,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) select,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) textarea,
+body:has(.app-shell.is-courier-mobile) #dialogModal button,
+body:has(.app-shell.is-courier-mobile) #dialogModal input,
+body:has(.app-shell.is-courier-mobile) #dialogModal select,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea {
+  min-height: var(--ops-control);
+  border-radius: var(--ops-radius);
+  font-size: 0.9rem;
+  letter-spacing: 0;
+}
+
+.app-shell.is-admin-dashboard .button,
+.app-shell.is-admin-dashboard .mini-button,
+.app-shell.is-admin-dashboard .nearest-icon-button,
+.app-shell.is-admin-dashboard .nearest-status-button,
+.app-shell.is-admin-dashboard .calendar-nav-button,
+.app-shell.is-courier-mobile .button,
+.app-shell.is-courier-mobile .mini-button,
+.app-shell.is-courier-mobile .nearest-icon-button,
+.app-shell.is-courier-mobile .nearest-status-button,
+.app-shell.is-courier-mobile .calendar-nav-button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .mini-button,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button {
+  min-height: var(--ops-control);
+  display: inline-grid;
+  place-items: center;
+  padding: 9px 14px;
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+  font-weight: 850;
+  line-height: 1.15;
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.app-shell.is-admin-dashboard .button,
+.app-shell.is-admin-dashboard .button.primary,
+.app-shell.is-courier-mobile .button,
+.app-shell.is-courier-mobile .button.primary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button.primary,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button.primary {
+  color: #fff;
+  background: var(--ops-primary);
+  border-color: var(--ops-primary);
+}
+
+.app-shell.is-admin-dashboard .button.secondary,
+.app-shell.is-admin-dashboard .mini-button,
+.app-shell.is-admin-dashboard .nearest-icon-button,
+.app-shell.is-courier-mobile .button.secondary,
+.app-shell.is-courier-mobile .mini-button,
+.app-shell.is-courier-mobile .nearest-icon-button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button.secondary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .mini-button,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button.secondary,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button {
+  color: var(--ops-text);
+  background: var(--ops-surface-solid);
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .button.danger,
+.app-shell.is-admin-dashboard .mini-button.danger,
+.app-shell.is-admin-dashboard .nearest-status-button.failed,
+.app-shell.is-courier-mobile .button.danger,
+.app-shell.is-courier-mobile .mini-button.danger,
+.app-shell.is-courier-mobile .nearest-status-button.failed,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button.danger,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .mini-button.danger,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button.danger,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button.danger {
+  color: #fff;
+  background: var(--ops-red);
+  border-color: var(--ops-red);
+}
+
+.app-shell.is-admin-dashboard .nearest-status-button.delivered,
+.app-shell.is-courier-mobile .nearest-status-button.delivered {
+  color: #fff;
+  background: var(--ops-green);
+  border-color: var(--ops-green);
+}
+
+.app-shell.is-admin-dashboard .button:hover,
+.app-shell.is-admin-dashboard .button:focus-visible,
+.app-shell.is-admin-dashboard .mini-button:hover,
+.app-shell.is-admin-dashboard .mini-button:focus-visible,
+.app-shell.is-admin-dashboard .nearest-icon-button:hover,
+.app-shell.is-admin-dashboard .nearest-icon-button:focus-visible,
+.app-shell.is-courier-mobile .button:hover,
+.app-shell.is-courier-mobile .button:focus-visible,
+.app-shell.is-courier-mobile .mini-button:hover,
+.app-shell.is-courier-mobile .mini-button:focus-visible,
+.app-shell.is-courier-mobile .nearest-icon-button:hover,
+.app-shell.is-courier-mobile .nearest-icon-button:focus-visible,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button:hover,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button:focus-visible,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button:hover,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button:focus-visible {
+  border-color: var(--ops-line-strong);
+  transform: translateY(-1px);
+}
+
+.app-shell.is-admin-dashboard input:not([type="checkbox"]),
+.app-shell.is-admin-dashboard select,
+.app-shell.is-admin-dashboard textarea,
+.app-shell.is-courier-mobile input:not([type="checkbox"]),
+.app-shell.is-courier-mobile select,
+.app-shell.is-courier-mobile textarea,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) input:not([type="checkbox"]),
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) select,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) textarea,
+body:has(.app-shell.is-courier-mobile) #dialogModal input:not([type="checkbox"]),
+body:has(.app-shell.is-courier-mobile) #dialogModal select,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea {
+  color: var(--ops-text);
+  background: #fbfcfd;
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+}
+
+.app-shell.is-admin-dashboard input:not([type="checkbox"]):focus,
+.app-shell.is-admin-dashboard select:focus,
+.app-shell.is-admin-dashboard textarea:focus,
+.app-shell.is-courier-mobile input:not([type="checkbox"]):focus,
+.app-shell.is-courier-mobile select:focus,
+.app-shell.is-courier-mobile textarea:focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) input:not([type="checkbox"]):focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) select:focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) textarea:focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal input:not([type="checkbox"]):focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal select:focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea:focus {
+  border-color: var(--ops-primary);
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.14);
+  outline: none;
+}
+
+.app-shell.is-admin-dashboard {
+  --desktop-sidebar-width: 304px;
+  --desktop-gutter: 14px;
+  --desktop-topbar-height: 112px;
+  --desktop-right-width: clamp(330px, 27vw, 420px);
+  background: var(--ops-bg);
+}
+
+.app-shell.is-admin-dashboard .map {
+  background: #dfe6ea;
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  box-shadow: var(--ops-shadow);
+}
+
+.app-shell.is-admin-dashboard .app-sidebar,
+.app-shell.is-admin-dashboard .app-topbar,
+.app-shell.is-admin-dashboard .right-panel,
+.app-shell.is-admin-dashboard .bottom-nav,
+.admin-mobile-drawer {
+  background: var(--ops-surface);
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  box-shadow: var(--ops-shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.app-shell.is-admin-dashboard .app-sidebar {
+  gap: 10px;
+  padding: 10px;
+  overflow-x: hidden;
+}
+
+.app-shell.is-admin-dashboard .app-sidebar-brand {
+  min-height: 58px;
+  padding: 8px;
+  border-bottom: 1px solid var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .swift-brand-mark {
+  background: linear-gradient(135deg, #155eef 0%, #12805c 100%);
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+}
+
+.app-shell.is-admin-dashboard .app-sidebar-label {
+  margin: 8px 8px 4px;
+  color: var(--ops-faint);
+  font-size: 0.66rem;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.app-shell.is-admin-dashboard .action-item,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item {
+  min-height: 44px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 8px 10px;
+  padding: 7px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--ops-radius);
+}
+
+.app-shell.is-admin-dashboard .action-item b,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item b {
+  width: 30px;
+  height: 30px;
+  color: var(--ops-primary);
+  background: var(--ops-primary-soft);
+  border-radius: var(--ops-radius);
+  font-size: 0.86rem;
+  font-weight: 950;
+}
+
+.app-shell.is-admin-dashboard .action-item span,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item span {
+  color: var(--ops-text);
+  font-size: 0.83rem;
+  font-weight: 900;
+}
+
+.app-shell.is-admin-dashboard .action-item small,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item small {
+  color: var(--ops-muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.app-shell.is-admin-dashboard .action-item:hover,
+.app-shell.is-admin-dashboard .action-item:focus-visible,
+.app-shell.is-admin-dashboard .action-item.is-active,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item:hover,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item:focus-visible {
+  background: var(--ops-surface-muted);
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .action-item:hover b,
+.app-shell.is-admin-dashboard .action-item:focus-visible b,
+.app-shell.is-admin-dashboard .action-item.is-active b {
+  color: #fff;
+  background: var(--ops-primary);
+}
+
+.app-shell.is-admin-dashboard .app-topbar {
+  grid-auto-rows: minmax(44px, 1fr);
+  gap: 6px;
+  padding: 8px;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card {
+  min-height: 44px;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "mark label value";
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--ops-surface-solid);
+  border: 1px solid transparent;
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card::before {
+  grid-area: mark;
+  position: static;
+  width: 8px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--ops-primary);
+}
+
+.app-shell.is-admin-dashboard .dashboard-card i {
+  display: none;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card span {
+  grid-area: label;
+  color: var(--ops-muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: none;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card strong {
+  grid-area: value;
+  justify-self: end;
+  color: var(--ops-text);
+  font-size: clamp(0.96rem, 1.2vw, 1.18rem);
+  font-weight: 950;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card:hover,
+.app-shell.is-admin-dashboard .dashboard-card:focus-visible,
+.app-shell.is-admin-dashboard .dashboard-card.is-active {
+  background: #f8fbff;
+  border-color: rgba(21, 94, 239, 0.28);
+  box-shadow: none;
+  transform: none;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card--success::before {
+  background: var(--ops-green);
+}
+
+.app-shell.is-admin-dashboard .dashboard-card--danger::before {
+  background: var(--ops-red);
+}
+
+.app-shell.is-admin-dashboard .dashboard-card--warning::before {
+  background: var(--ops-amber);
+}
+
+.app-shell.is-admin-dashboard .dashboard-card--neutral::before {
+  background: #7a8694;
+}
+
+.app-shell.is-admin-dashboard .right-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-shell.is-admin-dashboard .nearest-card-header {
+  min-height: 56px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ops-line);
+  background: #fbfcfd;
+}
+
+.app-shell.is-admin-dashboard .nearest-card-header strong {
+  color: var(--ops-text);
+  font-size: 0.98rem;
+  font-weight: 950;
+}
+
+.app-shell.is-admin-dashboard .nearest-card-actions {
+  gap: 6px;
+}
+
+.app-shell.is-admin-dashboard .nearest-card-body {
+  max-height: calc(100dvh - 210px);
+  padding: 10px 12px 12px;
+  background: var(--ops-surface-solid);
+  border: 0;
+}
+
+.app-shell.is-admin-dashboard .nearest-detail,
+.app-shell.is-admin-dashboard .parcel-address-preview,
+.app-shell.is-admin-dashboard .stats-card,
+.app-shell.is-admin-dashboard .parcel-row {
+  min-height: 42px;
+  padding: 9px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ops-line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.app-shell.is-admin-dashboard .nearest-detail span,
+.app-shell.is-admin-dashboard .parcel-address-preview span {
+  color: var(--ops-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.app-shell.is-admin-dashboard .nearest-status-actions {
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.app-shell.is-admin-dashboard .pin-label-card {
+  min-width: 172px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--ops-line);
+  border-left: 5px solid var(--ops-primary);
+  border-radius: var(--ops-radius);
+  box-shadow: 0 12px 28px rgba(24, 34, 45, 0.16);
+}
+
+.app-shell.is-admin-dashboard .dispatch-pin-marker,
+.app-shell.is-admin-dashboard .pending-parcel-marker {
+  box-shadow: 0 10px 26px rgba(24, 34, 45, 0.25);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)),
+body:has(.app-shell.is-courier-mobile) #dialogModal {
+  background: rgba(15, 23, 32, 0.48);
+  backdrop-filter: blur(12px);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .modal-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card {
+  width: min(880px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+  color: var(--ops-text);
+  background: var(--ops-surface-solid);
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  box-shadow: 0 30px 80px rgba(15, 23, 32, 0.28);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .modal-card > h2,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card > h2 {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 18px;
+  color: var(--ops-text);
+  background: #fbfcfd;
+  border-bottom: 1px solid var(--ops-line);
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .dialog-body,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-body {
+  max-height: min(66dvh, 620px);
+  gap: 10px;
+  padding: 14px 18px;
+  overflow: auto;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .dialog-actions,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-actions {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 12px 18px 18px;
+  background: #fbfcfd;
+  border-top: 1px solid var(--ops-line);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) label,
+body:has(.app-shell.is-courier-mobile) #dialogModal label {
+  margin: 4px 0 0;
+  color: var(--ops-muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .history-summary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .live-courier-summary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-profile-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-calendar-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .zone-courier-panel,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-summary {
+  background: var(--ops-surface-muted);
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .finance-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .admin-user-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-stats-user-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-order-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .parcel-history-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .history-row,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .list-button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .live-courier-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .zone-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .parcel-history-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-row,
+body:has(.app-shell.is-courier-mobile) #dialogModal .courier-parcel-card {
+  background: #fff;
+  border: 1px solid var(--ops-line);
+  border-left: 5px solid var(--ops-line-strong);
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .finance-card:hover,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .admin-user-card:hover,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-stats-user-card:hover,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .list-button:hover,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-row:hover {
+  background: #f8fbff;
+  border-color: rgba(21, 94, 239, 0.26);
+  box-shadow: none;
+  transform: none;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .history-status,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-order-status,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-status,
+.app-shell.is-courier-mobile .courier-order-status {
+  min-height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.app-shell.is-courier-mobile {
+  --courier-bottom-nav: 78px;
+  background: var(--ops-bg);
+}
+
+.app-shell.is-courier-mobile .map {
+  background: #dfe6ea;
+}
+
+.app-shell.is-courier-mobile .courier-mobile-top,
+.app-shell.is-courier-mobile .courier-orders-sheet,
+.app-shell.is-courier-mobile .courier-map-stats-sheet,
+.app-shell.is-courier-mobile .nearest-card,
+.app-shell.is-courier-mobile .bottom-nav,
+.app-shell.is-courier-mobile .action-panel {
+  background: var(--ops-surface);
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  box-shadow: var(--ops-shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.app-shell.is-courier-mobile .courier-mobile-top {
+  padding: 8px;
+}
+
+.app-shell.is-courier-mobile .courier-status-row {
+  grid-template-columns: minmax(118px, 1.15fr) minmax(88px, 0.85fr) minmax(74px, 0.7fr);
+  gap: 6px;
+}
+
+.app-shell.is-courier-mobile .courier-online-toggle,
+.app-shell.is-courier-mobile .courier-day-pill,
+.app-shell.is-courier-mobile .courier-mini-route {
+  min-height: 44px;
+  background: #fff;
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+}
+
+.app-shell.is-courier-mobile .courier-online-toggle {
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--ops-text);
+}
+
+.app-shell.is-courier-mobile .courier-online-toggle span {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--ops-green);
+  box-shadow: 0 0 0 4px var(--ops-green-soft);
+}
+
+.app-shell.is-courier-mobile .courier-status-offline span {
+  background: #7a8694;
+  box-shadow: 0 0 0 4px #eef1f4;
+}
+
+.app-shell.is-courier-mobile .courier-day-pill {
+  align-content: center;
+  gap: 2px;
+  padding: 7px 9px;
+}
+
+.app-shell.is-courier-mobile .courier-day-pill span,
+.app-shell.is-courier-mobile .courier-mini-route span,
+.app-shell.is-courier-mobile .courier-mini-route small {
+  color: var(--ops-muted);
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+
+.app-shell.is-courier-mobile .courier-day-pill strong,
+.app-shell.is-courier-mobile .courier-mini-route strong {
+  color: var(--ops-text);
+  font-weight: 950;
+}
+
+.app-shell.is-courier-mobile .courier-mini-route {
+  margin-top: 6px;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.app-shell.is-courier-mobile .bottom-nav {
+  min-height: var(--courier-bottom-nav);
+  gap: 6px;
+  padding: 7px;
+}
+
+.app-shell.is-courier-mobile .bottom-nav-item,
+.app-shell.is-admin-dashboard .bottom-nav-item {
+  min-width: 0;
+  min-height: 58px;
+  gap: 3px;
+  padding: 6px 4px;
+  color: var(--ops-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+}
+
+.app-shell.is-courier-mobile .bottom-nav-item b,
+.app-shell.is-admin-dashboard .bottom-nav-item b {
+  width: 28px;
+  height: 28px;
+  color: var(--ops-primary);
+  background: var(--ops-primary-soft);
+  border-radius: var(--ops-radius);
+  font-size: 0.84rem;
+}
+
+.app-shell.is-courier-mobile .bottom-nav-item span,
+.app-shell.is-admin-dashboard .bottom-nav-item span {
+  max-width: 100%;
+  color: var(--ops-text);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+.app-shell.is-courier-mobile .bottom-nav-item:hover,
+.app-shell.is-courier-mobile .bottom-nav-item:focus-visible,
+.app-shell.is-courier-mobile .bottom-nav-item.is-active,
+.app-shell.is-admin-dashboard .bottom-nav-item:hover,
+.app-shell.is-admin-dashboard .bottom-nav-item:focus-visible {
+  background: var(--ops-surface-muted);
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-courier-mobile .courier-orders-sheet,
+.app-shell.is-courier-mobile .courier-map-stats-sheet {
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-shell.is-courier-mobile .bottom-sheet-handle,
+.app-shell.is-courier-mobile .courier-sheet-handle {
+  width: 44px;
+  height: 4px;
+  margin: 8px auto;
+  background: var(--ops-line-strong);
+  border-radius: 999px;
+}
+
+.app-shell.is-courier-mobile .courier-orders-list {
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.app-shell.is-courier-mobile .courier-mobile-order-card {
+  padding: 11px;
+  background: #fff;
+  border: 1px solid var(--ops-line);
+  border-left: 5px solid var(--ops-primary);
+  border-radius: var(--ops-radius);
+  box-shadow: none;
+}
+
+.app-shell.is-courier-mobile .courier-mobile-order-card.status-delivered {
+  border-left-color: var(--ops-green);
+}
+
+.app-shell.is-courier-mobile .courier-mobile-order-card.status-failed {
+  border-left-color: var(--ops-red);
+}
+
+.app-shell.is-courier-mobile .courier-order-topline {
+  gap: 8px;
+}
+
+.app-shell.is-courier-mobile .courier-mobile-order-card h3 {
+  margin: 8px 0 6px;
+  color: var(--ops-text);
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.app-shell.is-courier-mobile .courier-order-meta {
+  color: var(--ops-muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions button,
+.app-shell.is-courier-mobile .courier-quick-actions a {
+  min-height: 38px;
+  display: inline-grid;
+  place-items: center;
+  padding: 7px 8px;
+  color: var(--ops-text);
+  background: #fff;
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+  text-decoration: none;
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions .is-success {
+  color: #fff;
+  background: var(--ops-green);
+  border-color: var(--ops-green);
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions .is-danger {
+  color: #fff;
+  background: var(--ops-red);
+  border-color: var(--ops-red);
+}
+
+.app-shell.is-courier-mobile .nearest-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-shell.is-courier-mobile .nearest-card-header {
+  min-height: 52px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ops-line);
+}
+
+.app-shell.is-courier-mobile .nearest-card-body {
+  padding: 10px;
+}
+
+.app-shell.is-courier-mobile .courier-stats-card div {
+  min-height: 34px;
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-courier-mobile .mode-toast,
+.app-shell.is-admin-dashboard .mode-toast {
+  color: #fff;
+  background: #18222d;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--ops-radius);
+  box-shadow: var(--ops-shadow-soft);
+}
+
+@media (min-width: 961px) {
+  .app-shell.is-admin-dashboard .app-topbar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-height: var(--desktop-topbar-height);
+  }
+
+  .app-shell.is-admin-dashboard .map {
+    top: calc(var(--desktop-gutter) + var(--desktop-topbar-height) + 12px);
+    right: var(--desktop-gutter);
+    bottom: var(--desktop-gutter);
+    left: calc(var(--desktop-sidebar-width) + (var(--desktop-gutter) * 2));
+  }
+
+  .app-shell.is-admin-dashboard.has-selected-pin .map {
+    right: calc(var(--desktop-right-width) + (var(--desktop-gutter) * 2));
+  }
+
+  .app-shell.is-admin-dashboard .right-panel {
+    top: calc(var(--desktop-gutter) + var(--desktop-topbar-height) + 12px);
+    right: var(--desktop-gutter);
+    bottom: var(--desktop-gutter);
+    width: var(--desktop-right-width);
+    max-width: var(--desktop-right-width);
+  }
+}
+
+@media (max-width: 960px) {
+  .app-shell.is-admin-dashboard .menu-button {
+    top: 10px;
+    right: 10px;
+    width: 46px;
+    height: 46px;
+    background: var(--ops-surface);
+    border-color: var(--ops-line);
+    border-radius: var(--ops-radius);
+    box-shadow: var(--ops-shadow-soft);
+  }
+
+  .app-shell.is-admin-dashboard .app-topbar {
+    right: 10px;
+    bottom: 84px;
+    left: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    max-height: 34dvh;
+    padding: 7px;
+  }
+
+  .app-shell.is-admin-dashboard .dashboard-card {
+    min-height: 48px;
+  }
+
+  .app-shell.is-admin-dashboard .dashboard-card strong {
+    font-size: 0.98rem;
+  }
+
+  .app-shell.is-admin-dashboard .right-panel {
+    right: 10px;
+    bottom: 84px;
+    left: 10px;
+  }
+
+  .admin-mobile-drawer {
+    width: min(360px, calc(100vw - 28px));
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .modal-card,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card {
+    width: min(100%, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .dialog-body,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-body {
+    max-height: calc(100dvh - 154px);
+    padding: 12px;
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .dialog-actions,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-actions {
+    padding: 10px 12px 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell.is-courier-mobile .courier-status-row {
+    grid-template-columns: 1fr 0.82fr;
+  }
+
+  .app-shell.is-courier-mobile .courier-status-row .courier-day-pill:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell.is-courier-mobile .courier-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
