@@ -938,6 +938,13 @@ async function assignSelectedPins() {
     if (message) message.textContent = "აირჩიეთ პინები და კურიერი.";
     return;
   }
+  const missingLocation = state.activePins.find((pin) => parcelIds.includes(pin.id) && (!Number.isFinite(Number(pin.lat)) || !Number.isFinite(Number(pin.lng))));
+  if (missingLocation) {
+    if (message) message.textContent = "ჯერ მიუთითეთ პინის მდებარეობა.";
+    showSelectedParcelCard(missingLocation.id, { focus: true });
+    startParcelLocationEdit(missingLocation.id);
+    return;
+  }
   try {
     await api("/api/parcels/assign", { method: "PATCH", body: { parcelIds, courierUsername } });
     showToast("პინები მიება კურიერს.");

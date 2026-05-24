@@ -151,8 +151,33 @@ function startPendingMarkerAdjustment(username) {
 }
 
 
+function startParcelLocationEdit(parcelId) {
+  if (!state.isAdmin || !state.map) return;
+  const parcel = state.activePins.find((item) => item.id === parcelId);
+  if (!parcel) return;
+  const hasCoords = Number.isFinite(Number(parcel.lat)) && Number.isFinite(Number(parcel.lng));
+  const coords = hasCoords ? { lat: Number(parcel.lat), lng: Number(parcel.lng) } : toCoords(state.map.getCenter());
+  state.locationEditParcelId = parcelId;
+  state.pendingCoords = coords;
+  state.mode = "editingParcelLocation";
+  showPendingMarker(coords);
+  setMapView(coords, Math.max(getMapZoom(), 17));
+  els.modeToast.hidden = false;
+  els.modeToast.textContent = hasCoords ? "Drag the pin to correct location, then save." : "Place the missing pin, then save.";
+  renderSelectedParcelCard();
+}
+
+
+function setLocationEditCoords(coords) {
+  state.pendingCoords = coords;
+  showPendingMarker(coords);
+  els.modeToast.hidden = false;
+  els.modeToast.textContent = "Pin moved. Save location to confirm.";
+}
+
+
 function cancelMapSelection() {
-  if (state.mode !== "selectingParcel") return;
+  if (!["selectingParcel", "editingParcelLocation"].includes(state.mode)) return;
   resetMapSelectionUi();
 }
 
@@ -174,7 +199,7 @@ function showPendingMarker(coords) {
   state.pendingMarker.on("dragend", handlePendingMarkerDragEnd);
   state.pendingMarker.on("click", async (event) => {
     stopMapClick(event);
-    if (state.mode !== "selectingParcel" || !state.pendingCoords) return;
+  if (state.mode !== "selectingParcel" || !state.pendingCoords) return;
     await updatePendingZoneAssignment(state.pendingCoords);
     await openParcelDetailsDialog();
     updatePendingAddressPreview();
@@ -185,6 +210,10 @@ function showPendingMarker(coords) {
 
 async function handlePendingMarkerDragEnd(event) {
   const coords = toCoords(event.target.getLatLng());
+  if (state.mode === "editingParcelLocation") {
+    setLocationEditCoords(coords);
+    return;
+  }
   state.pendingCoords = coords;
   state.pendingAddressWarning = "პინი ხელით გადაადგილდა. მისამართის ტექსტი დარჩება როგორც ჩაწერილია.";
   await updatePendingZoneAssignment(coords);
@@ -194,6 +223,11 @@ async function handlePendingMarkerDragEnd(event) {
 
 
 async function handleMapClick(event) {
+  if (state.mode === "editingParcelLocation") {
+    if (!event.latlng) return;
+    setLocationEditCoords(toCoords(event.latlng));
+    return;
+  }
   if (state.mode !== "selectingParcel") {
     closeActions();
     closeAdminDrawer();
@@ -916,7 +950,7 @@ function showSelectedParcelCard(pinId, options = {}) {
   if (pin?.address) state.parcelAddressCache[pinId] = pin.address;
   rerenderCurrentMapPins();
   renderSelectedParcelCard();
-  if (options.focus || state.isAdmin) setMapView(pin, Math.max(getMapZoom(), 17));
+  if ((options.focus || state.isAdmin) && Number.isFinite(Number(pin.lat)) && Number.isFinite(Number(pin.lng))) setMapView(pin, Math.max(getMapZoom(), 17));
   ensureSelectedPinAddress(pinId);
 }
 
@@ -938,6 +972,14 @@ function renderSelectedParcelCard() {
   const assignedDate = parcelAssignedDate(pin);
   const failureReason = parcelFailureReason(pin);
   const routeActive = !state.isAdmin && state.routePinId === pin.id;
+  const hasLocation = Number.isFinite(Number(pin.lat)) && Number.isFinite(Number(pin.lng));
+  const locationAccuracy = pin.locationAccuracy || (hasLocation ? "confirmed" : "missing");
+  const isEditingLocation = state.mode === "editingParcelLocation" && state.locationEditParcelId === pin.id;
+  const locationLabel = locationAccuracy === "confirmed"
+    ? "Confirmed"
+    : locationAccuracy === "approximate"
+      ? "Approximate"
+      : "Location needs admin correction";
   const statusControls = state.isAdmin || pin.status !== "delivered"
     ? `<div class="nearest-status-actions">
         <button class="nearest-status-button delivered" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">ჩაბარდა</button>
@@ -980,6 +1022,12 @@ function renderSelectedParcelCard() {
           <span>მისამართი</span>
           <strong>${escapeHtml(address)}</strong>
         </div>
+        ${!state.isAdmin && pin.partnerName ? `
+          <div class="nearest-detail">
+            <span>Partner</span>
+            <strong>${escapeHtml(pin.partnerName)}</strong>
+          </div>
+        ` : ""}
         ${state.isAdmin ? `
           <div class="nearest-detail">
             <span>ზონა</span>
@@ -992,6 +1040,25 @@ function renderSelectedParcelCard() {
           <div class="nearest-detail">
             <span>პარტნიორი</span>
             <strong>${escapeHtml(pin.partnerName || "Private")}</strong>
+          </div>
+          <div class="nearest-detail">
+            <span>Location</span>
+            <strong class="location-${escapeAttr(locationAccuracy)}">${escapeHtml(locationLabel)}</strong>
+          </div>
+          <div class="nearest-detail">
+            <span>Pin</span>
+            <strong>${hasLocation ? `${Number(pin.lat).toFixed(5)}, ${Number(pin.lng).toFixed(5)}` : "Missing"}</strong>
+          </div>
+          <div class="nearest-status-actions">
+            ${isEditingLocation
+              ? `
+                <button class="nearest-status-button delivered" type="button" data-action="saveParcelLocation">Save Pin</button>
+                <button class="nearest-status-button failed" type="button" data-action="cancelParcelLocation">Cancel</button>
+              `
+              : `
+                <button class="nearest-status-button" type="button" data-action="editParcelLocation" data-value="${escapeAttr(pin.id)}">${hasLocation ? "Edit Pin" : "Set Pin"}</button>
+                ${hasLocation && locationAccuracy !== "confirmed" ? `<button class="nearest-status-button delivered" type="button" data-action="confirmParcelLocation" data-value="${escapeAttr(pin.id)}">Confirm Location</button>` : ""}
+              `}
           </div>
         ` : ""}
       </section>
@@ -1056,6 +1123,59 @@ function hideSelectedParcelCard() {
 function toggleSelectedParcelCard() {
   if (!state.selectedPinId) return;
   hideSelectedParcelCard();
+}
+
+
+async function saveParcelLocationEdit() {
+  if (!state.isAdmin || state.mode !== "editingParcelLocation" || !state.locationEditParcelId || !state.pendingCoords) return;
+  try {
+    await api(`/api/parcels/${encodeURIComponent(state.locationEditParcelId)}/location`, {
+      method: "PATCH",
+      body: {
+        lat: state.pendingCoords.lat,
+        lng: state.pendingCoords.lng,
+        locationAccuracy: "confirmed",
+        locationSource: "admin_manual_adjustment",
+      },
+    });
+    const editedId = state.locationEditParcelId;
+    resetMapSelectionUi();
+    await refreshPins();
+    showSelectedParcelCard(editedId, { focus: true });
+    showToast("Location confirmed.");
+  } catch (error) {
+    showToast(error.message || STRINGS.serverFailed);
+  }
+}
+
+
+function cancelParcelLocationEdit() {
+  const parcelId = state.locationEditParcelId;
+  resetMapSelectionUi();
+  if (parcelId) showSelectedParcelCard(parcelId, { focus: true });
+}
+
+
+async function confirmParcelLocation(parcelId) {
+  const parcel = state.activePins.find((item) => item.id === parcelId);
+  if (!parcel) return;
+  const lat = Number(parcel.lat);
+  const lng = Number(parcel.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    startParcelLocationEdit(parcelId);
+    return;
+  }
+  try {
+    await api(`/api/parcels/${encodeURIComponent(parcelId)}/location`, {
+      method: "PATCH",
+      body: { lat, lng, locationAccuracy: "confirmed", locationSource: "admin_manual_adjustment" },
+    });
+    await refreshPins();
+    showSelectedParcelCard(parcelId, { focus: true });
+    showToast("Location confirmed.");
+  } catch (error) {
+    showToast(error.message || STRINGS.serverFailed);
+  }
 }
 
 
@@ -1399,6 +1519,7 @@ function resetMapSelectionUi() {
   state.pendingAddressWarning = "";
   state.pendingZone = null;
   state.pendingAutoAssignment = null;
+  state.locationEditParcelId = "";
   els.menuButton.hidden = false;
   els.modeToast.hidden = true;
 }

@@ -526,6 +526,10 @@ const ADMIN_PIN_CONTEXT_KEEP_ACTIONS = new Set([
   "focusSelectedParcel",
   "toggleSelectedParcelCard",
   "setStatus",
+  "editParcelLocation",
+  "saveParcelLocation",
+  "cancelParcelLocation",
+  "confirmParcelLocation",
 ]);
 
 
@@ -627,6 +631,10 @@ async function handleAction(action, value, sourceElement) {
     routeSelectedParcel,
     clearSelectedRoute: clearActiveRoute,
     toggleSelectedParcelCard,
+    editParcelLocation: () => startParcelLocationEdit(value),
+    saveParcelLocation: saveParcelLocationEdit,
+    cancelParcelLocation: cancelParcelLocationEdit,
+    confirmParcelLocation: () => confirmParcelLocation(value),
     setStatus: () => updatePinStatus(value, sourceElement.dataset.status),
     logout,
   };

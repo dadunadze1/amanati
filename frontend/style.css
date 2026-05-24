@@ -8367,6 +8367,29 @@ button.finance-card:hover,
   font-weight: 700;
 }
 
+.location-approximate,
+.dispatch-pin-location-approximate {
+  border-color: #f79009 !important;
+}
+
+.location-approximate {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.location-confirmed {
+  color: #027a48;
+}
+
+.location-missing {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.dispatch-pin-location-approximate {
+  stroke-dasharray: 4 3;
+}
+
 .partner-form-grid,
 .partner-filter-row {
   display: grid;

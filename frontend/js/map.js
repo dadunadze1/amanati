@@ -66,6 +66,7 @@ function renderParcelMarkers(pins) {
 function renderSinglePinMarker(pin) {
   if (!pin) return;
   const isSelected = pin.id && pin.id === state.selectedPinId;
+  const locationClass = `dispatch-pin-location-${pin.locationAccuracy || "confirmed"}`;
   if (isSelected) {
     addParcelOverlay(createCircleMarker(pin, {
       radius: 18,
@@ -83,7 +84,7 @@ function renderSinglePinMarker(pin) {
     color: isSelected ? "#2563eb" : "#fff",
     weight: isSelected ? 4 : 2,
     fillOpacity: 0.92,
-    className: `${isSelected ? "selected-pin-marker" : "dispatch-pin-marker"} dispatch-pin-status-${pin.status || "pending"}`,
+    className: `${isSelected ? "selected-pin-marker" : "dispatch-pin-marker"} dispatch-pin-status-${pin.status || "pending"} ${locationClass}`,
   });
 
   addParcelOverlay(marker);

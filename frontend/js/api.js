@@ -413,6 +413,24 @@ function buildStaticNominatimQuery(value) {
   return `${normalized}, Tbilisi, Georgia`;
 }
 
+async function geocodeStaticPartnerOrder(body) {
+  const query = buildStaticNominatimQuery([body.city, body.district || body.area, body.streetAddress || body.street || body.address, body.building].filter(Boolean).join(", "));
+  if (!query) return null;
+  const results = await fetchOsmJson("/search", {
+    q: query,
+    format: "jsonv2",
+    addressdetails: 1,
+    limit: 1,
+    "accept-language": "ka,en",
+    bounded: 1,
+    viewbox: getTbilisiViewbox(),
+  }).catch(() => []);
+  const first = Array.isArray(results) ? results[0] : null;
+  const lat = Number(first?.lat);
+  const lng = Number(first?.lon ?? first?.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
 function saveStaticSession(user) {
   const session = { token: createStaticToken(user), user: publicStaticUser(user), savedAt: new Date().toISOString() };
   saveData(STATIC_SESSION_STORAGE_KEY, session);
@@ -690,16 +708,24 @@ async function staticApi(path, options = {}) {
     const partner = state.isPartner
       ? store.users.find((user) => user.id === state.currentUserProfile?.id)
       : store.users.find((user) => user.role === "partner" && (user.id === body.partnerId || normalizeUsername(user.username) === normalizeUsername(body.partnerUsername)));
-    const hasCoords = Number.isFinite(Number(body.lat)) && Number.isFinite(Number(body.lng));
+    const geocoded = state.isPartner && (!Number.isFinite(Number(body.lat)) || !Number.isFinite(Number(body.lng)))
+      ? await geocodeStaticPartnerOrder(body)
+      : null;
+    const latValue = Number(body.lat ?? body.latitude ?? geocoded?.lat);
+    const lngValue = Number(body.lng ?? body.longitude ?? geocoded?.lng);
+    const hasCoords = Number.isFinite(latValue) && Number.isFinite(lngValue);
+    const fullAddress = body.fullAddress || body.address || [body.city, body.district || body.area, body.streetAddress || body.street, body.building].filter(Boolean).join(", ");
     const parcel = {
       id: `parcel-${Date.now()}`,
       courierUsername: body.courierUsername || "",
-      ...(hasCoords ? { lat: Number(body.lat), lng: Number(body.lng) } : {}),
-      address: body.address || "",
+      ...(hasCoords ? { lat: latValue, lng: lngValue, latitude: latValue, longitude: lngValue } : {}),
+      address: body.address || fullAddress,
+      fullAddress,
       fullName: body.fullName || "",
       phone: body.phone || "",
       city: body.city || "",
       district: body.district || body.area || "",
+      streetAddress: body.streetAddress || body.street || body.address || "",
       building: body.building || "",
       floor: body.floor || "",
       apartment: body.apartment || "",
@@ -708,6 +734,10 @@ async function staticApi(path, options = {}) {
       partnerName: partner?.companyName || partner?.contactPerson || partner?.username || "",
       partnerUsername: partner?.username || "",
       createdByRole: state.isPartner ? "partner" : "admin",
+      locationAccuracy: hasCoords ? state.isPartner ? "approximate" : "confirmed" : "missing",
+      locationSource: hasCoords ? state.isPartner ? "partner_address_geocoded" : "admin_created" : "missing",
+      locationConfirmedByAdmin: hasCoords && !state.isPartner,
+      locationUpdatedAt: hasCoords ? now : "",
       paymentAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       cashAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       codAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
@@ -725,6 +755,8 @@ async function staticApi(path, options = {}) {
 
   if (method === "PATCH" && apiPath === "/api/parcels/assign") {
     const parcelIds = Array.isArray(body.parcelIds) ? body.parcelIds : [];
+    const missingLocation = store.parcels.find((parcel) => parcelIds.includes(parcel.id) && (!Number.isFinite(Number(parcel.lat)) || !Number.isFinite(Number(parcel.lng))));
+    if (missingLocation) throw new Error("Set order pin location before assigning courier.");
     store.parcels.forEach((parcel) => {
       if (parcelIds.includes(parcel.id)) {
         parcel.courierUsername = body.courierUsername || "";
@@ -797,6 +829,29 @@ async function staticApi(path, options = {}) {
     }
     saveStaticBootstrap();
     return { archived };
+  }
+
+  const locationMatch = apiPath.match(/^\/api\/parcels\/([^/]+)\/location$/);
+  if (locationMatch && method === "PATCH") {
+    const parcel = store.parcels.find((item) => item.id === decodeURIComponent(locationMatch[1]));
+    if (!parcel) return { ok: false };
+    const lat = Number(body.lat ?? body.latitude);
+    const lng = Number(body.lng ?? body.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("Valid latitude and longitude are required.");
+    const now = new Date().toISOString();
+    Object.assign(parcel, {
+      lat,
+      lng,
+      latitude: lat,
+      longitude: lng,
+      locationAccuracy: body.locationAccuracy === "approximate" ? "approximate" : "confirmed",
+      locationSource: body.locationSource || "admin_manual_adjustment",
+      locationConfirmedByAdmin: body.locationAccuracy !== "approximate",
+      locationUpdatedAt: now,
+      updatedAt: now,
+    });
+    saveStaticBootstrap();
+    return { parcel: publicStaticParcel(store, parcel) };
   }
 
   if (method === "POST" && apiPath === "/api/maintenance/retention") {

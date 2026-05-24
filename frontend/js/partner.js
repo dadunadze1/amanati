@@ -98,6 +98,7 @@ function renderPartnerOrderTable(orders, options = {}) {
             <th>Address</th>
             <th>Courier</th>
             <th>Status</th>
+            ${includePartner ? "<th>Location</th>" : ""}
             <th>COD Amount</th>
             <th>Date</th>
             ${includeActions ? "<th></th>" : ""}
@@ -112,15 +113,28 @@ function renderPartnerOrderTable(orders, options = {}) {
               <td>${escapeHtml(order.address || "")}</td>
               <td>${escapeHtml(parcelCourierDisplayName(order))}</td>
               <td><span class="history-status status-${escapeAttr(order.status || "pending")}">${escapeHtml(getPartnerOrderStatusLabel(order))}</span></td>
+              ${includePartner ? `<td><span class="partner-tag location-${escapeAttr(order.locationAccuracy || "missing")}">${escapeHtml(getOrderLocationLabel(order))}</span></td>` : ""}
               <td>${escapeHtml(formatMoney(getPaymentAmount(order)))}</td>
               <td>${escapeHtml(formatOptionalDateTime(order.createdAt))}</td>
-              ${includeActions ? `<td><button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">კურიერი</button></td>` : ""}
+              ${includeActions ? `<td><button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "Set Pin"}</button></td>` : ""}
             </tr>
           `).join("")}
         </tbody>
       </table>
     </div>
   `;
+}
+
+
+function hasOrderLocation(order) {
+  return Number.isFinite(Number(order?.lat)) && Number.isFinite(Number(order?.lng));
+}
+
+
+function getOrderLocationLabel(order) {
+  if (!hasOrderLocation(order) || order.locationAccuracy === "missing") return "Location needs admin correction";
+  if (order.locationAccuracy === "confirmed") return "Confirmed";
+  return "Approximate";
 }
 
 
@@ -193,7 +207,7 @@ async function savePartnerOrder() {
   try {
     await api("/api/parcels", {
       method: "POST",
-      body: { city, district, address, building, floor, apartment, fullName, phone, comment, paymentAmount },
+      body: { city, district, streetAddress: street, address, fullAddress: address, building, floor, apartment, fullName, phone, comment, paymentAmount },
     });
     closeDialog();
     await refreshPins();
@@ -337,6 +351,15 @@ async function openAdminPartnerOrders(partnerId = "") {
 
 
 async function openPartnerOrderAssignDialog(parcelId) {
+  const orders = state.activePins.length ? state.activePins : (await api("/api/parcels")).parcels;
+  const order = orders.find((item) => item.id === parcelId);
+  if (order && !hasOrderLocation(order)) {
+    showDialog("Location required", `<p>Location not found. Please set pin manually before assigning courier.</p><p>${escapeHtml(order.fullAddress || order.address || "")}</p>`, [
+      { label: "Set Pin", variant: "primary", action: () => { closeDialog(); showSelectedParcelCard(parcelId, { focus: true }); startParcelLocationEdit(parcelId); } },
+      { label: "Back", variant: "secondary", action: openAdminPartnerOrders },
+    ]);
+    return;
+  }
   const couriers = await getCouriers();
   const courierOptions = couriers.map((courier) => `<option value="${escapeAttr(courier.username)}">${escapeHtml(userDisplayName(courier))}</option>`).join("");
   const body = `

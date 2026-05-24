@@ -221,6 +221,38 @@ function findPartnerByIdOrUsername(db, value) {
   ));
 }
 
+function cleanAddressPart(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function buildPartnerFullAddress(body) {
+  const city = cleanAddressPart(body.city);
+  const district = cleanAddressPart(body.district || body.area);
+  const streetAddress = cleanAddressPart(body.streetAddress || body.street || body.address);
+  const building = cleanAddressPart(body.building || body.buildingNumber);
+  return [city, district, [streetAddress, building].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}
+
+async function geocodePartnerAddress(body) {
+  const query = buildPartnerFullAddress(body);
+  if (!query) return null;
+  const results = await fetchNominatimJson("/search", {
+    format: "jsonv2",
+    q: /georgia|საქართველო|tbilisi|თბილისი/i.test(query) ? query : `${query}, Georgia`,
+    addressdetails: 1,
+    limit: 1,
+    countrycodes: "ge",
+    viewbox: "44.60,41.88,45.05,41.55",
+    bounded: 1,
+    "accept-language": "ka,en",
+  }, []);
+  const first = Array.isArray(results) ? results[0] : null;
+  const lat = Number(first?.lat);
+  const lng = Number(first?.lon ?? first?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
 function isCompletedParcel(parcel) {
   return parcel.status === "delivered";
 }
@@ -846,24 +878,32 @@ async function handleApi(request, response, url) {
 
     const fullName = String(body.fullName || "").trim();
     const phone = String(body.phone || "").trim();
-    const lat = Number(body.lat);
-    const lng = Number(body.lng);
-    const address = String(body.address || "").trim();
+    let lat = Number(body.lat ?? body.latitude);
+    let lng = Number(body.lng ?? body.longitude);
+    const fullAddress = cleanAddressPart(body.fullAddress || buildPartnerFullAddress(body) || body.address);
+    const address = cleanAddressPart(body.address || fullAddress);
     const paymentAmount = cleanPaymentAmount(body.paymentAmount ?? body.payment ?? body.cashAmount);
-    const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const selectedPartner = session.role === "partner"
       ? partnerUser
       : findPartnerByIdOrUsername(db, body.partnerId || body.partnerUsername || "");
     if (session.role === "partner" && (!partnerUser || partnerUser.role !== "partner" || partnerUser.status !== "active")) throw httpError(403, "Partner account is inactive.");
     if (selectedPartner && selectedPartner.status !== "active") throw httpError(400, "Partner account is inactive.");
+    if (session.role === "partner" && (!Number.isFinite(lat) || !Number.isFinite(lng))) {
+      const geocoded = await geocodePartnerAddress({ ...body, address: fullAddress || address });
+      if (geocoded) {
+        lat = geocoded.lat;
+        lng = geocoded.lng;
+      }
+    }
+    const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
     if (!fullName || !phone || (session.role === "admin" && !hasCoords)) throw httpError(400, "Parcel details are required.");
     if (!address || isCoordinateLabel(address) || (session.role === "admin" && !hasHouseNumber(address))) throw httpError(400, "Street address is required.");
 
     const detectedZone = hasCoords ? detectTbilisiZone({ lat, lng }) : null;
     let autoAssigned = false;
     let assignmentMessage = "";
-    if (!courierUsername) {
+    if (session.role === "admin" && !courierUsername) {
       if (!detectedZone) {
         assignmentMessage = "ამ მისამართისთვის ზონა ვერ მოიძებნა";
       } else {
@@ -877,20 +917,32 @@ async function handleApi(request, response, url) {
     }
 
     const now = new Date().toISOString();
-    const coords = hasCoords ? { lat, lng } : {};
+    const locationAccuracy = hasCoords
+      ? session.role === "partner" ? "approximate" : String(body.locationAccuracy || "confirmed")
+      : "missing";
+    const locationSource = hasCoords
+      ? session.role === "partner" ? "partner_address_geocoded" : String(body.locationSource || "admin_created")
+      : "missing";
+    const coords = hasCoords ? { lat, lng, latitude: lat, longitude: lng } : {};
     const parcel = {
       id: randomBytes(12).toString("hex"),
       courierUsername: courier?.username || "",
       ...coords,
       address,
+      fullAddress: fullAddress || address,
       fullName,
       phone,
-      city: String(body.city || "").trim(),
-      district: String(body.district || body.area || "").trim(),
-      building: String(body.building || "").trim(),
+      city: cleanAddressPart(body.city),
+      district: cleanAddressPart(body.district || body.area),
+      streetAddress: cleanAddressPart(body.streetAddress || body.street || body.address),
+      building: cleanAddressPart(body.building || body.buildingNumber),
       floor: String(body.floor || "").trim(),
       apartment: String(body.apartment || "").trim(),
       comment: String(body.comment || body.notes || "").trim(),
+      locationAccuracy,
+      locationSource,
+      locationConfirmedByAdmin: locationAccuracy === "confirmed",
+      locationUpdatedAt: hasCoords ? now : "",
       partnerId: selectedPartner?.id || "",
       partnerName: selectedPartner ? partnerDisplayName(selectedPartner) : "",
       partnerUsername: selectedPartner?.username || "",
@@ -926,6 +978,7 @@ async function handleApi(request, response, url) {
     let assigned = 0;
     db.parcels.forEach((parcel) => {
       if (parcelIds.includes(parcel.id) && !parcel.archivedAt) {
+        if (!Number.isFinite(Number(parcel.lat ?? parcel.latitude)) || !Number.isFinite(Number(parcel.lng ?? parcel.longitude))) return;
         parcel.courierUsername = courier.username;
         parcel.assignedAt = new Date().toISOString();
         parcel.updatedAt = parcel.assignedAt;
@@ -933,9 +986,33 @@ async function handleApi(request, response, url) {
         assigned += 1;
       }
     });
-    if (!assigned) throw httpError(404, "ამანათები ვერ მოიძებნა.");
+    if (!assigned) throw httpError(400, "Set order pin location before assigning courier.");
     await writeDb(db);
     sendJson(response, 200, { assigned });
+    return;
+  }
+
+  const parcelLocationMatch = path.match(/^\/api\/parcels\/([^/]+)\/location$/);
+  if (parcelLocationMatch && method === "PATCH") {
+    const session = requireAdmin(request);
+    const body = await readJsonBody(request);
+    const lat = Number(body.lat ?? body.latitude);
+    const lng = Number(body.lng ?? body.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw httpError(400, "Valid latitude and longitude are required.");
+    const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelLocationMatch[1]));
+    if (!parcel || parcel.archivedAt) throw httpError(404, "Order not found.");
+    const now = new Date().toISOString();
+    parcel.lat = lat;
+    parcel.lng = lng;
+    parcel.latitude = lat;
+    parcel.longitude = lng;
+    parcel.locationAccuracy = body.locationAccuracy === "approximate" ? "approximate" : "confirmed";
+    parcel.locationSource = body.locationSource || (parcel.locationAccuracy === "confirmed" ? "admin_manual_adjustment" : "partner_address_geocoded");
+    parcel.locationConfirmedByAdmin = parcel.locationAccuracy === "confirmed";
+    parcel.locationUpdatedAt = now;
+    parcel.updatedAt = now;
+    await writeDb(db);
+    sendJson(response, 200, { parcel: publicParcel(db, parcel), user: publicUser(findUser(db, session.username)) });
     return;
   }
 
