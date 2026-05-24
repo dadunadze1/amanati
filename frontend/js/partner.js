@@ -160,6 +160,8 @@ function openPartnerNewOrderDialog() {
       <input id="partnerOrderName" type="text" autocomplete="name" required>
       <label for="partnerOrderPhone">მომხმარებლის ნომერი</label>
       <input id="partnerOrderPhone" type="tel" autocomplete="tel" required>
+      <label for="partnerOrderCash">ქეში</label>
+      <input id="partnerOrderCash" type="text" inputmode="decimal" autocomplete="off" value="0">
       <p class="form-message" id="partnerOrderMessage" role="alert"></p>
     </form>
   `;
@@ -177,7 +179,7 @@ async function savePartnerOrder() {
   const street = document.getElementById("partnerOrderAddress")?.value.trim();
   const fullName = document.getElementById("partnerOrderName")?.value.trim();
   const phone = document.getElementById("partnerOrderPhone")?.value.trim();
-  const paymentAmount = 0;
+  const paymentAmount = parsePaymentAmount(document.getElementById("partnerOrderCash")?.value);
   if (!city || !district || !street || !fullName || !phone) {
     if (message) message.textContent = STRINGS.emptyFields;
     return;
