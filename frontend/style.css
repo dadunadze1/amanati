@@ -10985,3 +10985,376 @@ body:has(.app-shell.is-admin-dashboard) #dialogModal .status-failed {
   border-color: var(--ops-text);
   box-shadow: none;
 }
+
+/* Unified function windows: admin and courier only. */
+body:has(.app-shell.is-admin-dashboard) #dialogModal,
+body:has(.app-shell.is-courier-mobile) #dialogModal {
+  --window-bg: #f5f5f2;
+  --window-surface: #ffffff;
+  --window-muted: #f0f0ec;
+  --window-line: #deded8;
+  --window-line-strong: #bebeb6;
+  --window-text: #111312;
+  --window-soft-text: #686a66;
+  --window-success: #157347;
+  --window-danger: #b42318;
+  --window-warning: #9a6700;
+  --window-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(10px, 2vw, 24px);
+  background: rgba(17, 19, 18, 0.42) !important;
+  backdrop-filter: none !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal.admin-map-dialog .modal-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal.admin-map-dialog .modal-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal.courier-stats-dialog .modal-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal.courier-stats-dialog .modal-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal.zone-management-dialog .modal-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal.zone-management-dialog .modal-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal.history-dialog .modal-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal.history-dialog .modal-card {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1040px, calc(100vw - 32px)) !important;
+  max-width: min(1040px, calc(100vw - 32px)) !important;
+  max-height: min(860px, calc(100dvh - 32px)) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  color: var(--window-text) !important;
+  background: var(--window-surface) !important;
+  border: 1px solid var(--window-line) !important;
+  border-radius: var(--window-radius) !important;
+  box-shadow: 0 22px 70px rgba(17, 19, 18, 0.18) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-card > h1,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-card > h2,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card > h1,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card > h2 {
+  display: flex !important;
+  align-items: center;
+  min-height: 58px;
+  margin: 0 !important;
+  padding: 16px 20px !important;
+  color: var(--window-text) !important;
+  background: var(--window-surface) !important;
+  border-bottom: 1px solid var(--window-line) !important;
+  font-size: 1rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.2 !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-body,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-body,
+body:has(.app-shell.is-admin-dashboard) #dialogModal.admin-map-dialog .dialog-body,
+body:has(.app-shell.is-courier-mobile) #dialogModal.admin-map-dialog .dialog-body,
+body:has(.app-shell.is-admin-dashboard) #dialogModal.history-dialog .dialog-body,
+body:has(.app-shell.is-courier-mobile) #dialogModal.history-dialog .dialog-body {
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: auto !important;
+  padding: 18px 20px !important;
+  background: var(--window-bg) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-body::-webkit-scrollbar,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-body::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-body::-webkit-scrollbar-track,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-body::-webkit-scrollbar-thumb,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-body::-webkit-scrollbar-thumb {
+  background: var(--window-line-strong);
+  border: 3px solid var(--window-bg);
+  border-radius: 999px;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-actions,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-actions {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 58px;
+  padding: 12px 20px !important;
+  background: var(--window-surface) !important;
+  border-top: 1px solid var(--window-line) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .mini-button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .link-button,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button,
+body:has(.app-shell.is-courier-mobile) #dialogModal .link-button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  min-height: 40px;
+  padding: 0 14px !important;
+  color: var(--window-text) !important;
+  background: var(--window-surface) !important;
+  border: 1px solid var(--window-line) !important;
+  border-radius: var(--window-radius) !important;
+  box-shadow: none !important;
+  font-size: 0.86rem !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.1 !important;
+  text-decoration: none !important;
+  transform: none !important;
+  white-space: nowrap;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .button.primary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-button-primary,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button.primary,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-button-primary {
+  color: #ffffff !important;
+  background: var(--window-text) !important;
+  border-color: var(--window-text) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .button.danger,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .mini-button.danger,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button.danger,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button.danger {
+  color: #ffffff !important;
+  background: var(--window-danger) !important;
+  border-color: var(--window-danger) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .button:hover,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .button:focus-visible,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .mini-button:hover,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .mini-button:focus-visible,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button:hover,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button:focus-visible,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button:hover,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button:focus-visible {
+  border-color: var(--window-text) !important;
+  outline: none !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal label,
+body:has(.app-shell.is-courier-mobile) #dialogModal label {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--window-soft-text) !important;
+  font-size: 0.72rem !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal input:not([type="checkbox"]),
+body:has(.app-shell.is-admin-dashboard) #dialogModal select,
+body:has(.app-shell.is-admin-dashboard) #dialogModal textarea,
+body:has(.app-shell.is-courier-mobile) #dialogModal input:not([type="checkbox"]),
+body:has(.app-shell.is-courier-mobile) #dialogModal select,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px !important;
+  color: var(--window-text) !important;
+  background: var(--window-surface) !important;
+  border: 1px solid var(--window-line) !important;
+  border-radius: var(--window-radius) !important;
+  box-shadow: none !important;
+  font-size: 0.92rem !important;
+  line-height: 1.2 !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal textarea,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea {
+  min-height: 96px;
+  padding-block: 10px !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal input:not([type="checkbox"]):focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal select:focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal textarea:focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal input:not([type="checkbox"]):focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal select:focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea:focus {
+  border-color: var(--window-text) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(17, 19, 18, 0.08) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .stats-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-section,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .history-summary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .live-courier-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .live-courier-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .courier-stats-profile-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .courier-calendar-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .courier-order-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .parcel-history-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .history-row,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .history-empty-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .zone-list-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .zone-courier-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .zone-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .admin-map-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .admin-map-panel-modern,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .admin-map-assign-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .partner-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .partner-form,
+body:has(.app-shell.is-courier-mobile) #dialogModal .stats-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-section,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-summary,
+body:has(.app-shell.is-courier-mobile) #dialogModal .parcel-history-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-row,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-empty-card {
+  color: var(--window-text) !important;
+  background: var(--window-surface) !important;
+  border: 1px solid var(--window-line) !important;
+  border-radius: var(--window-radius) !important;
+  box-shadow: none !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-card::before,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-card::before {
+  display: none !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-card-list,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .admin-user-list,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .courier-stats-user-list,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-summary-grid,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-modal-summary-grid,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-card-list,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-summary-grid,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-modal-summary-grid {
+  gap: 10px !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-modal,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .finance-panel,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-modal,
+body:has(.app-shell.is-courier-mobile) #dialogModal .finance-panel {
+  display: grid !important;
+  gap: 12px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-header,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-filters,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-footer,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-header,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-filters,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-footer {
+  gap: 10px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal table,
+body:has(.app-shell.is-courier-mobile) #dialogModal table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  background: var(--window-surface);
+  border: 1px solid var(--window-line);
+  border-radius: var(--window-radius);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal th,
+body:has(.app-shell.is-admin-dashboard) #dialogModal td,
+body:has(.app-shell.is-courier-mobile) #dialogModal th,
+body:has(.app-shell.is-courier-mobile) #dialogModal td {
+  padding: 10px 12px !important;
+  border-bottom: 1px solid var(--window-line) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal th,
+body:has(.app-shell.is-courier-mobile) #dialogModal th {
+  color: var(--window-soft-text) !important;
+  background: var(--window-muted) !important;
+  font-size: 0.72rem !important;
+  font-weight: 900 !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal tr:last-child td,
+body:has(.app-shell.is-courier-mobile) #dialogModal tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .status-pending,
+body:has(.app-shell.is-courier-mobile) #dialogModal .status-pending {
+  color: var(--window-soft-text) !important;
+  background: var(--window-muted) !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .status-delivered,
+body:has(.app-shell.is-courier-mobile) #dialogModal .status-delivered {
+  color: var(--window-success) !important;
+  background: #eef7f1 !important;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal .status-failed,
+body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
+  color: var(--window-danger) !important;
+  background: #fff1f0 !important;
+}
+
+@media (max-width: 720px) {
+  body:has(.app-shell.is-admin-dashboard) #dialogModal,
+  body:has(.app-shell.is-courier-mobile) #dialogModal {
+    align-items: stretch;
+    padding: 8px;
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-card,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-card > h1,
+  body:has(.app-shell.is-admin-dashboard) #dialogModal .modal-card > h2,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card > h1,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card > h2 {
+    min-height: 54px;
+    padding: 14px 14px !important;
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-body,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-body {
+    padding: 12px !important;
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-actions,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 10px 12px !important;
+  }
+
+  body:has(.app-shell.is-admin-dashboard) #dialogModal .dialog-actions .button,
+  body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-actions .button {
+    width: 100%;
+    min-width: 0;
+  }
+}
