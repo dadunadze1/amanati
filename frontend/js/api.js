@@ -658,6 +658,36 @@ async function staticApi(path, options = {}) {
     return { partners: store.users.filter((user) => user.role === "partner").map(publicStaticUser) };
   }
 
+  if (method === "GET" && apiPath === "/api/partner-cash-adjustments") {
+    const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
+    const adjustments = normalizeFinanceAdjustmentList(financeData.partnerCashAdjustments || [], "partnerCash");
+    if (state.isPartner) {
+      const partner = state.currentUserProfile || {};
+      const id = partner.id || partner.username || "";
+      return {
+        adjustments: adjustments.filter((item) => (
+          (id && item.partnerId === id)
+          || normalizeUsername(item.partnerUsername || item.username) === normalizeUsername(partner.username)
+        )),
+      };
+    }
+    return { adjustments };
+  }
+
+  if (method === "POST" && apiPath === "/api/partner-cash-adjustments") {
+    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია პარტნიორის ქეშის კორექტირება.");
+    const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
+    const adjustments = normalizeFinanceAdjustmentList(financeData.partnerCashAdjustments || [], "partnerCash");
+    const adjustment = normalizeFinanceAdjustment(body, "partnerCash", adjustments.length);
+    store.financeData = {
+      ...financeData,
+      partnerCashAdjustments: [...adjustments, adjustment],
+    };
+    saveData(CONFIG.partnerCashAdjustmentsStorageKey, store.financeData.partnerCashAdjustments);
+    saveStaticBootstrap();
+    return { adjustment };
+  }
+
   if (method === "GET" && apiPath === "/api/couriers") {
     return { couriers: store.users.filter((user) => user.role === "courier" && user.status === "active").map(publicStaticUser) };
   }
@@ -897,7 +927,7 @@ async function staticApi(path, options = {}) {
   if (method === "PATCH" && apiPath === "/api/parcels/assign") {
     const parcelIds = Array.isArray(body.parcelIds) ? body.parcelIds : [];
     const missingLocation = store.parcels.find((parcel) => parcelIds.includes(parcel.id) && (!Number.isFinite(Number(parcel.lat)) || !Number.isFinite(Number(parcel.lng))));
-    if (missingLocation) throw new Error("Set order pin location before assigning courier.");
+    if (missingLocation) throw new Error("კურიერის მიბმამდე მიუთითეთ შეკვეთის პინის ლოკაცია.");
     store.parcels.forEach((parcel) => {
       if (parcelIds.includes(parcel.id)) {
         parcel.courierUsername = body.courierUsername || "";
@@ -913,7 +943,7 @@ async function staticApi(path, options = {}) {
   if (statusMatch && method === "PATCH") {
     const parcel = store.parcels.find((item) => item.id === decodeURIComponent(statusMatch[1]));
     if (!parcel) return { ok: false };
-    if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("Failure reason is required.");
+    if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
     parcel.status = body.status || parcel.status;
     parcel.updatedAt = now;
@@ -978,7 +1008,7 @@ async function staticApi(path, options = {}) {
     if (!parcel) return { ok: false };
     const lat = Number(body.lat ?? body.latitude);
     const lng = Number(body.lng ?? body.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("Valid latitude and longitude are required.");
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("სწორი გრძედი და განედი აუცილებელია.");
     const now = new Date().toISOString();
     Object.assign(parcel, {
       lat,

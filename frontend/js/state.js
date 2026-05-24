@@ -55,6 +55,8 @@ const state = {
   financeRangeStart: toDateKey(new Date()),
   financeRangeEnd: toDateKey(new Date()),
   selectedCourier: null,
+  partnerCashAdjustments: [],
+  partnerCashAdjustmentsLoaded: false,
   pendingCoords: null,
   pendingMarker: null,
   pendingAddress: "",

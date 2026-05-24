@@ -10565,3 +10565,423 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .history-status,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Local minimalist refresh: admin and courier only. */
+body:has(.app-shell.is-admin-dashboard),
+body:has(.app-shell.is-courier-mobile),
+.app-shell.is-admin-dashboard,
+.app-shell.is-courier-mobile {
+  --ops-bg: #f6f6f4;
+  --ops-surface: #ffffff;
+  --ops-surface-solid: #ffffff;
+  --ops-surface-muted: #f2f2ef;
+  --ops-line: #deded8;
+  --ops-line-strong: #bdbdb5;
+  --ops-text: #111312;
+  --ops-muted: #686a66;
+  --ops-faint: #93958f;
+  --ops-primary: #111312;
+  --ops-primary-soft: #eeeeea;
+  --ops-green: #157347;
+  --ops-green-soft: #eef7f1;
+  --ops-amber: #9a6700;
+  --ops-amber-soft: #fff7e6;
+  --ops-red: #b42318;
+  --ops-red-soft: #fff1f0;
+  --ops-radius: 8px;
+  --ops-control: 42px;
+  --ops-shadow: none;
+  --ops-shadow-soft: none;
+}
+
+.app-shell.is-admin-dashboard,
+.app-shell.is-courier-mobile {
+  background:
+    linear-gradient(#e7e7e1 1px, transparent 1px),
+    linear-gradient(90deg, #e7e7e1 1px, transparent 1px),
+    var(--ops-bg);
+  background-size: 28px 28px;
+}
+
+.app-shell.is-admin-dashboard *,
+.app-shell.is-courier-mobile *,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) *,
+body:has(.app-shell.is-courier-mobile) #dialogModal * {
+  text-shadow: none !important;
+}
+
+.app-shell.is-admin-dashboard .app-sidebar,
+.app-shell.is-admin-dashboard .app-topbar,
+.app-shell.is-admin-dashboard .right-panel,
+.app-shell.is-admin-dashboard .bottom-nav,
+.app-shell.is-admin-dashboard .menu-button,
+.app-shell.is-courier-mobile .courier-mobile-top,
+.app-shell.is-courier-mobile .courier-orders-sheet,
+.app-shell.is-courier-mobile .courier-map-stats-sheet,
+.app-shell.is-courier-mobile .nearest-card,
+.app-shell.is-courier-mobile .bottom-nav,
+.app-shell.is-courier-mobile .action-panel,
+.admin-mobile-drawer {
+  background: var(--ops-surface);
+  border: 1px solid var(--ops-line);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.app-shell.is-admin-dashboard .map,
+.app-shell.is-courier-mobile .map {
+  background: #e2e5df;
+  border: 1px solid var(--ops-line);
+  box-shadow: none;
+}
+
+.app-shell.is-admin-dashboard .leaflet-control-zoom a,
+.app-shell.is-courier-mobile .leaflet-control-zoom a {
+  color: var(--ops-text);
+  background: #fff;
+  border-color: var(--ops-line);
+  box-shadow: none;
+}
+
+.app-shell.is-admin-dashboard .swift-brand-mark {
+  color: var(--ops-text);
+  background: #fff;
+  border: 1px solid var(--ops-line);
+  box-shadow: none;
+}
+
+.app-shell.is-admin-dashboard .swift-brand-mark i {
+  opacity: 1;
+}
+
+.app-shell.is-admin-dashboard .app-sidebar-brand strong {
+  font-size: 0.96rem;
+  font-weight: 950;
+}
+
+.app-shell.is-admin-dashboard .app-sidebar-brand small {
+  color: var(--ops-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.app-shell.is-admin-dashboard .app-sidebar-label,
+.admin-mobile-drawer .app-sidebar-label {
+  color: var(--ops-faint);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+}
+
+.app-shell.is-admin-dashboard .action-item,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item,
+.app-shell.is-courier-mobile .bottom-nav-item,
+.app-shell.is-admin-dashboard .bottom-nav-item {
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell.is-admin-dashboard .action-item b,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item b,
+.app-shell.is-courier-mobile .bottom-nav-item b,
+.app-shell.is-admin-dashboard .bottom-nav-item b {
+  color: var(--ops-muted);
+  background: transparent;
+  border: 1px solid var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .action-item:hover,
+.app-shell.is-admin-dashboard .action-item:focus-visible,
+.app-shell.is-admin-dashboard .action-item.is-active,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item:hover,
+.app-shell.is-admin-dashboard .mobile-admin-drawer-item:focus-visible,
+.app-shell.is-courier-mobile .bottom-nav-item:hover,
+.app-shell.is-courier-mobile .bottom-nav-item:focus-visible,
+.app-shell.is-courier-mobile .bottom-nav-item.is-active,
+.app-shell.is-admin-dashboard .bottom-nav-item:hover,
+.app-shell.is-admin-dashboard .bottom-nav-item:focus-visible {
+  color: var(--ops-text);
+  background: var(--ops-surface-muted);
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .action-item:hover b,
+.app-shell.is-admin-dashboard .action-item:focus-visible b,
+.app-shell.is-admin-dashboard .action-item.is-active b,
+.app-shell.is-courier-mobile .bottom-nav-item:hover b,
+.app-shell.is-courier-mobile .bottom-nav-item:focus-visible b,
+.app-shell.is-courier-mobile .bottom-nav-item.is-active b {
+  color: #fff;
+  background: var(--ops-text);
+  border-color: var(--ops-text);
+}
+
+.app-shell.is-admin-dashboard .app-topbar {
+  background: #fff;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label value";
+  min-height: 46px;
+  background: transparent;
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .dashboard-card::before {
+  display: none;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card span {
+  color: var(--ops-muted);
+  font-size: 0.72rem;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card strong {
+  font-size: 1.02rem;
+  font-weight: 950;
+}
+
+.app-shell.is-admin-dashboard .dashboard-card:hover,
+.app-shell.is-admin-dashboard .dashboard-card:focus-visible,
+.app-shell.is-admin-dashboard .dashboard-card.is-active {
+  background: var(--ops-text);
+  border-color: var(--ops-text);
+}
+
+.app-shell.is-admin-dashboard .dashboard-card:hover span,
+.app-shell.is-admin-dashboard .dashboard-card:focus-visible span,
+.app-shell.is-admin-dashboard .dashboard-card.is-active span,
+.app-shell.is-admin-dashboard .dashboard-card:hover strong,
+.app-shell.is-admin-dashboard .dashboard-card:focus-visible strong,
+.app-shell.is-admin-dashboard .dashboard-card.is-active strong {
+  color: #fff;
+}
+
+.app-shell.is-admin-dashboard .nearest-card-header,
+.app-shell.is-courier-mobile .nearest-card-header,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .modal-card > h2,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card > h2 {
+  background: #fff;
+  border-bottom-color: var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .nearest-detail,
+.app-shell.is-admin-dashboard .parcel-address-preview,
+.app-shell.is-admin-dashboard .stats-card,
+.app-shell.is-admin-dashboard .parcel-row,
+.app-shell.is-courier-mobile .nearest-detail {
+  border-bottom-color: var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .button,
+.app-shell.is-admin-dashboard .button.primary,
+.app-shell.is-courier-mobile .button,
+.app-shell.is-courier-mobile .button.primary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button.primary,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button.primary {
+  color: #fff;
+  background: var(--ops-text);
+  border-color: var(--ops-text);
+}
+
+.app-shell.is-admin-dashboard .button.secondary,
+.app-shell.is-admin-dashboard .mini-button,
+.app-shell.is-admin-dashboard .nearest-icon-button,
+.app-shell.is-courier-mobile .button.secondary,
+.app-shell.is-courier-mobile .mini-button,
+.app-shell.is-courier-mobile .nearest-icon-button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button.secondary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .mini-button,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button.secondary,
+body:has(.app-shell.is-courier-mobile) #dialogModal .mini-button {
+  color: var(--ops-text);
+  background: #fff;
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-admin-dashboard .button:hover,
+.app-shell.is-admin-dashboard .button:focus-visible,
+.app-shell.is-admin-dashboard .mini-button:hover,
+.app-shell.is-admin-dashboard .mini-button:focus-visible,
+.app-shell.is-courier-mobile .button:hover,
+.app-shell.is-courier-mobile .button:focus-visible,
+.app-shell.is-courier-mobile .mini-button:hover,
+.app-shell.is-courier-mobile .mini-button:focus-visible,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button:hover,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .button:focus-visible,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button:hover,
+body:has(.app-shell.is-courier-mobile) #dialogModal .button:focus-visible {
+  transform: none;
+  border-color: var(--ops-text);
+}
+
+.app-shell.is-admin-dashboard input:not([type="checkbox"]),
+.app-shell.is-admin-dashboard select,
+.app-shell.is-admin-dashboard textarea,
+.app-shell.is-courier-mobile input:not([type="checkbox"]),
+.app-shell.is-courier-mobile select,
+.app-shell.is-courier-mobile textarea,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) input:not([type="checkbox"]),
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) select,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) textarea,
+body:has(.app-shell.is-courier-mobile) #dialogModal input:not([type="checkbox"]),
+body:has(.app-shell.is-courier-mobile) #dialogModal select,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea {
+  background: #fff;
+}
+
+.app-shell.is-admin-dashboard input:not([type="checkbox"]):focus,
+.app-shell.is-admin-dashboard select:focus,
+.app-shell.is-admin-dashboard textarea:focus,
+.app-shell.is-courier-mobile input:not([type="checkbox"]):focus,
+.app-shell.is-courier-mobile select:focus,
+.app-shell.is-courier-mobile textarea:focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) input:not([type="checkbox"]):focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) select:focus,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) textarea:focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal input:not([type="checkbox"]):focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal select:focus,
+body:has(.app-shell.is-courier-mobile) #dialogModal textarea:focus {
+  border-color: var(--ops-text);
+  box-shadow: 0 0 0 3px rgba(17, 19, 18, 0.08);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)),
+body:has(.app-shell.is-courier-mobile) #dialogModal {
+  background: rgba(17, 19, 18, 0.34);
+  backdrop-filter: none;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .modal-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .modal-card {
+  background: #fff;
+  border-color: var(--ops-line);
+  box-shadow: none;
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .dialog-actions,
+body:has(.app-shell.is-courier-mobile) #dialogModal .dialog-actions {
+  background: #fff;
+  border-top-color: var(--ops-line);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .history-summary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .live-courier-summary,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-profile-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-calendar-panel,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .zone-courier-panel,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-summary {
+  background: var(--ops-surface-muted);
+}
+
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .finance-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .admin-user-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-stats-user-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .courier-order-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .parcel-history-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .history-row,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .list-button,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .live-courier-card,
+body:has(.app-shell.is-admin-dashboard) #dialogModal:not(:has(.partner-panel)):not(:has(.partner-form)):not(:has(.partner-order-table)) .zone-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .parcel-history-card,
+body:has(.app-shell.is-courier-mobile) #dialogModal .history-row,
+body:has(.app-shell.is-courier-mobile) #dialogModal .courier-parcel-card,
+.app-shell.is-courier-mobile .courier-mobile-order-card {
+  background: #fff;
+  border-color: var(--ops-line);
+  border-left-color: var(--ops-line-strong);
+}
+
+.app-shell.is-admin-dashboard .status-pending,
+.app-shell.is-courier-mobile .status-pending,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .status-pending {
+  color: var(--ops-muted);
+  background: var(--ops-surface-muted);
+}
+
+.app-shell.is-admin-dashboard .status-delivered,
+.app-shell.is-courier-mobile .status-delivered,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .status-delivered {
+  color: var(--ops-green);
+  background: var(--ops-green-soft);
+}
+
+.app-shell.is-admin-dashboard .status-failed,
+.app-shell.is-courier-mobile .status-failed,
+body:has(.app-shell.is-admin-dashboard) #dialogModal .status-failed {
+  color: var(--ops-red);
+  background: var(--ops-red-soft);
+}
+
+.app-shell.is-admin-dashboard .pin-label-card {
+  background: #fff;
+  border-color: var(--ops-line);
+  border-left-color: var(--ops-text);
+  box-shadow: none;
+}
+
+.app-shell.is-admin-dashboard .dispatch-pin-marker,
+.app-shell.is-admin-dashboard .pending-parcel-marker,
+.app-shell.is-admin-dashboard .selected-pin-marker {
+  box-shadow: none;
+}
+
+.app-shell.is-courier-mobile .courier-online-toggle,
+.app-shell.is-courier-mobile .courier-day-pill,
+.app-shell.is-courier-mobile .courier-mini-route {
+  background: #fff;
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-courier-mobile .courier-online-toggle span {
+  box-shadow: none;
+}
+
+.app-shell.is-courier-mobile .courier-mobile-order-card.status-delivered {
+  border-left-color: var(--ops-green);
+}
+
+.app-shell.is-courier-mobile .courier-mobile-order-card.status-failed {
+  border-left-color: var(--ops-red);
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions button,
+.app-shell.is-courier-mobile .courier-quick-actions a {
+  background: #fff;
+  border-color: var(--ops-line);
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions button:hover,
+.app-shell.is-courier-mobile .courier-quick-actions a:hover,
+.app-shell.is-courier-mobile .courier-quick-actions button:focus-visible,
+.app-shell.is-courier-mobile .courier-quick-actions a:focus-visible {
+  border-color: var(--ops-text);
+  outline: none;
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions .is-success,
+.app-shell.is-admin-dashboard .nearest-status-button.delivered,
+.app-shell.is-courier-mobile .nearest-status-button.delivered {
+  color: #fff;
+  background: var(--ops-green);
+  border-color: var(--ops-green);
+}
+
+.app-shell.is-courier-mobile .courier-quick-actions .is-danger,
+.app-shell.is-admin-dashboard .button.danger,
+.app-shell.is-admin-dashboard .mini-button.danger,
+.app-shell.is-admin-dashboard .nearest-status-button.failed,
+.app-shell.is-courier-mobile .button.danger,
+.app-shell.is-courier-mobile .mini-button.danger,
+.app-shell.is-courier-mobile .nearest-status-button.failed {
+  color: #fff;
+  background: var(--ops-red);
+  border-color: var(--ops-red);
+}
+
+.app-shell.is-admin-dashboard .mode-toast,
+.app-shell.is-courier-mobile .mode-toast {
+  background: var(--ops-text);
+  border-color: var(--ops-text);
+  box-shadow: none;
+}

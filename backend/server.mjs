@@ -213,6 +213,49 @@ function partnerDisplayName(user) {
   return user?.companyName || user?.contactPerson || user?.username || "";
 }
 
+function getPartnerCashAdjustments(db) {
+  const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+  return Array.isArray(settings.partnerCashAdjustments) ? settings.partnerCashAdjustments : [];
+}
+
+function setPartnerCashAdjustments(db, adjustments) {
+  db.settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+  db.settings.partnerCashAdjustments = Array.isArray(adjustments) ? adjustments : [];
+}
+
+function partnerCashIdentity(user = {}) {
+  return user.id || user.username || "";
+}
+
+function publicPartnerCashAdjustment(adjustment) {
+  return {
+    id: adjustment.id || "",
+    username: adjustment.username || adjustment.partnerUsername || "",
+    partnerUsername: adjustment.partnerUsername || adjustment.username || "",
+    partnerId: adjustment.partnerId || "",
+    amount: Number(adjustment.amount || adjustment.delta || 0),
+    delta: Number(adjustment.delta || adjustment.amount || 0),
+    targetAmount: Number(adjustment.targetAmount || 0),
+    type: adjustment.type || (Number(adjustment.delta || adjustment.amount || 0) < 0 ? "negative" : "positive"),
+    category: "partnerCash",
+    dateKey: adjustment.dateKey || adjustment.date || "",
+    date: adjustment.date || adjustment.dateKey || "",
+    note: adjustment.note || "",
+    timestamp: adjustment.timestamp || adjustment.createdAt || "",
+    createdAt: adjustment.createdAt || adjustment.timestamp || "",
+  };
+}
+
+function partnerCashAdjustmentBelongsTo(adjustment, partner) {
+  const id = partnerCashIdentity(partner);
+  const username = partner.username || "";
+  return Boolean(
+    (id && adjustment.partnerId === id)
+    || (username && normalizeUsername(adjustment.partnerId) === normalizeUsername(username))
+    || (username && normalizeUsername(adjustment.partnerUsername || adjustment.username) === normalizeUsername(username))
+  );
+}
+
 function findPartnerByIdOrUsername(db, value) {
   const normalized = normalizeUsername(value);
   return db.users.find((user) => (
@@ -810,6 +853,58 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (method === "GET" && path === "/api/partner-cash-adjustments") {
+    const session = requireSession(request);
+    const adjustments = getPartnerCashAdjustments(db).map(publicPartnerCashAdjustment);
+    if (session.role === "admin") {
+      sendJson(response, 200, { adjustments });
+      return;
+    }
+    if (session.role === "partner") {
+      const partner = findUser(db, session.username);
+      sendJson(response, 200, {
+        adjustments: adjustments.filter((adjustment) => partnerCashAdjustmentBelongsTo(adjustment, partner)),
+      });
+      return;
+    }
+    sendJson(response, 200, { adjustments: [] });
+    return;
+  }
+
+  if (method === "POST" && path === "/api/partner-cash-adjustments") {
+    requireAdmin(request);
+    const body = await readJsonBody(request);
+    const partner = findPartnerByIdOrUsername(db, body.partnerId || body.partnerUsername || body.username);
+    if (!partner) throw httpError(404, "პარტნიორი ვერ მოიძებნა.");
+    const delta = Number(body.delta ?? body.amount ?? 0);
+    const targetAmount = Number(body.targetAmount ?? 0);
+    if (!Number.isFinite(delta) || !Number.isFinite(targetAmount)) throw httpError(400, "თანხა არასწორია.");
+    const now = new Date().toISOString();
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(body.dateKey || body.date || ""))
+      ? String(body.dateKey || body.date)
+      : now.slice(0, 10);
+    const adjustment = publicPartnerCashAdjustment({
+      id: body.id || randomBytes(12).toString("hex"),
+      username: partner.username,
+      partnerUsername: partner.username,
+      partnerId: partnerCashIdentity(partner),
+      amount: delta,
+      delta,
+      targetAmount,
+      type: delta < 0 ? "negative" : "positive",
+      category: "partnerCash",
+      dateKey,
+      date: dateKey,
+      note: body.note || "პარტნიორის ქეშის კორექტირება",
+      timestamp: body.timestamp || now,
+      createdAt: body.createdAt || now,
+    });
+    setPartnerCashAdjustments(db, [...getPartnerCashAdjustments(db), adjustment]);
+    await writeDb(db);
+    sendJson(response, 201, { adjustment });
+    return;
+  }
+
   if (method === "POST" && path === "/api/users") {
     requireAdmin(request);
     const body = await readJsonBody(request);
@@ -843,8 +938,8 @@ async function handleApi(request, response, url) {
     const username = cleanUsername(body.username || body.email);
     const password = String(body.password || "").trim();
     const profile = cleanPartnerProfile(body);
-    if (!username || !password || !profile.companyName || !profile.contactPerson || !profile.phone) throw httpError(400, "Partner fields are required.");
-    if (findUser(db, username)) throw httpError(409, "This login already exists.");
+    if (!username || !password || !profile.companyName || !profile.contactPerson || !profile.phone) throw httpError(400, "შეავსეთ პარტნიორის ყველა სავალდებულო ველი.");
+    if (findUser(db, username)) throw httpError(409, "ეს ლოგინი უკვე არსებობს.");
 
     const now = new Date().toISOString();
     const user = {
@@ -873,7 +968,7 @@ async function handleApi(request, response, url) {
     requireAdmin(request);
     const username = decodeURIComponent(partnerMatch[1]);
     const user = findUser(db, username);
-    if (!user || user.role !== "partner") throw httpError(404, "Partner not found.");
+    if (!user || user.role !== "partner") throw httpError(404, "პარტნიორი ვერ მოიძებნა.");
     const body = await readJsonBody(request);
     Object.assign(user, cleanPartnerProfile(body));
     user.firstName = user.contactPerson;
@@ -1028,11 +1123,11 @@ async function handleApi(request, response, url) {
 
   if (method === "POST" && path === "/api/parcels") {
     const session = requireSession(request);
-    if (!["admin", "partner"].includes(session.role)) throw httpError(403, "Access denied.");
+    if (!["admin", "partner"].includes(session.role)) throw httpError(403, "წვდომა აკრძალულია.");
     const body = await readJsonBody(request);
     const courierUsername = cleanUsername(body.courierUsername);
     if (session.role === "admin" && !canAccessCourier(session, courierUsername || session.username)) throw httpError(403, "წვდომა აკრძალულია.");
-    if (session.role === "partner" && courierUsername) throw httpError(403, "Partner cannot assign courier.");
+    if (session.role === "partner" && courierUsername) throw httpError(403, "პარტნიორს კურიერის მიბმა არ შეუძლია.");
     let courier = courierUsername ? findUser(db, courierUsername) : null;
     if (courierUsername && (!courier || courier.role !== "courier" || courier.status !== "active")) throw httpError(404, "კურიერი ვერ მოიძებნა.");
 
@@ -1047,8 +1142,8 @@ async function handleApi(request, response, url) {
     const selectedPartner = session.role === "partner"
       ? partnerUser
       : findPartnerByIdOrUsername(db, body.partnerId || body.partnerUsername || "");
-    if (session.role === "partner" && (!partnerUser || partnerUser.role !== "partner" || partnerUser.status !== "active")) throw httpError(403, "Partner account is inactive.");
-    if (selectedPartner && selectedPartner.status !== "active") throw httpError(400, "Partner account is inactive.");
+    if (session.role === "partner" && (!partnerUser || partnerUser.role !== "partner" || partnerUser.status !== "active")) throw httpError(403, "პარტნიორის ანგარიში არააქტიურია.");
+    if (selectedPartner && selectedPartner.status !== "active") throw httpError(400, "პარტნიორის ანგარიში არააქტიურია.");
     if (session.role === "partner" && (!Number.isFinite(lat) || !Number.isFinite(lng))) {
       const geocoded = await geocodePartnerAddress({ ...body, address: fullAddress || address });
       if (geocoded) {
@@ -1057,8 +1152,8 @@ async function handleApi(request, response, url) {
       }
     }
     const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
-    if (!fullName || !phone || (session.role === "admin" && !hasCoords)) throw httpError(400, "Parcel details are required.");
-    if (!address || isCoordinateLabel(address) || (session.role === "admin" && !hasHouseNumber(address))) throw httpError(400, "Street address is required.");
+    if (!fullName || !phone || (session.role === "admin" && !hasCoords)) throw httpError(400, "შეავსეთ შეკვეთის დეტალები.");
+    if (!address || isCoordinateLabel(address) || (session.role === "admin" && !hasHouseNumber(address))) throw httpError(400, "ქუჩის მისამართი აუცილებელია.");
 
     const detectedZone = hasCoords ? detectTbilisiZone({ lat, lng }) : null;
     let autoAssigned = false;
@@ -1146,7 +1241,7 @@ async function handleApi(request, response, url) {
         assigned += 1;
       }
     });
-    if (!assigned) throw httpError(400, "Set order pin location before assigning courier.");
+    if (!assigned) throw httpError(400, "კურიერის მიბმამდე მიუთითეთ შეკვეთის პინის ლოკაცია.");
     await writeDb(db);
     sendJson(response, 200, { assigned });
     return;
@@ -1158,9 +1253,9 @@ async function handleApi(request, response, url) {
     const body = await readJsonBody(request);
     const lat = Number(body.lat ?? body.latitude);
     const lng = Number(body.lng ?? body.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw httpError(400, "Valid latitude and longitude are required.");
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw httpError(400, "სწორი გრძედი და განედი აუცილებელია.");
     const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelLocationMatch[1]));
-    if (!parcel || parcel.archivedAt) throw httpError(404, "Order not found.");
+    if (!parcel || parcel.archivedAt) throw httpError(404, "შეკვეთა ვერ მოიძებნა.");
     const now = new Date().toISOString();
     parcel.lat = lat;
     parcel.lng = lng;
@@ -1185,9 +1280,9 @@ async function handleApi(request, response, url) {
     const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelStatusMatch[1]));
     if (!parcel || parcel.archivedAt) throw httpError(404, "ამანათი ვერ მოიძებნა.");
     if (!canAccessCourier(session, parcel.courierUsername)) throw httpError(403, "წვდომა აკრძალულია.");
-    if (session.role !== "admin" && status === "pending") throw httpError(403, "Only admin can return a parcel to pending.");
+    if (session.role !== "admin" && status === "pending") throw httpError(403, "ამანათის მოლოდინში დაბრუნება მხოლოდ ადმინს შეუძლია.");
     if (session.role !== "admin" && parcel.status === "delivered" && status === "failed") throw httpError(403, "ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
-    if (status === "failed" && !String(body.failureReason || "").trim()) throw httpError(400, "Failure reason is required.");
+    if (status === "failed" && !String(body.failureReason || "").trim()) throw httpError(400, "ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
     parcel.status = status;
     parcel.updatedAt = now;

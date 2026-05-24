@@ -8,7 +8,7 @@ function partnerName(partner) {
 
 
 function orderPartnerName(parcel) {
-  return parcel?.partnerName || "Private";
+  return parcel?.partnerName || "პირადი";
 }
 
 
@@ -25,7 +25,8 @@ function partnerCodCollected(orders) {
     .reduce((sum, order) => sum + getPaymentAmount(order), 0);
 }
 
-function readPartnerCashAdjustments() {
+
+function readLocalPartnerCashAdjustments() {
   try {
     const parsed = typeof loadData === "function"
       ? loadData(CONFIG.partnerCashAdjustmentsStorageKey) || []
@@ -37,13 +38,54 @@ function readPartnerCashAdjustments() {
 }
 
 
+function readPartnerCashAdjustments() {
+  if (state.partnerCashAdjustmentsLoaded && Array.isArray(state.partnerCashAdjustments)) {
+    return normalizeFinanceAdjustmentList(state.partnerCashAdjustments, "partnerCash");
+  }
+  return readLocalPartnerCashAdjustments();
+}
+
+
 function writePartnerCashAdjustments(adjustments) {
   const normalized = normalizeFinanceAdjustmentList(adjustments, "partnerCash");
+  state.partnerCashAdjustments = normalized;
+  state.partnerCashAdjustmentsLoaded = true;
   if (typeof saveData === "function") saveData(CONFIG.partnerCashAdjustmentsStorageKey, normalized);
   else localStorage.setItem(CONFIG.partnerCashAdjustmentsStorageKey, JSON.stringify(normalized));
   if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
     saveStaticFinanceData({ ...getStaticFinanceData(), partnerCashAdjustments: normalized });
   }
+}
+
+
+async function loadPartnerCashAdjustments() {
+  try {
+    const payload = await api("/api/partner-cash-adjustments");
+    const adjustments = normalizeFinanceAdjustmentList(payload.adjustments || [], "partnerCash");
+    state.partnerCashAdjustments = adjustments;
+    state.partnerCashAdjustmentsLoaded = true;
+    if (typeof saveData === "function") saveData(CONFIG.partnerCashAdjustmentsStorageKey, adjustments);
+    return adjustments;
+  } catch {
+    const adjustments = readLocalPartnerCashAdjustments();
+    state.partnerCashAdjustments = adjustments;
+    state.partnerCashAdjustmentsLoaded = true;
+    return adjustments;
+  }
+}
+
+
+async function savePartnerCashAdjustmentToServer(adjustment) {
+  if (typeof isStaticDeploy === "function" && isStaticDeploy()) {
+    const next = [...readPartnerCashAdjustments(), adjustment];
+    writePartnerCashAdjustments(next);
+    return adjustment;
+  }
+  const payload = await api("/api/partner-cash-adjustments", { method: "POST", body: adjustment });
+  const saved = normalizeFinanceAdjustment(payload.adjustment || adjustment, "partnerCash");
+  state.partnerCashAdjustments = normalizeFinanceAdjustmentList([...readPartnerCashAdjustments(), saved], "partnerCash");
+  state.partnerCashAdjustmentsLoaded = true;
+  return saved;
 }
 
 
@@ -66,6 +108,7 @@ function getPartnerCashAdjustments(partner) {
   const username = partner.username || "";
   return readPartnerCashAdjustments().filter((item) => (
     (id && item.partnerId === id)
+    || (username && normalizeUsername(item.partnerId) === normalizeUsername(username))
     || (username && normalizeUsername(item.partnerUsername || item.username) === normalizeUsername(username))
   ));
 }
@@ -108,7 +151,11 @@ async function renderPartnerDashboard(pins = state.activePins) {
     return;
   }
 
+  await loadPartnerCashAdjustments();
   const orders = Array.isArray(pins) ? pins : await getPins("");
+  const cashRecords = await getAllPartnerCashRecords().catch(() => orders);
+  const partner = state.currentUserProfile || { username: state.currentUser };
+  const cash = calculatePartnerCashSummary(partner, cashRecords);
   els.appShell?.classList.add("is-partner-dashboard");
   els.partnerDashboard.hidden = false;
 
@@ -122,22 +169,24 @@ async function renderPartnerDashboard(pins = state.activePins) {
   els.partnerDashboard.innerHTML = `
     <div class="partner-dashboard-head">
       <div>
-        <span>Partner</span>
-        <strong>${escapeHtml(state.currentUserProfile?.companyName || state.currentUserProfile?.contactPerson || state.currentUser)}</strong>
+        <span>პარტნიორი</span>
+        <strong>${escapeHtml(partnerName(partner) || state.currentUser)}</strong>
       </div>
       <button class="button primary" type="button" data-action="partnerNewOrder">ახალი შეკვეთა</button>
     </div>
     <div class="partner-stat-grid">
-      ${renderPartnerStat("Total Orders", orders.length)}
-      ${renderPartnerStat("Active Orders", activeOrders.length)}
-      ${renderPartnerStat("Delivered Orders", deliveredOrders.length)}
-      ${renderPartnerStat("Failed Orders", failedOrders.length)}
-      ${renderPartnerStat("COD/Cash Pending", formatMoney(partnerCodPending(orders)))}
-      ${renderPartnerStat("Total COD Collected", formatMoney(partnerCodCollected(orders)))}
+      ${renderPartnerStat("სულ შეკვეთები", orders.length)}
+      ${renderPartnerStat("აქტიური შეკვეთები", activeOrders.length)}
+      ${renderPartnerStat("ჩაბარებული", deliveredOrders.length)}
+      ${renderPartnerStat("ვერ ჩაბარდა", failedOrders.length)}
+      ${renderPartnerStat("მისაცემი ქეში", formatMoney(cash.cashDue))}
+      ${renderPartnerStat("კორექტირება", formatMoney(cash.adjustmentTotal))}
+      ${renderPartnerStat("მოლოდინში ქეში", formatMoney(cash.pendingCash))}
+      ${renderPartnerStat("ჩაბარებული ქეში", formatMoney(cash.baseCash))}
     </div>
     <section class="partner-panel">
       <div class="partner-panel-head">
-        <h2>Recent orders</h2>
+        <h2>ბოლო შეკვეთები</h2>
         <button class="button secondary" type="button" data-action="partnerOrders">ყველა</button>
       </div>
       ${renderPartnerOrderTable(recentOrders)}
@@ -165,15 +214,15 @@ function renderPartnerOrderTable(orders, options = {}) {
       <table class="partner-order-table">
         <thead>
           <tr>
-            <th>Order ID</th>
-            ${includePartner ? "<th>Partner</th>" : ""}
-            <th>Customer Name</th>
-            <th>Address</th>
-            <th>Courier</th>
-            <th>Status</th>
-            ${includePartner ? "<th>Location</th>" : ""}
-            <th>COD Amount</th>
-            <th>Date</th>
+            <th>შეკვეთის ID</th>
+            ${includePartner ? "<th>პარტნიორი</th>" : ""}
+            <th>მომხმარებელი</th>
+            <th>მისამართი</th>
+            <th>კურიერი</th>
+            <th>სტატუსი</th>
+            ${includePartner ? "<th>ლოკაცია</th>" : ""}
+            <th>ქეში</th>
+            <th>თარიღი</th>
             ${includeActions ? "<th></th>" : ""}
           </tr>
         </thead>
@@ -183,13 +232,13 @@ function renderPartnerOrderTable(orders, options = {}) {
               <td>${escapeHtml(String(order.id || "").slice(0, 8))}</td>
               ${includePartner ? `<td><span class="partner-tag">${escapeHtml(orderPartnerName(order))}</span></td>` : ""}
               <td>${escapeHtml(order.fullName || "")}</td>
-              <td>${escapeHtml(order.address || "")}</td>
+              <td>${escapeHtml(order.address || order.fullAddress || "")}</td>
               <td>${escapeHtml(parcelCourierDisplayName(order))}</td>
               <td><span class="history-status status-${escapeAttr(order.status || "pending")}">${escapeHtml(getPartnerOrderStatusLabel(order))}</span></td>
               ${includePartner ? `<td><span class="partner-tag location-${escapeAttr(order.locationAccuracy || "missing")}">${escapeHtml(getOrderLocationLabel(order))}</span></td>` : ""}
               <td>${escapeHtml(formatMoney(getPaymentAmount(order)))}</td>
               <td>${escapeHtml(formatOptionalDateTime(order.createdAt))}</td>
-              ${includeActions ? `<td><button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "Set Pin"}</button></td>` : ""}
+              ${includeActions ? `<td><button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "პინის დასმა"}</button></td>` : ""}
             </tr>
           `).join("")}
         </tbody>
@@ -205,9 +254,9 @@ function hasOrderLocation(order) {
 
 
 function getOrderLocationLabel(order) {
-  if (!hasOrderLocation(order) || order.locationAccuracy === "missing") return "Location needs admin correction";
-  if (order.locationAccuracy === "confirmed") return "Confirmed";
-  return "Approximate";
+  if (!hasOrderLocation(order) || order.locationAccuracy === "missing") return "საჭიროა ლოკაციის გასწორება";
+  if (order.locationAccuracy === "confirmed") return "დადასტურებული";
+  return "მიახლოებითი";
 }
 
 
@@ -262,9 +311,7 @@ async function savePartnerOrder() {
     return;
   }
 
-  const address = [city, district, street]
-    .filter(Boolean)
-    .join(", ");
+  const address = [city, district, street].filter(Boolean).join(", ");
 
   try {
     await api("/api/parcels", {
@@ -282,17 +329,21 @@ async function savePartnerOrder() {
 
 async function openPartnerManagement() {
   const partners = await getPartners();
-  state.partnerCashRecords = await getAllPartnerCashRecords();
+  const [records] = await Promise.all([
+    getAllPartnerCashRecords(),
+    loadPartnerCashAdjustments(),
+  ]);
+  state.partnerCashRecords = records;
   const body = `
     <div class="partner-panel-head">
-      <h2>Partners</h2>
+      <h2>პარტნიორები</h2>
       <button class="button primary" type="button" data-action="createPartner">დამატება</button>
     </div>
     <div class="finance-card-list admin-user-list">
       ${partners.map(renderPartnerCard).join("") || "<div class=\"history-empty history-empty-card\">პარტნიორი ჯერ არ არის</div>"}
     </div>
   `;
-  showDialog("Partners", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+  showDialog("პარტნიორები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
 
 
@@ -302,13 +353,14 @@ function renderPartnerCard(partner) {
   return `
     <article class="finance-card finance-static-card admin-user-card">
       <span class="admin-user-name">${escapeHtml(partnerName(partner))}</span>
-      <small>login: ${escapeHtml(partner.username)}</small>
+      <small>ლოგინი: ${escapeHtml(partner.username)}</small>
       <small>კომპანიისთვის მისაცემი ქეში: ${escapeHtml(formatMoney(cash.cashDue))}</small>
+      <small>კორექტირება: ${escapeHtml(formatMoney(cash.adjustmentTotal))}</small>
       <small>მოლოდინში ქეში: ${escapeHtml(formatMoney(cash.pendingCash))}</small>
       <small>კონტაქტი: ${escapeHtml(partner.contactPerson || "არ არის")}</small>
       <small>ტელეფონი: ${escapeHtml(partner.phone || "არ არის")}</small>
       <small>შექმნა: ${escapeHtml(formatOptionalDateTime(partner.createdAt))}</small>
-      <small>სტატუსი: ${active ? "active" : "inactive"}</small>
+      <small>სტატუსი: ${active ? "აქტიური" : "არააქტიური"}</small>
       <div class="row-actions admin-user-actions">
         <button class="mini-button" type="button" data-action="adjustPartnerCash" data-value="${escapeAttr(partner.username)}">ქეში</button>
         <button class="mini-button" type="button" data-action="editPartner" data-value="${escapeAttr(partner.username)}">რედაქტირება</button>
@@ -324,6 +376,7 @@ async function openPartnerCashAdjustmentDialog(username) {
   const [partners, records] = await Promise.all([
     getPartners(),
     getAllPartnerCashRecords(),
+    loadPartnerCashAdjustments(),
   ]);
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
@@ -371,6 +424,7 @@ async function addPartnerCashAdjustment(username, targetAmount) {
   const [partners, records] = await Promise.all([
     getPartners(),
     getAllPartnerCashRecords(),
+    loadPartnerCashAdjustments(),
   ]);
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
@@ -393,11 +447,11 @@ async function addPartnerCashAdjustment(username, targetAmount) {
     category: "partnerCash",
     dateKey: toDateKey(new Date()),
     date: toDateKey(new Date()),
-    note: "partner cash correction",
+    note: "პარტნიორის ქეშის კორექტირება",
     timestamp: now,
     createdAt: now,
   };
-  writePartnerCashAdjustments([...readPartnerCashAdjustments(), adjustment]);
+  await savePartnerCashAdjustmentToServer(adjustment);
 }
 
 
@@ -410,7 +464,7 @@ async function openPartnerEditDialog(username) {
   const partner = username ? (await getPartners()).find((item) => item.username === username) : {};
   if (username && !partner) return;
   const body = renderPartnerForm(partner);
-  showDialog(username ? "Partner edit" : "New partner", body, [
+  showDialog(username ? "პარტნიორის რედაქტირება" : "ახალი პარტნიორი", body, [
     { label: "შენახვა", variant: "primary", action: () => savePartner(username) },
     { label: "უკან", variant: "secondary", action: openPartnerManagement },
   ]);
@@ -419,20 +473,20 @@ async function openPartnerEditDialog(username) {
 
 function renderPartnerForm(partner = {}) {
   return `
-    <label for="partnerCompanyName">Company/business name</label>
+    <label for="partnerCompanyName">კომპანიის/ბიზნესის სახელი</label>
     <input id="partnerCompanyName" type="text" value="${escapeAttr(partner.companyName || "")}">
-    <label for="partnerContactPerson">Contact person</label>
+    <label for="partnerContactPerson">საკონტაქტო პირი</label>
     <input id="partnerContactPerson" type="text" value="${escapeAttr(partner.contactPerson || "")}">
-    <label for="partnerPhone">Phone number</label>
+    <label for="partnerPhone">ტელეფონის ნომერი</label>
     <input id="partnerPhone" type="tel" value="${escapeAttr(partner.phone || "")}">
-    <label for="partnerUsername">Email/login</label>
+    <label for="partnerUsername">ელ-ფოსტა / ლოგინი</label>
     <input id="partnerUsername" type="email" autocomplete="username" value="${escapeAttr(partner.username || "")}" ${partner.username ? "disabled" : ""}>
-    <label for="partnerPassword">Password</label>
+    <label for="partnerPassword">პაროლი</label>
     <input id="partnerPassword" type="password" autocomplete="new-password" placeholder="${partner.username ? "ცარიელი დატოვე თუ არ იცვლება" : ""}">
-    <label for="partnerStatus">Status</label>
+    <label for="partnerStatus">სტატუსი</label>
     <select id="partnerStatus">
-      <option value="active" ${partner.status !== "inactive" ? "selected" : ""}>Active</option>
-      <option value="inactive" ${partner.status === "inactive" ? "selected" : ""}>Inactive</option>
+      <option value="active" ${partner.status !== "inactive" ? "selected" : ""}>აქტიური</option>
+      <option value="inactive" ${partner.status === "inactive" ? "selected" : ""}>არააქტიური</option>
     </select>
     <p class="form-message" id="partnerFormMessage" role="alert"></p>
   `;
@@ -484,7 +538,7 @@ async function openAdminPartnerOrders(partnerId = "") {
   const partnerOptions = partners.map((partner) => `<option value="${escapeAttr(partner.id)}" ${partner.id === partnerId ? "selected" : ""}>${escapeHtml(partnerName(partner))}</option>`).join("");
   const body = `
     <div class="partner-panel-head">
-      <h2>Partner orders</h2>
+      <h2>პარტნიორის შეკვეთები</h2>
       <div class="partner-filter-row">
         <select id="adminPartnerOrdersFilter">
           <option value="">ყველა პარტნიორი</option>
@@ -495,7 +549,7 @@ async function openAdminPartnerOrders(partnerId = "") {
     </div>
     ${renderPartnerOrderTable(orders, { includePartner: true, includeActions: true })}
   `;
-  showDialog("Partner orders", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+  showDialog("პარტნიორის შეკვეთები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
 
 
@@ -503,9 +557,9 @@ async function openPartnerOrderAssignDialog(parcelId) {
   const orders = state.activePins.length ? state.activePins : (await api("/api/parcels")).parcels;
   const order = orders.find((item) => item.id === parcelId);
   if (order && !hasOrderLocation(order)) {
-    showDialog("Location required", `<p>Location not found. Please set pin manually before assigning courier.</p><p>${escapeHtml(order.fullAddress || order.address || "")}</p>`, [
-      { label: "Set Pin", variant: "primary", action: () => { closeDialog(); showSelectedParcelCard(parcelId, { focus: true }); startParcelLocationEdit(parcelId); } },
-      { label: "Back", variant: "secondary", action: openAdminPartnerOrders },
+    showDialog("ლოკაცია აუცილებელია", `<p>ლოკაცია ვერ მოიძებნა. კურიერის მიბმამდე პინი ხელით დასვით.</p><p>${escapeHtml(order.fullAddress || order.address || "")}</p>`, [
+      { label: "პინის დასმა", variant: "primary", action: () => { closeDialog(); showSelectedParcelCard(parcelId, { focus: true }); startParcelLocationEdit(parcelId); } },
+      { label: "უკან", variant: "secondary", action: openAdminPartnerOrders },
     ]);
     return;
   }
