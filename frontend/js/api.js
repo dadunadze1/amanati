@@ -56,6 +56,7 @@ async function loadStaticBootstrap() {
   }
 
   loadStaticBootstrap.cache = normalizeStaticStore(mergeStaticStores(...stores));
+  await backfillStaticPartnerOrderLocations(loadStaticBootstrap.cache);
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
   saveStaticBootstrap();
   startStaticRealtimeSync();
@@ -270,11 +271,17 @@ function startStaticRealtimeSync() {
   });
 }
 
-function applyFirebaseStaticStoreUpdate(store) {
+async function applyFirebaseStaticStoreUpdate(store) {
   if (!store || typeof store !== "object") return;
   const normalizedStore = normalizeStaticStore(mergeStaticStores(loadStaticBootstrap.cache, store));
+  const backfilled = await backfillStaticPartnerOrderLocations(normalizedStore);
   loadStaticBootstrap.cache = normalizedStore;
   saveData(STATIC_DEPLOY_STORAGE_KEY, normalizedStore);
+  if (backfilled && typeof saveFirebaseStaticStore === "function") {
+    saveFirebaseStaticStore(normalizedStore).catch((error) => {
+      console.warn("Firebase static store save failed", error);
+    });
+  }
   hydrateStaticFinanceStorage(normalizedStore.financeData);
 
   if (!state.currentUser || !state.map || typeof refreshPins !== "function") return;
@@ -413,11 +420,44 @@ function buildStaticNominatimQuery(value) {
   return `${normalized}, Tbilisi, Georgia`;
 }
 
+function stripStaticPartnerAddressNoise(value) {
+  return normalizeStaticGeocodeQuery(value)
+    .replace(/\b(?:building|floor|apt|apartment|block|entrance)\s*[:#№-]?\s*[\wა-ჰ/-]+/gi, " ")
+    .replace(/\b(?:შენობა|სართული|ბინა|კორპუსი|სადარბაზო)\s*[:#№-]?\s*[\wა-ჰ/-]+/gi, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/\s+/g, " ")
+    .replace(/^[,\s]+|[,\s]+$/g, "");
+}
+
+function extractStaticPartnerBuilding(body) {
+  const direct = stripStaticPartnerAddressNoise(body.building || body.buildingNumber);
+  if (direct) return direct;
+  const source = String(body.address || body.fullAddress || "");
+  const match = source.match(/\b(?:building|შენობა|კორპუსი)\s*[:#№-]?\s*([\wა-ჰ/-]+)/i);
+  return match ? stripStaticPartnerAddressNoise(match[1]) : "";
+}
+
+function extractStaticPartnerStreet(body) {
+  const direct = stripStaticPartnerAddressNoise(body.streetAddress || body.street);
+  if (direct) return direct;
+
+  const source = String(body.fullAddress || body.address || "");
+  const cityToken = normalizeStaticAddressLookupToken(body.city);
+  const districtToken = normalizeStaticAddressLookupToken(body.district || body.area);
+  const parts = source.split(",").map(stripStaticPartnerAddressNoise).filter(Boolean);
+  const streetPart = parts.find((part) => {
+    const token = normalizeStaticAddressLookupToken(part);
+    return token && token !== cityToken && token !== districtToken && !/^(building|floor|apt|apartment|შენობა|სართული|ბინა)\b/i.test(part);
+  });
+  return streetPart || stripStaticPartnerAddressNoise(source);
+}
+
 async function geocodeStaticPartnerOrder(body) {
-  const city = body.city || "Tbilisi";
-  const district = body.district || body.area || "";
-  const street = body.streetAddress || body.street || body.address || "";
-  const building = body.building || "";
+  const city = stripStaticPartnerAddressNoise(body.city || "Tbilisi");
+  const district = stripStaticPartnerAddressNoise(body.district || body.area || "");
+  const street = extractStaticPartnerStreet(body);
+  const building = extractStaticPartnerBuilding(body);
   const variants = [
     [city, district, [street, building].filter(Boolean).join(" ")].filter(Boolean).join(", "),
     [city, district, street].filter(Boolean).join(", "),
@@ -467,6 +507,10 @@ function localStaticPartnerAddressFallback(street, building) {
     { tokens: ["university", "უნივერსიტეტის"], base: { lat: 41.7206, lng: 44.7219 }, step: { lat: 0.00001, lng: 0.00002 } },
     { tokens: ["abashidze", "აბაშიძე", "აბაშიძის"], base: { lat: 41.70717, lng: 44.77018 }, step: { lat: 0.000015, lng: -0.000035 } },
     { tokens: ["sairme", "საირმე", "საირმის"], base: { lat: 41.7190, lng: 44.7500 }, step: { lat: 0.000010, lng: 0.000020 } },
+    { tokens: ["paliashvili", "ფალიაშვილი", "ფალიაშვილის"], base: { lat: 41.71001, lng: 44.75489 }, step: { lat: -0.000010, lng: 0.000020 } },
+    { tokens: ["tsintsadze", "ცინცაძე", "ცინცაძის"], base: { lat: 41.72166, lng: 44.76621 }, step: { lat: -0.000015, lng: -0.000010 } },
+    { tokens: ["taqtakishvili", "taktakishvili", "თაქთაქიშვილი", "თაქთაქიშვილის"], base: { lat: 41.70819, lng: 44.76478 }, step: { lat: 0.000010, lng: -0.000010 } },
+    { tokens: ["rustaveli", "რუსთაველი", "რუსთაველის"], base: { lat: 41.70077, lng: 44.79561 }, step: { lat: 0.000010, lng: -0.000015 } },
   ];
   const match = known.find((item) => item.tokens.some((itemToken) => token.includes(normalizeStaticAddressLookupToken(itemToken))));
   if (!match) return null;
@@ -487,6 +531,37 @@ function normalizeStaticAddressLookupToken(value) {
     .replace(/\d+[a-zა-ჰ/-]*/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isStaticPartnerParcel(parcel) {
+  return Boolean(parcel?.partnerId || parcel?.partnerUsername || parcel?.createdByRole === "partner");
+}
+
+function hasStaticParcelCoords(parcel) {
+  return Number.isFinite(Number(parcel?.lat ?? parcel?.latitude)) && Number.isFinite(Number(parcel?.lng ?? parcel?.longitude));
+}
+
+async function backfillStaticPartnerOrderLocations(store) {
+  if (!store || !Array.isArray(store.parcels)) return false;
+  let changed = false;
+  for (const parcel of store.parcels) {
+    if (!parcel || parcel.archivedAt || !isStaticPartnerParcel(parcel) || hasStaticParcelCoords(parcel)) continue;
+    const geocoded = await geocodeStaticPartnerOrder(parcel);
+    if (!geocoded) continue;
+
+    const now = new Date().toISOString();
+    parcel.lat = geocoded.lat;
+    parcel.lng = geocoded.lng;
+    parcel.latitude = geocoded.lat;
+    parcel.longitude = geocoded.lng;
+    parcel.locationAccuracy = "approximate";
+    parcel.locationSource = "partner_address_geocoded_backfill";
+    parcel.locationConfirmedByAdmin = false;
+    parcel.locationUpdatedAt = now;
+    parcel.updatedAt = now;
+    changed = true;
+  }
+  return changed;
 }
 
 function saveStaticSession(user) {
@@ -772,22 +847,22 @@ async function staticApi(path, options = {}) {
     const latValue = Number(body.lat ?? body.latitude ?? geocoded?.lat);
     const lngValue = Number(body.lng ?? body.longitude ?? geocoded?.lng);
     const hasCoords = Number.isFinite(latValue) && Number.isFinite(lngValue);
-    const fullAddress = body.fullAddress || body.address || [body.city, body.district || body.area, body.streetAddress || body.street, body.building].filter(Boolean).join(", ");
+    const fullAddress = stripStaticPartnerAddressNoise(body.fullAddress || body.address || [body.city, body.district || body.area, body.streetAddress || body.street].filter(Boolean).join(", "));
     const parcel = {
       id: `parcel-${Date.now()}`,
       courierUsername: body.courierUsername || "",
       ...(hasCoords ? { lat: latValue, lng: lngValue, latitude: latValue, longitude: lngValue } : {}),
-      address: body.address || fullAddress,
+      address: state.isPartner ? fullAddress : body.address || fullAddress,
       fullAddress,
       fullName: body.fullName || "",
       phone: body.phone || "",
-      city: body.city || "",
-      district: body.district || body.area || "",
-      streetAddress: body.streetAddress || body.street || body.address || "",
-      building: body.building || "",
-      floor: body.floor || "",
-      apartment: body.apartment || "",
-      comment: body.comment || body.notes || "",
+      city: stripStaticPartnerAddressNoise(body.city || ""),
+      district: stripStaticPartnerAddressNoise(body.district || body.area || ""),
+      streetAddress: extractStaticPartnerStreet(body),
+      building: state.isPartner ? "" : extractStaticPartnerBuilding(body),
+      floor: state.isPartner ? "" : body.floor || "",
+      apartment: state.isPartner ? "" : body.apartment || "",
+      comment: state.isPartner ? "" : body.comment || body.notes || "",
       partnerId: partner?.id || "",
       partnerName: partner?.companyName || partner?.contactPerson || partner?.username || "",
       partnerUsername: partner?.username || "",

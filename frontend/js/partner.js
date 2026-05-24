@@ -150,25 +150,16 @@ async function openPartnerOrdersDialog() {
 function openPartnerNewOrderDialog() {
   const body = `
     <form id="partnerOrderForm" class="partner-form">
-      <label for="partnerOrderCity">City</label>
+      <label for="partnerOrderCity">ქალაქი</label>
       <input id="partnerOrderCity" type="text" autocomplete="address-level2" required>
-      <label for="partnerOrderDistrict">District/Area</label>
+      <label for="partnerOrderDistrict">რაიონი</label>
       <input id="partnerOrderDistrict" type="text" autocomplete="address-level3" required>
-      <label for="partnerOrderAddress">Street Address</label>
+      <label for="partnerOrderAddress">ქუჩის სახელი</label>
       <input id="partnerOrderAddress" type="text" autocomplete="street-address" required>
-      <div class="partner-form-grid">
-        <label>Building <input id="partnerOrderBuilding" type="text"></label>
-        <label>Floor <input id="partnerOrderFloor" type="text"></label>
-        <label>Apartment <input id="partnerOrderApartment" type="text"></label>
-      </div>
-      <label for="partnerOrderName">Customer Full Name</label>
+      <label for="partnerOrderName">მომხმარებლის სახელი</label>
       <input id="partnerOrderName" type="text" autocomplete="name" required>
-      <label for="partnerOrderPhone">Mobile Number</label>
+      <label for="partnerOrderPhone">მომხმარებლის ნომერი</label>
       <input id="partnerOrderPhone" type="tel" autocomplete="tel" required>
-      <label for="partnerOrderCod">COD Amount</label>
-      <input id="partnerOrderCod" type="text" inputmode="decimal" autocomplete="off" value="0">
-      <label for="partnerOrderComment">Comment/Notes</label>
-      <textarea id="partnerOrderComment" rows="3"></textarea>
       <p class="form-message" id="partnerOrderMessage" role="alert"></p>
     </form>
   `;
@@ -186,7 +177,7 @@ async function savePartnerOrder() {
   const street = document.getElementById("partnerOrderAddress")?.value.trim();
   const fullName = document.getElementById("partnerOrderName")?.value.trim();
   const phone = document.getElementById("partnerOrderPhone")?.value.trim();
-  const paymentAmount = parsePaymentAmount(document.getElementById("partnerOrderCod")?.value);
+  const paymentAmount = 0;
   if (!city || !district || !street || !fullName || !phone) {
     if (message) message.textContent = STRINGS.emptyFields;
     return;
@@ -196,18 +187,14 @@ async function savePartnerOrder() {
     return;
   }
 
-  const building = document.getElementById("partnerOrderBuilding")?.value.trim();
-  const floor = document.getElementById("partnerOrderFloor")?.value.trim();
-  const apartment = document.getElementById("partnerOrderApartment")?.value.trim();
-  const comment = document.getElementById("partnerOrderComment")?.value.trim();
-  const address = [city, district, street, building ? `Building ${building}` : "", floor ? `Floor ${floor}` : "", apartment ? `Apt ${apartment}` : ""]
+  const address = [city, district, street]
     .filter(Boolean)
     .join(", ");
 
   try {
     await api("/api/parcels", {
       method: "POST",
-      body: { city, district, streetAddress: street, address, fullAddress: address, building, floor, apartment, fullName, phone, comment, paymentAmount },
+      body: { city, district, streetAddress: street, address, fullAddress: address, fullName, phone, paymentAmount },
     });
     closeDialog();
     await refreshPins();

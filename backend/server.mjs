@@ -225,19 +225,52 @@ function cleanAddressPart(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
+function stripPartnerAddressNoise(value) {
+  return cleanAddressPart(value)
+    .replace(/\b(?:building|floor|apt|apartment|block|entrance)\s*[:#№-]?\s*[\wა-ჰ/-]+/gi, " ")
+    .replace(/\b(?:შენობა|სართული|ბინა|კორპუსი|სადარბაზო)\s*[:#№-]?\s*[\wა-ჰ/-]+/gi, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/\s+/g, " ")
+    .replace(/^[,\s]+|[,\s]+$/g, "");
+}
+
+function extractPartnerBuilding(body) {
+  const direct = cleanAddressPart(body.building || body.buildingNumber);
+  if (direct) return direct;
+  const source = cleanAddressPart(body.address || body.fullAddress);
+  const match = source.match(/\b(?:building|შენობა|კორპუსი)\s*[:#№-]?\s*([\wა-ჰ/-]+)/i);
+  return match ? cleanAddressPart(match[1]) : "";
+}
+
+function extractPartnerStreetAddress(body) {
+  const direct = stripPartnerAddressNoise(body.streetAddress || body.street);
+  if (direct) return direct;
+
+  const source = cleanAddressPart(body.fullAddress || body.address);
+  const cityToken = normalizeAddressLookupToken(body.city);
+  const districtToken = normalizeAddressLookupToken(body.district || body.area);
+  const parts = source.split(",").map(stripPartnerAddressNoise).filter(Boolean);
+  const streetPart = parts.find((part) => {
+    const token = normalizeAddressLookupToken(part);
+    return token && token !== cityToken && token !== districtToken && !/^(building|floor|apt|apartment|შენობა|სართული|ბინა)\b/i.test(part);
+  });
+  return streetPart || stripPartnerAddressNoise(source);
+}
+
 function buildPartnerFullAddress(body) {
-  const city = cleanAddressPart(body.city);
-  const district = cleanAddressPart(body.district || body.area);
-  const streetAddress = cleanAddressPart(body.streetAddress || body.street || body.address);
-  const building = cleanAddressPart(body.building || body.buildingNumber);
+  const city = stripPartnerAddressNoise(body.city);
+  const district = stripPartnerAddressNoise(body.district || body.area);
+  const streetAddress = extractPartnerStreetAddress(body);
+  const building = extractPartnerBuilding(body);
   return [city, district, [streetAddress, building].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 }
 
 async function geocodePartnerAddress(body) {
-  const city = cleanAddressPart(body.city || "Tbilisi");
-  const district = cleanAddressPart(body.district || body.area);
-  const streetAddress = cleanAddressPart(body.streetAddress || body.street || body.address);
-  const building = cleanAddressPart(body.building || body.buildingNumber);
+  const city = stripPartnerAddressNoise(body.city || "Tbilisi");
+  const district = stripPartnerAddressNoise(body.district || body.area);
+  const streetAddress = extractPartnerStreetAddress(body);
+  const building = extractPartnerBuilding(body);
   const streetWithBuilding = [streetAddress, building].filter(Boolean).join(" ");
   const variants = [
     [city, district, streetWithBuilding].filter(Boolean).join(", "),
@@ -317,6 +350,10 @@ function localPartnerAddressFallback({ streetAddress, building }) {
     { tokens: ["university", "უნივერსიტეტის"], base: { lat: 41.7206, lng: 44.7219 }, step: { lat: 0.00001, lng: 0.00002 } },
     { tokens: ["abashidze", "აბაშიძე", "აბაშიძის"], base: { lat: 41.70717, lng: 44.77018 }, step: { lat: 0.000015, lng: -0.000035 } },
     { tokens: ["sairme", "საირმე", "საირმის"], base: { lat: 41.7190, lng: 44.7500 }, step: { lat: 0.000010, lng: 0.000020 } },
+    { tokens: ["paliashvili", "ფალიაშვილი", "ფალიაშვილის"], base: { lat: 41.71001, lng: 44.75489 }, step: { lat: -0.000010, lng: 0.000020 } },
+    { tokens: ["tsintsadze", "ცინცაძე", "ცინცაძის"], base: { lat: 41.72166, lng: 44.76621 }, step: { lat: -0.000015, lng: -0.000010 } },
+    { tokens: ["taqtakishvili", "taktakishvili", "თაქთაქიშვილი", "თაქთაქიშვილის"], base: { lat: 41.70819, lng: 44.76478 }, step: { lat: 0.000010, lng: -0.000010 } },
+    { tokens: ["rustaveli", "რუსთაველი", "რუსთაველის"], base: { lat: 41.70077, lng: 44.79561 }, step: { lat: 0.000010, lng: -0.000015 } },
   ];
   const street = knownStreets.find((item) => item.tokens.some((itemToken) => token.includes(normalizeAddressLookupToken(itemToken))));
   if (!street) return null;
@@ -337,6 +374,42 @@ function normalizeAddressLookupToken(value) {
     .replace(/\d+[a-zა-ჰ/-]*/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isPartnerParcel(parcel) {
+  return Boolean(parcel?.partnerId || parcel?.partnerUsername || parcel?.createdByRole === "partner");
+}
+
+function hasParcelCoords(parcel) {
+  return Number.isFinite(Number(parcel?.lat ?? parcel?.latitude)) && Number.isFinite(Number(parcel?.lng ?? parcel?.longitude));
+}
+
+async function backfillPartnerParcelLocations(db) {
+  let changed = false;
+  for (const parcel of db.parcels) {
+    if (!parcel || parcel.archivedAt || !isPartnerParcel(parcel) || hasParcelCoords(parcel)) continue;
+    const geocoded = await geocodePartnerAddress(parcel);
+    if (!geocoded) continue;
+
+    const now = new Date().toISOString();
+    parcel.lat = geocoded.lat;
+    parcel.lng = geocoded.lng;
+    parcel.latitude = geocoded.lat;
+    parcel.longitude = geocoded.lng;
+    parcel.locationAccuracy = "approximate";
+    parcel.locationSource = "partner_address_geocoded_backfill";
+    parcel.locationConfirmedByAdmin = false;
+    parcel.locationUpdatedAt = now;
+    parcel.updatedAt = now;
+    const detectedZone = detectTbilisiZone(geocoded);
+    if (detectedZone) {
+      parcel.zoneId = parcel.zoneId || detectedZone.id;
+      parcel.zoneName = parcel.zoneName || detectedZone.name;
+    }
+    changed = true;
+  }
+  if (changed) await writeDb(db);
+  return changed;
 }
 
 function isCompletedParcel(parcel) {
@@ -935,6 +1008,7 @@ async function handleApi(request, response, url) {
 
   if (method === "GET" && path === "/api/parcels") {
     const session = requireSession(request);
+    await backfillPartnerParcelLocations(db);
     const partnerId = String(url.searchParams.get("partnerId") || "").trim();
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
@@ -967,7 +1041,7 @@ async function handleApi(request, response, url) {
     let lat = Number(body.lat ?? body.latitude);
     let lng = Number(body.lng ?? body.longitude);
     const fullAddress = cleanAddressPart(body.fullAddress || buildPartnerFullAddress(body) || body.address);
-    const address = cleanAddressPart(body.address || fullAddress);
+    const address = stripPartnerAddressNoise(body.address || fullAddress);
     const paymentAmount = cleanPaymentAmount(body.paymentAmount ?? body.payment ?? body.cashAmount);
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const selectedPartner = session.role === "partner"
@@ -1018,13 +1092,13 @@ async function handleApi(request, response, url) {
       fullAddress: fullAddress || address,
       fullName,
       phone,
-      city: cleanAddressPart(body.city),
-      district: cleanAddressPart(body.district || body.area),
-      streetAddress: cleanAddressPart(body.streetAddress || body.street || body.address),
-      building: cleanAddressPart(body.building || body.buildingNumber),
-      floor: String(body.floor || "").trim(),
-      apartment: String(body.apartment || "").trim(),
-      comment: String(body.comment || body.notes || "").trim(),
+      city: stripPartnerAddressNoise(body.city),
+      district: stripPartnerAddressNoise(body.district || body.area),
+      streetAddress: extractPartnerStreetAddress(body),
+      building: session.role === "partner" ? "" : extractPartnerBuilding(body),
+      floor: session.role === "partner" ? "" : String(body.floor || "").trim(),
+      apartment: session.role === "partner" ? "" : String(body.apartment || "").trim(),
+      comment: session.role === "partner" ? "" : String(body.comment || body.notes || "").trim(),
       locationAccuracy,
       locationSource,
       locationConfirmedByAdmin: locationAccuracy === "confirmed",
