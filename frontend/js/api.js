@@ -119,7 +119,7 @@ function normalizeStaticUsers(store) {
 
 function normalizeStaticUser(user, options = {}) {
   if (!user || typeof user !== "object") return null;
-  const role = user.role === "admin" ? "admin" : "courier";
+  const role = user.role === "admin" ? "admin" : user.role === "partner" ? "partner" : "courier";
   const activatePendingCouriers = options.activatePendingCouriers !== false;
   const status = role === "courier" && activatePendingCouriers && user.status === "pending" ? "active" : user.status || "active";
   const normalizedUsername = normalizeUsername(user.username);
@@ -359,6 +359,8 @@ function publicStaticUser(user) {
     username: user.username,
     role: user.role || "courier",
     status: user.status || "active",
+    companyName: user.companyName || "",
+    contactPerson: user.contactPerson || "",
     firstName: user.firstName || "",
     lastName: user.lastName || "",
     phone: user.phone || "",
@@ -493,6 +495,10 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/users") return { users: store.users.map(publicStaticUser) };
 
+  if (method === "GET" && apiPath === "/api/partners") {
+    return { partners: store.users.filter((user) => user.role === "partner").map(publicStaticUser) };
+  }
+
   if (method === "GET" && apiPath === "/api/couriers") {
     return { couriers: store.users.filter((user) => user.role === "courier" && user.status === "active").map(publicStaticUser) };
   }
@@ -503,9 +509,15 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/parcels") {
     const courier = url.searchParams.get("courier") || "";
+    const partnerId = url.searchParams.get("partnerId") || "";
     return {
       parcels: store.parcels
-        .filter((parcel) => !parcel.archivedAt && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier)))
+        .filter((parcel) => {
+          if (parcel.archivedAt) return false;
+          if (state.isPartner) return parcel.partnerId === state.currentUserProfile?.id;
+          if (partnerId && parcel.partnerId !== partnerId) return false;
+          return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
+        })
         .map((parcel) => publicStaticParcel(store, parcel)),
     };
   }
@@ -581,6 +593,26 @@ async function staticApi(path, options = {}) {
     return { user: publicStaticUser(user) };
   }
 
+  if (method === "POST" && apiPath === "/api/partners") {
+    const now = new Date().toISOString();
+    const user = {
+      id: `partner-${Date.now()}`,
+      username: body.username || body.email || "",
+      password: body.password || "",
+      role: "partner",
+      status: body.status === "inactive" ? "inactive" : "active",
+      companyName: body.companyName || "",
+      contactPerson: body.contactPerson || "",
+      firstName: body.contactPerson || "",
+      phone: body.phone || "",
+      createdAt: now,
+      updatedAt: now,
+    };
+    store.users.push(user);
+    saveStaticBootstrap();
+    return { partner: publicStaticUser(user) };
+  }
+
   const pendingMatch = apiPath.match(/^\/api\/pending\/([^/]+)$/);
   if (pendingMatch && method === "POST") {
     const username = decodeURIComponent(pendingMatch[1]);
@@ -600,6 +632,25 @@ async function staticApi(path, options = {}) {
   }
 
   const userMatch = apiPath.match(/^\/api\/users\/([^/]+)$/);
+  const partnerMatch = apiPath.match(/^\/api\/partners\/([^/]+)$/);
+  if (partnerMatch && method === "PUT") {
+    const username = decodeURIComponent(partnerMatch[1]);
+    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username) && item.role === "partner");
+    if (user) {
+      Object.assign(user, {
+        companyName: body.companyName || user.companyName || "",
+        contactPerson: body.contactPerson || user.contactPerson || "",
+        firstName: body.contactPerson || user.contactPerson || "",
+        phone: body.phone || user.phone || "",
+        status: body.status === "inactive" ? "inactive" : "active",
+        updatedAt: new Date().toISOString(),
+      });
+      if (body.password) user.password = body.password;
+    }
+    saveStaticBootstrap();
+    return { partner: user ? publicStaticUser(user) : null };
+  }
+
   if (userMatch && method === "PUT") {
     const username = decodeURIComponent(userMatch[1]);
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
@@ -636,16 +687,30 @@ async function staticApi(path, options = {}) {
 
   if (method === "POST" && apiPath === "/api/parcels") {
     const now = new Date().toISOString();
+    const partner = state.isPartner
+      ? store.users.find((user) => user.id === state.currentUserProfile?.id)
+      : store.users.find((user) => user.role === "partner" && (user.id === body.partnerId || normalizeUsername(user.username) === normalizeUsername(body.partnerUsername)));
+    const hasCoords = Number.isFinite(Number(body.lat)) && Number.isFinite(Number(body.lng));
     const parcel = {
       id: `parcel-${Date.now()}`,
       courierUsername: body.courierUsername || "",
-      lat: Number(body.lat),
-      lng: Number(body.lng),
+      ...(hasCoords ? { lat: Number(body.lat), lng: Number(body.lng) } : {}),
       address: body.address || "",
       fullName: body.fullName || "",
       phone: body.phone || "",
+      city: body.city || "",
+      district: body.district || body.area || "",
+      building: body.building || "",
+      floor: body.floor || "",
+      apartment: body.apartment || "",
+      comment: body.comment || body.notes || "",
+      partnerId: partner?.id || "",
+      partnerName: partner?.companyName || partner?.contactPerson || partner?.username || "",
+      partnerUsername: partner?.username || "",
+      createdByRole: state.isPartner ? "partner" : "admin",
       paymentAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       cashAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
+      codAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       zoneId: body.zoneId || "",
       zoneName: body.zoneName || "",
       autoAssigned: Boolean(body.autoAssigned),
@@ -675,6 +740,7 @@ async function staticApi(path, options = {}) {
   if (statusMatch && method === "PATCH") {
     const parcel = store.parcels.find((item) => item.id === decodeURIComponent(statusMatch[1]));
     if (!parcel) return { ok: false };
+    if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("Failure reason is required.");
     const now = new Date().toISOString();
     parcel.status = body.status || parcel.status;
     parcel.updatedAt = now;
@@ -783,6 +849,11 @@ async function getCouriers() {
 
 async function getUsers() {
   return applyLocalZoneAssignments((await api("/api/users")).users);
+}
+
+async function getPartners() {
+  const payload = await api("/api/partners");
+  return Array.isArray(payload.partners) ? payload.partners : [];
 }
 
 async function getPending() {

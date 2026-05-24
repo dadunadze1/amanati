@@ -37,11 +37,12 @@ async function refreshPinsOnce() {
     hideSelectedParcelCard();
     await renderCourierStatsCard([]);
     await renderAdminDashboard([]);
+    await renderPartnerDashboard([]);
     await renderCourierMobileDashboard([]);
     return;
   }
 
-  const pins = await getPins(state.isAdmin ? "" : state.currentUser);
+  const pins = await getPins(state.isAdmin || state.isPartner ? "" : state.currentUser);
   pins.forEach((pin) => {
     const cachedAddress = getCachedParcelAddress(pin.id);
     const storedAddress = getStoredParcelAddress(pin);
@@ -54,6 +55,7 @@ async function refreshPinsOnce() {
   hydratePinAddresses(pins);
   await renderCourierStatsCard(pins);
   await renderAdminDashboard(pins);
+  await renderPartnerDashboard(pins);
   await renderCourierMobileDashboard(pins);
   if (state.routePinId && !pins.some((pin) => pin.id === state.routePinId)) clearActiveRoute();
   clearHistoryPreviewMarker();
@@ -225,7 +227,12 @@ async function openParcelDetailsDialog() {
   const address = getPendingAddressLabel();
   const previewAddress = getPendingAddressPreviewLabel();
   const couriers = state.isAdmin ? await getCouriers() : [];
+  const partners = state.isAdmin ? await getPartners().catch(() => []) : [];
   const courierOptions = couriers.map((user) => `<option value="${escapeAttr(user.username)}" ${state.selectedCourier === user.username ? "selected" : ""}>${escapeHtml(userDisplayName(user))}</option>`).join("");
+  const partnerOptions = partners
+    .filter((partner) => partner.status === "active")
+    .map((partner) => `<option value="${escapeAttr(partner.id)}">${escapeHtml(userDisplayName(partner))}</option>`)
+    .join("");
   const body = `
     <div class="parcel-address-preview">
       <span>არჩეული მისამართი</span>
@@ -246,6 +253,11 @@ async function openParcelDetailsDialog() {
     <label for="parcelPaymentAmount">ქეში</label>
     <input id="parcelPaymentAmount" type="text" inputmode="decimal" autocomplete="off" value="0">
     ${state.isAdmin ? `
+      <label for="parcelPartner">პარტნიორი</label>
+      <select id="parcelPartner">
+        <option value="">No Partner / Private</option>
+        ${partnerOptions}
+      </select>
       <label for="parcelCourier">კურიერზე მიბმა</label>
       <select id="parcelCourier">
         <option value="">ავტომატურად ზონის მიხედვით</option>
@@ -286,6 +298,7 @@ async function saveParcel() {
   const amountInput = document.getElementById("parcelPaymentAmount");
   const paymentAmount = parsePaymentAmount(amountInput?.value);
   const selectedCourierUsername = state.isAdmin ? (document.getElementById("parcelCourier")?.value || "") : state.selectedCourier;
+  const partnerId = state.isAdmin ? (document.getElementById("parcelPartner")?.value || "") : "";
   let courierUsername = selectedCourierUsername;
   if (!fullName || !phone || !state.pendingCoords || (!state.isAdmin && !courierUsername)) return;
   if (!address || isCoordinateLabel(address)) return showToast(STRINGS.addressRequired);
@@ -318,6 +331,7 @@ async function saveParcel() {
         zoneId: autoAssignment.zoneId || "",
         zoneName: autoAssignment.zoneName || "ზონა არ მოიძებნა",
         autoAssigned: Boolean(autoAssignment.autoAssigned && !selectedCourierUsername),
+        partnerId,
       },
     });
   } catch (error) {
@@ -975,6 +989,10 @@ function renderSelectedParcelCard() {
             <span>მიბმის ტიპი</span>
             <strong>${escapeHtml(parcelAutoAssignLabel(pin))}</strong>
           </div>
+          <div class="nearest-detail">
+            <span>პარტნიორი</span>
+            <strong>${escapeHtml(pin.partnerName || "Private")}</strong>
+          </div>
         ` : ""}
       </section>
       <section class="nearest-detail-section">
@@ -1076,7 +1094,7 @@ function showGoogleMapsRoutePrompt(origin, pin) {
       <span>გსურთ GOOGLE MAP მარშრუტის დაგეგმვა?</span>
     </div>
   `, [
-    { label: "კი", variant: "primary", action: () => { window.open(buildGoogleMapsRouteUrl(origin, pin), "_blank", "noopener"); closeDialog(); } },
+    { label: "კი", variant: "primary", action: () => { openExternalUrl(buildGoogleMapsRouteUrl(origin, pin)); closeDialog(); } },
     { label: "არა", variant: "secondary", action: closeDialog },
   ]);
 }

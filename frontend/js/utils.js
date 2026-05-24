@@ -8,14 +8,24 @@ function normalizeUsername(username) {
 
 
 function roleLabel(role) {
+  if (role === "partner") return "პარტნიორი";
   return role === "admin" ? "ადმინი" : "კურიერი";
 }
 
 
 function getStatusLabel(status) {
+  if (status === "partner_pending") return "ადმინის დასადასტურებელია";
   if (status === "delivered") return "ჩაბარდა";
   if (status === "failed") return "არ ჩაბარდა";
   return "პროცესშია";
+}
+
+
+function getPartnerOrderStatusLabel(parcel) {
+  if (parcel?.status === "delivered") return "Delivered";
+  if (parcel?.status === "failed") return "Failed Delivery";
+  if (!parcel?.courierUsername) return "Pending Admin Approval";
+  return "Assigned to Courier";
 }
 
 
@@ -40,9 +50,8 @@ function safeMoney(value) {
 function normalizeDateKey(value) {
   if (!value) return "";
   if (typeof value === "string") {
-    const text = value.trim();
-    const dateOnlyMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (dateOnlyMatch) return `${dateOnlyMatch[1]}-${dateOnlyMatch[2]}-${dateOnlyMatch[3]}`;
+    const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
   }
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -53,38 +62,36 @@ function normalizeDateKey(value) {
 function getParcelStatsDateKey(parcel) {
   if (!parcel || typeof parcel !== "object") return "";
   const statusDates = parcel.status === "delivered"
-    ? [parcel.deliveredAt, parcel.completedAt, parcel.updatedAt, parcel.archivedAt]
+    ? [parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
     : parcel.status === "failed"
-      ? [parcel.failedAt, parcel.completedAt, parcel.updatedAt, parcel.archivedAt]
+      ? [parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
       : [parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
   return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
 }
 
 
 function getParcelStatsDateKeys(parcel) {
-  if (!parcel || typeof parcel !== "object") return [];
   const dateKey = getParcelStatsDateKey(parcel);
   return dateKey ? [dateKey] : [];
 }
 
 
 function parcelMatchesStatsDate(parcel, dateKey) {
-  const normalizedDateKey = normalizeDateKey(dateKey);
-  return Boolean(normalizedDateKey) && getParcelStatsDateKeys(parcel).includes(normalizedDateKey);
+  return getParcelStatsDateKey(parcel) === normalizeDateKey(dateKey);
 }
 
 
 function parcelMatchesStatsDateRange(parcel, startDate, endDate) {
+  const dateKey = getParcelStatsDateKey(parcel);
   const start = normalizeDateKey(startDate);
   const end = normalizeDateKey(endDate || startDate);
-  if (!start || !end) return false;
-  const rangeStart = start <= end ? start : end;
-  const rangeEnd = start <= end ? end : start;
-  return getParcelStatsDateKeys(parcel).some((dateKey) => dateKey >= rangeStart && dateKey <= rangeEnd);
+  if (!dateKey || !start || !end) return false;
+  return start <= end ? dateKey >= start && dateKey <= end : dateKey >= end && dateKey <= start;
 }
 
 
 function userDisplayName(user) {
+  if (user?.role === "partner") return user.companyName || user.contactPerson || user.username;
   const fullName = userFullName(user);
   return fullName ? `${fullName} (${user.username})` : user.username;
 }
@@ -138,15 +145,6 @@ function userProfileFields(user = {}) {
     <label for="userBankDetails">საბანკო რეკვიზიტები</label>
     <textarea id="userBankDetails" rows="3">${escapeHtml(user.bankDetails || "")}</textarea>
   `;
-}
-
-function readUserProfileFields() {
-  return {
-    firstName: document.getElementById("userFirstName")?.value.trim() || "",
-    lastName: document.getElementById("userLastName")?.value.trim() || "",
-    phone: document.getElementById("userPhone")?.value.trim() || "",
-    bankDetails: document.getElementById("userBankDetails")?.value.trim() || "",
-  };
 }
 
 
@@ -207,23 +205,17 @@ function getPaymentAmount(parcel) {
 
 
 function getCourierPay(parcel) {
-  if (parcel?.status !== "delivered") return 0;
-  const stored = safeMoney(parcel?.courierPay);
-  return stored > 0 ? stored : CONFIG.courierDeliveryPay;
+  return parcel?.status === "delivered" ? CONFIG.courierDeliveryPay : 0;
 }
 
 
 function getAdminProfit(parcel) {
-  if (parcel?.status !== "delivered") return 0;
-  const stored = safeMoney(parcel?.adminProfit);
-  return stored > 0 ? stored : CONFIG.adminDeliveryProfit;
+  return parcel?.status === "delivered" ? CONFIG.adminDeliveryProfit : 0;
 }
 
 
 function getDeliveryTotal(parcel) {
-  if (parcel?.status !== "delivered") return 0;
-  const stored = safeMoney(parcel?.deliveryTotalPrice);
-  return stored > 0 ? stored : CONFIG.deliveryTotalPrice;
+  return parcel?.status === "delivered" ? CONFIG.deliveryTotalPrice : 0;
 }
 
 
@@ -236,6 +228,48 @@ function parsePaymentAmount(value) {
 
   const amount = Number(normalized);
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : NaN;
+}
+
+
+function openUrlInBlankWindow(url) {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (opened) {
+    try {
+      opened.opener = null;
+    } catch {
+      // Some WebViews prevent touching the opened window. The rel flags above are enough.
+    }
+    return true;
+  }
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.style.display = "none";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  return true;
+}
+
+
+function openExternalUrl(url) {
+  const targetUrl = String(url || "").trim();
+  if (!targetUrl) return false;
+
+  const appLauncher = window.Capacitor?.Plugins?.AppLauncher
+    || window.Capacitor?.AppLauncher
+    || window.AppLauncher;
+
+  if (appLauncher?.openUrl) {
+    appLauncher.openUrl({ url: targetUrl }).catch(() => {
+      openUrlInBlankWindow(targetUrl);
+    });
+    return true;
+  }
+
+  return openUrlInBlankWindow(targetUrl);
 }
 
 

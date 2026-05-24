@@ -49,7 +49,7 @@ function cancelCourierDeliveredConfirm(pinId) {
 
 async function renderCourierMobileDashboard(pins = state.activePins) {
   if (!els.courierDashboard || !els.courierOrdersSheet) return;
-  if (state.isAdmin || !state.currentUser) {
+  if (state.isAdmin || state.isPartner || !state.currentUser) {
     els.appShell?.classList.remove("is-courier-mobile");
     els.courierDashboard.hidden = true;
     els.courierDashboard.textContent = "";

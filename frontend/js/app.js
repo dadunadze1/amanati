@@ -5,7 +5,7 @@
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
   [
-    "map", "adminDashboard", "courierDashboard", "menuButton", "actionPanel", "bottomNav", "courierOrdersSheet", "modeToast", "courierStatsCard", "nearestParcelCard",
+    "map", "adminDashboard", "courierDashboard", "partnerDashboard", "menuButton", "actionPanel", "bottomNav", "courierOrdersSheet", "modeToast", "courierStatsCard", "nearestParcelCard",
     "adminDrawerOverlay", "adminMobileDrawer", "adminMobileDrawerBody", "adminDrawerClose",
     "setupModal", "setupForm", "setupUsername", "setupPassword",
     "setupError", "authModal", "loginForm", "loginUsername", "loginPassword",
@@ -136,12 +136,25 @@ function renderActions() {
       ],
     },
     {
+      label: "პარტნიორები",
+      actions: [
+        ["adminPartners", "პარტნიორები", "◫", "პარტნიორი ანგარიშები"],
+        ["adminPartnerOrders", "შეკვეთები", "▣", "პარტნიორი შეკვეთები"],
+      ],
+    },
+    {
       label: "პარამეტრები",
       actions: [
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
       ],
     },
+  ];
+  const partnerActions = [
+    ["partnerDashboard", "მთავარი", "▥"],
+    ["partnerNewOrder", "ახალი", "+"],
+    ["partnerOrders", "შეკვეთები", "▣"],
+    ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
     ? [
@@ -155,7 +168,9 @@ function renderActions() {
         ["zoneManagement", "ზონები", "▧", "ზონების მართვა"],
         ["changePassword", "პარამეტრები", "⚙", "პაროლის შეცვლა"],
       ]
-    : [
+    : state.isPartner
+      ? partnerActions
+      : [
         ["courierParcels", "ჩემი ამანათები", "□"],
         ["today", "ჩემი დღე", "◷"],
         ["courierFinance", "ქეში", "₾"],
@@ -540,6 +555,8 @@ async function handleAction(action, value, sourceElement) {
     adminUsers: openUserManagement,
     zoneManagement: openZoneManagement,
     adminFinance: openFinanceDashboard,
+    adminPartners: openPartnerManagement,
+    adminPartnerOrders: openAdminPartnerOrders,
     addParcel: openAdminAddParcel,
     adminCloseDay: openAdminCloseDay,
     parcelHistory: openParcelHistorySearch,
@@ -562,6 +579,16 @@ async function handleAction(action, value, sourceElement) {
     courierHistory: () => openCalendar(state.currentUser, "ჩემი ისტორია"),
     courierFinance: () => openFinanceCourier(state.currentUser),
     courierCash: () => openFinanceCourier(state.currentUser),
+    partnerDashboard: renderPartnerDashboard,
+    partnerNewOrder: openPartnerNewOrderDialog,
+    partnerOrders: openPartnerOrdersDialog,
+    createPartner: openPartnerCreateDialog,
+    editPartner: () => openPartnerEditDialog(value),
+    togglePartnerStatus: () => togglePartnerStatus(value),
+    savePartner: () => savePartner(value),
+    assignPartnerOrder: () => openPartnerOrderAssignDialog(value),
+    savePartnerOrderAssign: () => savePartnerOrderAssign(value),
+    adminPartnerOrdersFilter: () => openAdminPartnerOrders(document.getElementById("adminPartnerOrdersFilter")?.value || ""),
     endDay: confirmEndDay,
     approve: () => approveCourier(value),
     reject: () => rejectCourier(value),
@@ -684,12 +711,14 @@ async function logout() {
   state.watchId = null;
   state.midnightTimer = null;
   state.currentUser = null;
+  state.currentUserProfile = null;
   state.authToken = null;
   state.isAdmin = false;
+  state.isPartner = false;
   state.hasCurrentPosition = false;
   state.activePins = [];
   state.adminDashboardHidden = false;
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   if (els.adminDashboard) {
     els.adminDashboard.hidden = true;
     els.adminDashboard.textContent = "";
@@ -715,6 +744,10 @@ async function logout() {
     els.courierOrdersSheet.hidden = true;
     els.courierOrdersSheet.textContent = "";
     els.courierOrdersSheet.classList.remove("is-expanded");
+  }
+  if (els.partnerDashboard) {
+    els.partnerDashboard.hidden = true;
+    els.partnerDashboard.textContent = "";
   }
   clearActiveRoute();
   clearParcelOverlays();

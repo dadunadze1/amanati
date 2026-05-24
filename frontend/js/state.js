@@ -7,6 +7,7 @@ const state = {
   currentUserProfile: null,
   authToken: null,
   isAdmin: false,
+  isPartner: false,
   activePins: [],
   adminMapCouriers: [],
   adminMapFilters: {

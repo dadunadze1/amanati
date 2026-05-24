@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+﻿import { createServer } from "node:http";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
@@ -143,6 +143,8 @@ function publicUser(user) {
     username: user.username,
     role: user.role,
     status: user.status,
+    companyName: user.companyName || "",
+    contactPerson: user.contactPerson || "",
     firstName: user.firstName || "",
     lastName: user.lastName || "",
     phone: user.phone || "",
@@ -186,7 +188,7 @@ function hasAdmin(db) {
 
 function cleanRole(role) {
   const value = String(role || "").trim().toLowerCase();
-  if (["admin", "courier"].includes(value)) return value;
+  if (["admin", "courier", "partner"].includes(value)) return value;
   throw httpError(400, "როლი უნდა იყოს ადმინი ან კურიერი.");
 }
 
@@ -197,6 +199,26 @@ function cleanUserProfile(body) {
     phone: String(body.phone || "").trim(),
     bankDetails: String(body.bankDetails || "").trim(),
   };
+}
+
+function cleanPartnerProfile(body) {
+  return {
+    companyName: String(body.companyName || body.businessName || "").trim(),
+    contactPerson: String(body.contactPerson || "").trim(),
+    phone: String(body.phone || "").trim(),
+  };
+}
+
+function partnerDisplayName(user) {
+  return user?.companyName || user?.contactPerson || user?.username || "";
+}
+
+function findPartnerByIdOrUsername(db, value) {
+  const normalized = normalizeUsername(value);
+  return db.users.find((user) => (
+    user.role === "partner"
+    && (String(user.id || "") === String(value || "") || normalizeUsername(user.username) === normalized)
+  ));
 }
 
 function isCompletedParcel(parcel) {
@@ -297,6 +319,10 @@ function parcelSearchHaystack(db, parcel) {
     parcel.fullName,
     parcel.phone,
     parcel.address,
+    parcel.partnerName,
+    parcel.partnerUsername,
+    parcel.createdByRole,
+    parcel.comment,
     parcel.status,
     parcel.status === "delivered" ? "ჩაბარდა" : "",
     parcel.status === "failed" ? "არ ჩაბარდა" : "",
@@ -585,6 +611,14 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (method === "GET" && path === "/api/partners") {
+    requireAdmin(request);
+    sendJson(response, 200, {
+      partners: db.users.filter((user) => user.role === "partner").map(publicUser),
+    });
+    return;
+  }
+
   if (method === "POST" && path === "/api/users") {
     requireAdmin(request);
     const body = await readJsonBody(request);
@@ -602,6 +636,7 @@ async function handleApi(request, response, url) {
       status: "active",
       passwordHash: hashPassword(password),
       ...cleanUserProfile(body),
+      ...(role === "partner" ? cleanPartnerProfile(body) : {}),
       createdAt: now,
       approvedAt: now,
     };
@@ -611,8 +646,62 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (method === "POST" && path === "/api/partners") {
+    requireAdmin(request);
+    const body = await readJsonBody(request);
+    const username = cleanUsername(body.username || body.email);
+    const password = String(body.password || "").trim();
+    const profile = cleanPartnerProfile(body);
+    if (!username || !password || !profile.companyName || !profile.contactPerson || !profile.phone) throw httpError(400, "Partner fields are required.");
+    if (findUser(db, username)) throw httpError(409, "This login already exists.");
+
+    const now = new Date().toISOString();
+    const user = {
+      id: randomBytes(12).toString("hex"),
+      username,
+      role: "partner",
+      status: body.status === "inactive" ? "inactive" : "active",
+      passwordHash: hashPassword(password),
+      ...profile,
+      firstName: profile.contactPerson,
+      lastName: "",
+      bankDetails: "",
+      createdAt: now,
+      approvedAt: now,
+    };
+    db.users.push(user);
+    await writeDb(db);
+    sendJson(response, 201, { partner: publicUser(user) });
+    return;
+  }
+
   const userMatch = path.match(/^\/api\/users\/([^/]+)$/);
   const userZoneMatch = path.match(/^\/api\/users\/([^/]+)\/zone$/);
+  const partnerMatch = path.match(/^\/api\/partners\/([^/]+)$/);
+  if (partnerMatch && method === "PUT") {
+    requireAdmin(request);
+    const username = decodeURIComponent(partnerMatch[1]);
+    const user = findUser(db, username);
+    if (!user || user.role !== "partner") throw httpError(404, "Partner not found.");
+    const body = await readJsonBody(request);
+    Object.assign(user, cleanPartnerProfile(body));
+    user.firstName = user.contactPerson;
+    if (body.status === "active" || body.status === "inactive") user.status = body.status;
+    if (body.password !== undefined) {
+      const password = String(body.password || "").trim();
+      if (password) user.passwordHash = hashPassword(password);
+    }
+    user.updatedAt = new Date().toISOString();
+    db.parcels.forEach((parcel) => {
+      if (parcel.partnerId === user.id || normalizeUsername(parcel.partnerUsername) === normalizeUsername(user.username)) {
+        parcel.partnerName = partnerDisplayName(user);
+      }
+    });
+    await writeDb(db);
+    sendJson(response, 200, { partner: publicUser(user) });
+    return;
+  }
+
   if (userZoneMatch && method === "PUT") {
     requireAdmin(request);
     const username = decodeURIComponent(userZoneMatch[1]);
@@ -632,6 +721,11 @@ async function handleApi(request, response, url) {
     if (!user || user.status !== "active") throw httpError(404, "ანგარიში ვერ მოიძებნა.");
     const body = await readJsonBody(request);
     Object.assign(user, cleanUserProfile(body));
+    if (user.role === "partner") {
+      const partnerProfile = cleanPartnerProfile(body);
+      Object.assign(user, partnerProfile);
+      user.firstName = partnerProfile.contactPerson;
+    }
     if (body.password !== undefined) {
       const password = String(body.password || "").trim();
       if (password) user.passwordHash = hashPassword(password);
@@ -647,6 +741,13 @@ async function handleApi(request, response, url) {
     const user = findUser(db, username);
     if (!user || user.status !== "active") throw httpError(404, "ანგარიში ვერ მოიძებნა.");
     if (user.role === "admin") throw httpError(403, "ადმინის დეაქტივაცია შეუძლებელია.");
+    if (user.role === "partner") {
+      user.status = "inactive";
+      user.updatedAt = new Date().toISOString();
+      await writeDb(db);
+      sendJson(response, 200, { ok: true });
+      return;
+    }
     db.users = db.users.filter((item) => normalizeUsername(item.username) !== normalizeUsername(username));
     db.parcels = db.parcels.filter((parcel) => normalizeUsername(parcel.courierUsername) !== normalizeUsername(username));
     await writeDb(db);
@@ -716,21 +817,30 @@ async function handleApi(request, response, url) {
 
   if (method === "GET" && path === "/api/parcels") {
     const session = requireSession(request);
-    const courier = url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
+    const partnerId = String(url.searchParams.get("partnerId") || "").trim();
+    const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
+    const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
     sendJson(response, 200, {
       parcels: db.parcels
-        .filter((parcel) => !parcel.archivedAt && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier)))
+        .filter((parcel) => {
+          if (parcel.archivedAt) return false;
+          if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
+          if (session.role === "admin" && partnerId && parcel.partnerId !== partnerId) return false;
+          return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
+        })
         .map((parcel) => publicParcel(db, parcel)),
     });
     return;
   }
 
   if (method === "POST" && path === "/api/parcels") {
-    const session = requireAdmin(request);
+    const session = requireSession(request);
+    if (!["admin", "partner"].includes(session.role)) throw httpError(403, "Access denied.");
     const body = await readJsonBody(request);
     const courierUsername = cleanUsername(body.courierUsername);
-    if (!canAccessCourier(session, courierUsername || session.username)) throw httpError(403, "წვდომა აკრძალულია.");
+    if (session.role === "admin" && !canAccessCourier(session, courierUsername || session.username)) throw httpError(403, "წვდომა აკრძალულია.");
+    if (session.role === "partner" && courierUsername) throw httpError(403, "Partner cannot assign courier.");
     let courier = courierUsername ? findUser(db, courierUsername) : null;
     if (courierUsername && (!courier || courier.role !== "courier" || courier.status !== "active")) throw httpError(404, "კურიერი ვერ მოიძებნა.");
 
@@ -740,10 +850,17 @@ async function handleApi(request, response, url) {
     const lng = Number(body.lng);
     const address = String(body.address || "").trim();
     const paymentAmount = cleanPaymentAmount(body.paymentAmount ?? body.payment ?? body.cashAmount);
-    if (!fullName || !phone || !Number.isFinite(lat) || !Number.isFinite(lng)) throw httpError(400, "ამანათის დეტალები აუცილებელია.");
-    if (!address || isCoordinateLabel(address) || !hasHouseNumber(address)) throw httpError(400, "ქუჩა და შენობის ნომერი აუცილებელია.");
+    const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+    const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
+    const selectedPartner = session.role === "partner"
+      ? partnerUser
+      : findPartnerByIdOrUsername(db, body.partnerId || body.partnerUsername || "");
+    if (session.role === "partner" && (!partnerUser || partnerUser.role !== "partner" || partnerUser.status !== "active")) throw httpError(403, "Partner account is inactive.");
+    if (selectedPartner && selectedPartner.status !== "active") throw httpError(400, "Partner account is inactive.");
+    if (!fullName || !phone || (session.role === "admin" && !hasCoords)) throw httpError(400, "Parcel details are required.");
+    if (!address || isCoordinateLabel(address) || (session.role === "admin" && !hasHouseNumber(address))) throw httpError(400, "Street address is required.");
 
-    const detectedZone = detectTbilisiZone({ lat, lng });
+    const detectedZone = hasCoords ? detectTbilisiZone({ lat, lng }) : null;
     let autoAssigned = false;
     let assignmentMessage = "";
     if (!courierUsername) {
@@ -760,16 +877,27 @@ async function handleApi(request, response, url) {
     }
 
     const now = new Date().toISOString();
+    const coords = hasCoords ? { lat, lng } : {};
     const parcel = {
       id: randomBytes(12).toString("hex"),
       courierUsername: courier?.username || "",
-      lat,
-      lng,
+      ...coords,
       address,
       fullName,
       phone,
+      city: String(body.city || "").trim(),
+      district: String(body.district || body.area || "").trim(),
+      building: String(body.building || "").trim(),
+      floor: String(body.floor || "").trim(),
+      apartment: String(body.apartment || "").trim(),
+      comment: String(body.comment || body.notes || "").trim(),
+      partnerId: selectedPartner?.id || "",
+      partnerName: selectedPartner ? partnerDisplayName(selectedPartner) : "",
+      partnerUsername: selectedPartner?.username || "",
+      createdByRole: session.role,
       paymentAmount,
       cashAmount: paymentAmount,
+      codAmount: paymentAmount,
       deliveryTotalPrice: 0,
       courierPay: 0,
       adminProfit: 0,
@@ -800,6 +928,7 @@ async function handleApi(request, response, url) {
       if (parcelIds.includes(parcel.id) && !parcel.archivedAt) {
         parcel.courierUsername = courier.username;
         parcel.assignedAt = new Date().toISOString();
+        parcel.updatedAt = parcel.assignedAt;
         parcel.autoAssigned = false;
         assigned += 1;
       }
@@ -821,6 +950,7 @@ async function handleApi(request, response, url) {
     if (!canAccessCourier(session, parcel.courierUsername)) throw httpError(403, "წვდომა აკრძალულია.");
     if (session.role !== "admin" && status === "pending") throw httpError(403, "Only admin can return a parcel to pending.");
     if (session.role !== "admin" && parcel.status === "delivered" && status === "failed") throw httpError(403, "ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
+    if (status === "failed" && !String(body.failureReason || "").trim()) throw httpError(400, "Failure reason is required.");
     const now = new Date().toISOString();
     parcel.status = status;
     parcel.updatedAt = now;
@@ -904,11 +1034,16 @@ async function handleApi(request, response, url) {
 
   if (method === "GET" && path === "/api/history") {
     const session = requireSession(request);
-    const courier = url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
+    const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
+    const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
     sendJson(response, 200, {
       history: db.parcels
-        .filter((parcel) => parcel.archivedAt && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier)))
+        .filter((parcel) => {
+          if (!parcel.archivedAt) return false;
+          if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
+          return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
+        })
         .map((parcel) => publicParcel(db, parcel)),
     });
     return;
@@ -985,3 +1120,5 @@ server.on("error", (error) => {
 server.listen(currentPort, host, () => {
   console.log(`საკურიერო სისტემა გაშვებულია მისამართზე http://localhost:${currentPort}`);
 });
+
+

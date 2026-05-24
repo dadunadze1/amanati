@@ -78,24 +78,28 @@ function completeLogin(payload) {
   state.currentUser = payload.user.username;
   state.currentUserProfile = payload.user;
   state.isAdmin = payload.user.role === "admin";
-  state.courierPresenceStatus = state.isAdmin ? "offline" : "online";
+  state.isPartner = payload.user.role === "partner";
+  state.courierPresenceStatus = state.isAdmin || state.isPartner ? "offline" : "online";
   state.adminDashboardHidden = false;
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   hideModal(els.setupModal);
   hideModal(els.authModal);
   hideModal(els.registerModal);
   resetMapSelectionUi();
   renderActions();
   renderAdminDashboard();
+  renderPartnerDashboard().catch(() => {});
   renderCourierMobileDashboard().catch(() => {});
-  startLocationWatch();
-  startCourierLocationServices();
-  runAutoDayClose(getPreviousDateKey()).catch((error) => {
-    console.warn("Auto day close failed", error);
-  });
-  runAutoRetentionCleanup().catch((error) => {
-    console.warn("Retention cleanup failed", error);
-  });
+  if (!state.isPartner) startLocationWatch();
+  if (!state.isPartner) startCourierLocationServices();
+  if (!state.isPartner) {
+    runAutoDayClose(getPreviousDateKey()).catch((error) => {
+      console.warn("Auto day close failed", error);
+    });
+    runAutoRetentionCleanup().catch((error) => {
+      console.warn("Retention cleanup failed", error);
+    });
+  }
   refreshPins();
   scheduleMapInvalidateSize();
   scheduleMidnightRefresh();
