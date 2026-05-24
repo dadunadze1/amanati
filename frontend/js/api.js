@@ -414,21 +414,79 @@ function buildStaticNominatimQuery(value) {
 }
 
 async function geocodeStaticPartnerOrder(body) {
-  const query = buildStaticNominatimQuery([body.city, body.district || body.area, body.streetAddress || body.street || body.address, body.building].filter(Boolean).join(", "));
-  if (!query) return null;
+  const city = body.city || "Tbilisi";
+  const district = body.district || body.area || "";
+  const street = body.streetAddress || body.street || body.address || "";
+  const building = body.building || "";
+  const variants = [
+    [city, district, [street, building].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    [city, district, street].filter(Boolean).join(", "),
+    [street, district, city].filter(Boolean).join(", "),
+    [street, city, "Georgia"].filter(Boolean).join(", "),
+  ].filter(Boolean);
+
+  for (const variant of [...new Set(variants)]) {
+    const result = await geocodeStaticPartnerQuery(variant);
+    if (result) return result;
+  }
+  return localStaticPartnerAddressFallback(street, building);
+}
+
+async function geocodeStaticPartnerQuery(query) {
   const results = await fetchOsmJson("/search", {
-    q: query,
+    q: buildStaticNominatimQuery(query),
     format: "jsonv2",
     addressdetails: 1,
-    limit: 1,
+    limit: 5,
     "accept-language": "ka,en",
-    bounded: 1,
+    bounded: 0,
     viewbox: getTbilisiViewbox(),
+    countrycodes: "ge",
   }).catch(() => []);
-  const first = Array.isArray(results) ? results[0] : null;
-  const lat = Number(first?.lat);
-  const lng = Number(first?.lon ?? first?.lng);
-  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  const items = Array.isArray(results) ? results : [];
+  const first = items.find((item) => isStaticTbilisiCoords(getStaticResultCoords(item))) || items[0];
+  const coords = getStaticResultCoords(first);
+  return Number.isFinite(coords.lat) && Number.isFinite(coords.lng) ? coords : null;
+}
+
+function getStaticResultCoords(result) {
+  return {
+    lat: Number(result?.lat ?? result?.latitude),
+    lng: Number(result?.lon ?? result?.lng ?? result?.longitude),
+  };
+}
+
+function isStaticTbilisiCoords(coords) {
+  return Number(coords?.lat) >= 41.55 && Number(coords?.lat) <= 41.88 && Number(coords?.lng) >= 44.60 && Number(coords?.lng) <= 45.05;
+}
+
+function localStaticPartnerAddressFallback(street, building) {
+  const token = normalizeStaticAddressLookupToken(street);
+  const known = [
+    { tokens: ["pekini", "პეკინი", "პეკინის"], base: { lat: 41.72455, lng: 44.76835 }, step: { lat: -0.00001, lng: 0.00002 } },
+    { tokens: ["university", "უნივერსიტეტის"], base: { lat: 41.7206, lng: 44.7219 }, step: { lat: 0.00001, lng: 0.00002 } },
+    { tokens: ["abashidze", "აბაშიძე", "აბაშიძის"], base: { lat: 41.70717, lng: 44.77018 }, step: { lat: 0.000015, lng: -0.000035 } },
+    { tokens: ["sairme", "საირმე", "საირმის"], base: { lat: 41.7190, lng: 44.7500 }, step: { lat: 0.000010, lng: 0.000020 } },
+  ];
+  const match = known.find((item) => item.tokens.some((itemToken) => token.includes(normalizeStaticAddressLookupToken(itemToken))));
+  if (!match) return null;
+  const houseNumber = Number.parseInt(building || street, 10);
+  const offset = Number.isFinite(houseNumber) ? Math.max(-80, Math.min(80, houseNumber - 12)) : 0;
+  return {
+    lat: match.base.lat + (offset * match.step.lat),
+    lng: match.base.lng + (offset * match.step.lng),
+  };
+}
+
+function normalizeStaticAddressLookupToken(value) {
+  return String(value || "")
+    .toLocaleLowerCase()
+    .replace(/[.,]/g, " ")
+    .replace(/\b(street|st|avenue|ave|road|rd|tbilisi|georgia)\b/gi, " ")
+    .replace(/\b(ქუჩა|ქ|გამზირი|გამზ|თბილისი|საქართველო)\b/gi, " ")
+    .replace(/\d+[a-zა-ჰ/-]*/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function saveStaticSession(user) {

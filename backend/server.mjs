@@ -234,23 +234,109 @@ function buildPartnerFullAddress(body) {
 }
 
 async function geocodePartnerAddress(body) {
-  const query = buildPartnerFullAddress(body);
-  if (!query) return null;
+  const city = cleanAddressPart(body.city || "Tbilisi");
+  const district = cleanAddressPart(body.district || body.area);
+  const streetAddress = cleanAddressPart(body.streetAddress || body.street || body.address);
+  const building = cleanAddressPart(body.building || body.buildingNumber);
+  const streetWithBuilding = [streetAddress, building].filter(Boolean).join(" ");
+  const variants = [
+    [city, district, streetWithBuilding].filter(Boolean).join(", "),
+    [city, district, streetAddress].filter(Boolean).join(", "),
+    [streetWithBuilding, district, city].filter(Boolean).join(", "),
+    [streetAddress, district, city].filter(Boolean).join(", "),
+    [streetAddress, city, "Georgia"].filter(Boolean).join(", "),
+    buildPartnerFullAddress(body),
+  ].filter(Boolean);
+
+  for (const query of [...new Set(variants)]) {
+    const result = await geocodePartnerQuery(query);
+    if (result) return result;
+  }
+
+  if (streetAddress) {
+    const streetResult = await geocodePartnerStreetParam(streetAddress, city);
+    if (streetResult) return streetResult;
+  }
+
+  return localPartnerAddressFallback({ streetAddress, building });
+}
+
+async function geocodePartnerQuery(query) {
   const results = await fetchNominatimJson("/search", {
     format: "jsonv2",
     q: /georgia|საქართველო|tbilisi|თბილისი/i.test(query) ? query : `${query}, Georgia`,
     addressdetails: 1,
-    limit: 1,
+    limit: 5,
     countrycodes: "ge",
     viewbox: "44.60,41.88,45.05,41.55",
-    bounded: 1,
+    bounded: 0,
     "accept-language": "ka,en",
   }, []);
-  const first = Array.isArray(results) ? results[0] : null;
-  const lat = Number(first?.lat);
-  const lng = Number(first?.lon ?? first?.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng };
+  return firstTbilisiGeocodeResult(results);
+}
+
+async function geocodePartnerStreetParam(street, city) {
+  const results = await fetchNominatimJson("/search", {
+    format: "jsonv2",
+    street,
+    city: city || "Tbilisi",
+    country: "Georgia",
+    addressdetails: 1,
+    limit: 5,
+    countrycodes: "ge",
+    viewbox: "44.60,41.88,45.05,41.55",
+    bounded: 0,
+    "accept-language": "ka,en",
+  }, []);
+  return firstTbilisiGeocodeResult(results);
+}
+
+function firstTbilisiGeocodeResult(results) {
+  const items = Array.isArray(results) ? results : [];
+  const preferred = items.find((item) => isTbilisiCoordinate(getGeocodeCoords(item))) || items[0];
+  const coords = getGeocodeCoords(preferred);
+  return Number.isFinite(coords.lat) && Number.isFinite(coords.lng) ? coords : null;
+}
+
+function getGeocodeCoords(result) {
+  return {
+    lat: Number(result?.lat ?? result?.latitude),
+    lng: Number(result?.lon ?? result?.lng ?? result?.longitude),
+  };
+}
+
+function isTbilisiCoordinate(coords) {
+  return Number(coords?.lat) >= 41.55 && Number(coords?.lat) <= 41.88 && Number(coords?.lng) >= 44.60 && Number(coords?.lng) <= 45.05;
+}
+
+function localPartnerAddressFallback({ streetAddress, building }) {
+  const token = normalizeAddressLookupToken(streetAddress);
+  if (!token) return null;
+  const knownStreets = [
+    { tokens: ["pekini", "პეკინი", "პეკინის"], base: { lat: 41.72455, lng: 44.76835 }, step: { lat: -0.00001, lng: 0.00002 } },
+    { tokens: ["university", "უნივერსიტეტის"], base: { lat: 41.7206, lng: 44.7219 }, step: { lat: 0.00001, lng: 0.00002 } },
+    { tokens: ["abashidze", "აბაშიძე", "აბაშიძის"], base: { lat: 41.70717, lng: 44.77018 }, step: { lat: 0.000015, lng: -0.000035 } },
+    { tokens: ["sairme", "საირმე", "საირმის"], base: { lat: 41.7190, lng: 44.7500 }, step: { lat: 0.000010, lng: 0.000020 } },
+  ];
+  const street = knownStreets.find((item) => item.tokens.some((itemToken) => token.includes(normalizeAddressLookupToken(itemToken))));
+  if (!street) return null;
+  const houseNumber = Number.parseInt(building || streetAddress, 10);
+  const offset = Number.isFinite(houseNumber) ? Math.max(-80, Math.min(80, houseNumber - 12)) : 0;
+  return {
+    lat: street.base.lat + (offset * street.step.lat),
+    lng: street.base.lng + (offset * street.step.lng),
+  };
+}
+
+function normalizeAddressLookupToken(value) {
+  return String(value || "")
+    .toLocaleLowerCase()
+    .replace(/[.,]/g, " ")
+    .replace(/\b(street|st|avenue|ave|road|rd|tbilisi|georgia)\b/gi, " ")
+    .replace(/\b(ქუჩა|ქ|გამზირი|გამზ|თბილისი|საქართველო)\b/gi, " ")
+    .replace(/\d+[a-zა-ჰ/-]*/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function isCompletedParcel(parcel) {
