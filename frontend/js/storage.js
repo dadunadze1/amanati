@@ -1,0 +1,260 @@
+"use strict";
+
+const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
+const FIREBASE_STATIC_STORE_DOC = "staticStore";
+const FIREBASE_AUTH_DISABLED_STORAGE_KEY = "deliveryFirebaseAuthDisabled:v1";
+const FIREBASE_AUTH_DISABLED_RETRY_MS = 6 * 60 * 60 * 1000;
+const FIREBASE_SYNC_TOAST_THROTTLE_MS = 60 * 1000;
+
+let firebaseInitPromise = null;
+let firebaseStoreUnsubscribe = null;
+let firebaseCourierLocationsUnsubscribe = null;
+let lastFirebaseStoreJson = "";
+let firebaseAuthUnavailable = false;
+let firebaseAuthWarningShown = false;
+
+function saveData(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function loadData(key) {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function clearData(key) {
+  localStorage.removeItem(key);
+}
+
+function hasFirebaseConfig() {
+  return typeof firebaseConfig === "object" && firebaseConfig && firebaseConfig.apiKey;
+}
+
+function hasFirebaseSdk() {
+  return Boolean(window.firebase?.initializeApp && window.firebase?.firestore);
+}
+
+function isFirebaseAuthDisabledLocally() {
+  const saved = loadData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
+  if (saved?.projectId !== firebaseConfig?.projectId) return false;
+  const savedAt = Date.parse(saved.savedAt || "");
+  if (!Number.isFinite(savedAt) || Date.now() - savedAt > FIREBASE_AUTH_DISABLED_RETRY_MS) {
+    clearData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
+    return false;
+  }
+  return true;
+}
+
+function markFirebaseAuthDisabled() {
+  firebaseAuthUnavailable = true;
+  saveData(FIREBASE_AUTH_DISABLED_STORAGE_KEY, {
+    projectId: firebaseConfig?.projectId || "",
+    reason: "anonymous-auth-failed",
+    savedAt: new Date().toISOString(),
+  });
+}
+
+function markFirebaseSyncIssue(message) {
+  if (typeof state !== "object") return;
+  state.firebaseSyncStatus = "error";
+  if (!state.currentUser || typeof showToast !== "function") return;
+
+  const now = Date.now();
+  if (now - state.lastFirebaseSyncToastAt < FIREBASE_SYNC_TOAST_THROTTLE_MS) return;
+  state.lastFirebaseSyncToastAt = now;
+  showToast(message || "Firebase სინქი დროებით ვერ მუშაობს. ცვლილება ლოკალურად შეინახა.");
+}
+
+function markFirebaseSyncOk() {
+  if (typeof state !== "object") return;
+  const wasError = state.firebaseSyncStatus === "error";
+  state.firebaseSyncStatus = "ok";
+  if (wasError && state.currentUser && typeof showToast === "function") {
+    showToast("Firebase სინქი აღდგა.");
+  }
+}
+
+async function initializeFirebaseStorage() {
+  if (firebaseAuthUnavailable || isFirebaseAuthDisabledLocally()) return null;
+  if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
+  if (firebaseInitPromise) return firebaseInitPromise;
+
+  firebaseInitPromise = Promise.resolve().then(async () => {
+    const app = window.firebase.apps?.length
+      ? window.firebase.app()
+      : window.firebase.initializeApp(firebaseConfig);
+    if (window.firebase.auth) {
+      const auth = window.firebase.auth(app);
+      if (!auth.currentUser) {
+        try {
+          await auth.signInAnonymously();
+        } catch (error) {
+          markFirebaseAuthDisabled();
+          if (!firebaseAuthWarningShown) {
+            firebaseAuthWarningShown = true;
+            console.warn("[firebase] anonymous auth failed; using static local mode", error);
+          }
+          markFirebaseSyncIssue("Firebase ავტორიზაცია ვერ ჩაირთო. საერთო სინქი დროებით გამორთულია.");
+          return null;
+        }
+      }
+    }
+    const db = window.firebase.firestore(app);
+    window.firebaseApp = app;
+    window.firebaseDb = db;
+    console.log("[firebase] initialized", firebaseConfig.projectId);
+    return db;
+  }).catch((error) => {
+    console.warn("[firebase] init failed", error);
+    markFirebaseSyncIssue("Firebase ვერ ჩაირთო. ინტერნეტი ან Firebase პარამეტრები შეამოწმე.");
+    return null;
+  });
+
+  return firebaseInitPromise;
+}
+
+async function loadFirebaseStaticStore() {
+  const db = await initializeFirebaseStorage();
+  if (!db) return null;
+
+  try {
+    const snapshot = await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).get();
+    if (!snapshot.exists) {
+      console.log("[firebase] static store empty");
+      return null;
+    }
+    const data = snapshot.data() || {};
+    const store = data.store && typeof data.store === "object" ? data.store : data;
+    lastFirebaseStoreJson = JSON.stringify(store);
+    console.log("[firebase] static store loaded");
+    markFirebaseSyncOk();
+    return store;
+  } catch (error) {
+    console.warn("[firebase] static store load failed", error);
+    markFirebaseSyncIssue("Firebase მონაცემების ჩატვირთვა ვერ მოხერხდა.");
+    return null;
+  }
+}
+
+async function saveFirebaseStaticStore(store) {
+  const db = await initializeFirebaseStorage();
+  if (!db || !store || typeof store !== "object") return false;
+
+  try {
+    const storeJson = JSON.stringify(store);
+    if (storeJson && storeJson === lastFirebaseStoreJson) return true;
+    lastFirebaseStoreJson = storeJson;
+    await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
+      store,
+      updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    console.log("[firebase] static store saved");
+    markFirebaseSyncOk();
+    return true;
+  } catch (error) {
+    console.warn("[firebase] static store save failed", error);
+    markFirebaseSyncIssue("Firebase-ში შენახვა ვერ მოხერხდა. ცვლილება ამ მოწყობილობაზე დარჩა.");
+    return false;
+  }
+}
+
+async function startFirebaseStaticStoreListener(onStoreChange) {
+  if (firebaseStoreUnsubscribe) return firebaseStoreUnsubscribe;
+  const db = await initializeFirebaseStorage();
+  if (!db) return null;
+
+  firebaseStoreUnsubscribe = db
+    .collection(FIREBASE_STATIC_STORE_COLLECTION)
+    .doc(FIREBASE_STATIC_STORE_DOC)
+    .onSnapshot((snapshot) => {
+      if (snapshot.metadata?.hasPendingWrites) return;
+      if (!snapshot.exists) return;
+      const data = snapshot.data() || {};
+      const store = data.store && typeof data.store === "object" ? data.store : data;
+      const storeJson = JSON.stringify(store);
+      if (!storeJson || storeJson === lastFirebaseStoreJson) return;
+      lastFirebaseStoreJson = storeJson;
+      console.log("[firebase] realtime static store update");
+      markFirebaseSyncOk();
+      onStoreChange?.(store);
+    }, (error) => {
+      console.warn("[firebase] realtime listener failed", error);
+      markFirebaseSyncIssue("Firebase live სინქი გაითიშა. ინტერნეტი შეამოწმე.");
+    });
+
+  console.log("[firebase] realtime listener started");
+  markFirebaseSyncOk();
+  return firebaseStoreUnsubscribe;
+}
+
+function stopFirebaseStaticStoreListener() {
+  if (!firebaseStoreUnsubscribe) return;
+  firebaseStoreUnsubscribe();
+  firebaseStoreUnsubscribe = null;
+}
+
+function getCourierLocationKey(username) {
+  return encodeURIComponent(normalizeUsername(username))
+    .replace(/%/g, "_")
+    .replace(/[^a-z0-9_~-]/gi, "_");
+}
+
+async function saveFirebaseCourierLocation(location) {
+  const db = await initializeFirebaseStorage();
+  if (!db || !location?.username) return false;
+
+  try {
+    const key = getCourierLocationKey(location.username);
+    await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
+      courierLocations: {
+        [key]: {
+          username: location.username,
+          displayName: location.displayName || location.username,
+          phone: location.phone || "",
+          lat: Number(location.lat),
+          lng: Number(location.lng),
+          status: location.status || "online",
+          updatedAt: location.updatedAt || new Date().toISOString(),
+        },
+      },
+      courierLocationsUpdatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    markFirebaseSyncOk();
+    return true;
+  } catch (error) {
+    console.warn("[firebase] courier location save failed", error);
+    markFirebaseSyncIssue("კურიერის live ლოკაცია Firebase-ში ვერ განახლდა.");
+    return false;
+  }
+}
+
+async function startFirebaseCourierLocationsListener(onLocationsChange) {
+  if (firebaseCourierLocationsUnsubscribe) return firebaseCourierLocationsUnsubscribe;
+  const db = await initializeFirebaseStorage();
+  if (!db) return null;
+
+  firebaseCourierLocationsUnsubscribe = db
+    .collection(FIREBASE_STATIC_STORE_COLLECTION)
+    .doc(FIREBASE_STATIC_STORE_DOC)
+    .onSnapshot((snapshot) => {
+      const data = snapshot.data() || {};
+      markFirebaseSyncOk();
+      onLocationsChange?.(data.courierLocations && typeof data.courierLocations === "object" ? data.courierLocations : {});
+    }, (error) => {
+      console.warn("[firebase] courier locations listener failed", error);
+      markFirebaseSyncIssue("კურიერების live ლოკაციების სინქი გაითიშა.");
+    });
+
+  return firebaseCourierLocationsUnsubscribe;
+}
+
+function stopFirebaseCourierLocationsListener() {
+  if (!firebaseCourierLocationsUnsubscribe) return;
+  firebaseCourierLocationsUnsubscribe();
+  firebaseCourierLocationsUnsubscribe = null;
+}

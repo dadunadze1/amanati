@@ -1,0 +1,6 @@
+*.log
+*.err
+*.rar
+backend/data/*.json
+checkpoints/
+GIT/
