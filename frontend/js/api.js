@@ -297,6 +297,9 @@ function hydrateStaticFinanceStorage(financeData = {}) {
   if (loadData(CONFIG.cashAdjustmentsStorageKey) === null && Array.isArray(financeData.cashAdjustments)) {
     saveData(CONFIG.cashAdjustmentsStorageKey, financeData.cashAdjustments);
   }
+  if (loadData(CONFIG.partnerCashAdjustmentsStorageKey) === null && Array.isArray(financeData.partnerCashAdjustments)) {
+    saveData(CONFIG.partnerCashAdjustmentsStorageKey, financeData.partnerCashAdjustments);
+  }
   if (loadData(CONFIG.payAdjustmentsStorageKey) === null && Array.isArray(financeData.payAdjustments)) {
     saveData(CONFIG.payAdjustmentsStorageKey, financeData.payAdjustments);
   }
@@ -338,24 +341,29 @@ function runStaticRetentionCleanup(store, cutoffDate) {
   const beforeParcels = store.parcels.length;
   const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
   const beforeCashAdjustments = Array.isArray(financeData.cashAdjustments) ? financeData.cashAdjustments.length : 0;
+  const beforePartnerCashAdjustments = Array.isArray(financeData.partnerCashAdjustments) ? financeData.partnerCashAdjustments.length : 0;
   const beforePayAdjustments = Array.isArray(financeData.payAdjustments) ? financeData.payAdjustments.length : 0;
 
   store.history = store.history.filter((parcel) => !isStaticRetentionParcelExpired(parcel, cutoffDate));
   store.parcels = store.parcels.filter((parcel) => !parcel.archivedAt || !isStaticRetentionParcelExpired(parcel, cutoffDate));
 
   const cashAdjustments = filterStaticRetentionAdjustments(financeData.cashAdjustments, cutoffDate);
+  const partnerCashAdjustments = filterStaticRetentionAdjustments(financeData.partnerCashAdjustments, cutoffDate);
   const payAdjustments = filterStaticRetentionAdjustments(financeData.payAdjustments, cutoffDate);
   store.financeData = {
     ...financeData,
     cashAdjustments,
+    partnerCashAdjustments,
     payAdjustments,
   };
   saveData(CONFIG.cashAdjustmentsStorageKey, normalizeFinanceAdjustmentList(cashAdjustments, "cash"));
+  saveData(CONFIG.partnerCashAdjustmentsStorageKey, normalizeFinanceAdjustmentList(partnerCashAdjustments, "partnerCash"));
   saveData(CONFIG.payAdjustmentsStorageKey, normalizeFinanceAdjustmentList(payAdjustments, "pay"));
 
   return {
     deletedParcels: (beforeHistory - store.history.length) + (beforeParcels - store.parcels.length),
     deletedCashAdjustments: beforeCashAdjustments - cashAdjustments.length,
+    deletedPartnerCashAdjustments: beforePartnerCashAdjustments - partnerCashAdjustments.length,
     deletedPayAdjustments: beforePayAdjustments - payAdjustments.length,
   };
 }

@@ -25,6 +25,79 @@ function partnerCodCollected(orders) {
     .reduce((sum, order) => sum + getPaymentAmount(order), 0);
 }
 
+function readPartnerCashAdjustments() {
+  try {
+    const parsed = typeof loadData === "function"
+      ? loadData(CONFIG.partnerCashAdjustmentsStorageKey) || []
+      : JSON.parse(localStorage.getItem(CONFIG.partnerCashAdjustmentsStorageKey) || "[]");
+    return normalizeFinanceAdjustmentList(Array.isArray(parsed) ? parsed : [], "partnerCash");
+  } catch {
+    return [];
+  }
+}
+
+
+function writePartnerCashAdjustments(adjustments) {
+  const normalized = normalizeFinanceAdjustmentList(adjustments, "partnerCash");
+  if (typeof saveData === "function") saveData(CONFIG.partnerCashAdjustmentsStorageKey, normalized);
+  else localStorage.setItem(CONFIG.partnerCashAdjustmentsStorageKey, JSON.stringify(normalized));
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    saveStaticFinanceData({ ...getStaticFinanceData(), partnerCashAdjustments: normalized });
+  }
+}
+
+
+function partnerCashIdentity(partner = {}) {
+  return partner.id || partner.username || "";
+}
+
+
+function orderBelongsToPartner(order, partner = {}) {
+  const id = partnerCashIdentity(partner);
+  return Boolean(
+    (id && (order.partnerId === id || normalizeUsername(order.partnerUsername) === normalizeUsername(id)))
+    || (partner.username && normalizeUsername(order.partnerUsername) === normalizeUsername(partner.username)),
+  );
+}
+
+
+function getPartnerCashAdjustments(partner) {
+  const id = partnerCashIdentity(partner);
+  const username = partner.username || "";
+  return readPartnerCashAdjustments().filter((item) => (
+    (id && item.partnerId === id)
+    || (username && normalizeUsername(item.partnerUsername || item.username) === normalizeUsername(username))
+  ));
+}
+
+
+function calculatePartnerCashSummary(partner, records = []) {
+  const orders = (Array.isArray(records) ? records : []).filter((order) => orderBelongsToPartner(order, partner));
+  const deliveredOrders = orders.filter((order) => order.status === "delivered");
+  const pendingOrders = orders.filter((order) => order.status !== "delivered" && order.status !== "failed");
+  const baseCash = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
+  const pendingCash = safeMoney(pendingOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
+  const adjustmentTotal = safeMoney(getPartnerCashAdjustments(partner).reduce((sum, adjustment) => sum + getAdjustmentSignedAmount(adjustment), 0));
+  return {
+    orders,
+    deliveredOrders,
+    pendingOrders,
+    baseCash,
+    pendingCash,
+    adjustmentTotal,
+    cashDue: safeMoney(baseCash + adjustmentTotal),
+  };
+}
+
+
+async function getAllPartnerCashRecords() {
+  const [pins, history] = await Promise.all([
+    getPins(""),
+    getHistory(""),
+  ]);
+  return [...pins, ...history];
+}
+
 
 async function renderPartnerDashboard(pins = state.activePins) {
   if (!els.partnerDashboard) return;
@@ -209,6 +282,7 @@ async function savePartnerOrder() {
 
 async function openPartnerManagement() {
   const partners = await getPartners();
+  state.partnerCashRecords = await getAllPartnerCashRecords();
   const body = `
     <div class="partner-panel-head">
       <h2>Partners</h2>
@@ -224,20 +298,106 @@ async function openPartnerManagement() {
 
 function renderPartnerCard(partner) {
   const active = partner.status === "active";
+  const cash = calculatePartnerCashSummary(partner, state.partnerCashRecords || []);
   return `
     <article class="finance-card finance-static-card admin-user-card">
       <span class="admin-user-name">${escapeHtml(partnerName(partner))}</span>
       <small>login: ${escapeHtml(partner.username)}</small>
+      <small>კომპანიისთვის მისაცემი ქეში: ${escapeHtml(formatMoney(cash.cashDue))}</small>
+      <small>მოლოდინში ქეში: ${escapeHtml(formatMoney(cash.pendingCash))}</small>
       <small>კონტაქტი: ${escapeHtml(partner.contactPerson || "არ არის")}</small>
       <small>ტელეფონი: ${escapeHtml(partner.phone || "არ არის")}</small>
       <small>შექმნა: ${escapeHtml(formatOptionalDateTime(partner.createdAt))}</small>
       <small>სტატუსი: ${active ? "active" : "inactive"}</small>
       <div class="row-actions admin-user-actions">
+        <button class="mini-button" type="button" data-action="adjustPartnerCash" data-value="${escapeAttr(partner.username)}">ქეში</button>
         <button class="mini-button" type="button" data-action="editPartner" data-value="${escapeAttr(partner.username)}">რედაქტირება</button>
         <button class="mini-button ${active ? "danger" : ""}" type="button" data-action="togglePartnerStatus" data-value="${escapeAttr(partner.username)}">${active ? "დეაქტივაცია" : "აქტივაცია"}</button>
       </div>
     </article>
   `;
+}
+
+
+async function openPartnerCashAdjustmentDialog(username) {
+  if (!state.isAdmin) return;
+  const [partners, records] = await Promise.all([
+    getPartners(),
+    getAllPartnerCashRecords(),
+  ]);
+  const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
+  if (!partner) return;
+
+  const summary = calculatePartnerCashSummary(partner, records);
+  const content = `
+    <div class="finance-card finance-mini-card finance-section stats-card">
+      <strong>${escapeHtml(partnerName(partner))}</strong>
+      <span>კომპანიისთვის მისაცემი ქეში: ${escapeHtml(formatMoney(summary.cashDue))}</span>
+      <small>ჩაბარებული შეკვეთების ქეში: ${escapeHtml(formatMoney(summary.baseCash))}</small>
+      <small>კორექტირება: ${escapeHtml(formatMoney(summary.adjustmentTotal))}</small>
+      <small>მოლოდინში ქეში: ${escapeHtml(formatMoney(summary.pendingCash))}</small>
+    </div>
+    <label for="partnerCashAdjustmentAmount">ახალი მისაცემი თანხა</label>
+    <input class="finance-input" id="partnerCashAdjustmentAmount" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(String(summary.cashDue))}">
+    <p class="form-message" id="partnerCashAdjustmentMessage" role="alert"></p>
+  `;
+  showDialog("პარტნიორის ქეშის კორექტირება", content, [
+    { label: "შენახვა", variant: "primary", action: () => savePartnerCashAdjustment(username) },
+    { label: "განულება", variant: "danger", action: () => resetPartnerCashAdjustment(username) },
+    { label: "უკან", variant: "secondary", action: openPartnerManagement },
+  ]);
+}
+
+
+async function savePartnerCashAdjustment(username) {
+  const message = document.getElementById("partnerCashAdjustmentMessage");
+  const value = parsePaymentAmount(document.getElementById("partnerCashAdjustmentAmount")?.value);
+  if (!Number.isFinite(value) || value < 0) {
+    if (message) message.textContent = "შეიყვანეთ სწორი თანხა.";
+    return;
+  }
+  await addPartnerCashAdjustment(username, value);
+  await openPartnerManagement();
+}
+
+
+async function resetPartnerCashAdjustment(username) {
+  await addPartnerCashAdjustment(username, 0);
+  await openPartnerManagement();
+}
+
+
+async function addPartnerCashAdjustment(username, targetAmount) {
+  const [partners, records] = await Promise.all([
+    getPartners(),
+    getAllPartnerCashRecords(),
+  ]);
+  const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
+  if (!partner) return;
+
+  const summary = calculatePartnerCashSummary(partner, records);
+  const nextAmount = safeMoney(targetAmount);
+  const nextDelta = safeMoney(nextAmount - summary.cashDue);
+  if (Math.abs(nextDelta) < 0.005) return;
+
+  const now = new Date().toISOString();
+  const adjustment = {
+    id: createFinanceEntryId("partner-cash"),
+    username: partner.username,
+    partnerUsername: partner.username,
+    partnerId: partnerCashIdentity(partner),
+    amount: nextDelta,
+    delta: nextDelta,
+    targetAmount: nextAmount,
+    type: nextDelta < 0 ? "negative" : "positive",
+    category: "partnerCash",
+    dateKey: toDateKey(new Date()),
+    date: toDateKey(new Date()),
+    note: "partner cash correction",
+    timestamp: now,
+    createdAt: now,
+  };
+  writePartnerCashAdjustments([...readPartnerCashAdjustments(), adjustment]);
 }
 
 

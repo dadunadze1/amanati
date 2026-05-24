@@ -15,6 +15,7 @@ const CONFIG = {
   dataRetentionMonths: 8,
   zoneAssignmentsStorageKey: "deliveryZoneAssignments:v1",
   cashAdjustmentsStorageKey: "deliveryCashAdjustments:v1",
+  partnerCashAdjustmentsStorageKey: "deliveryPartnerCashAdjustments:v1",
   payAdjustmentsStorageKey: "deliveryPayAdjustments:v1",
 };
 
