@@ -199,41 +199,74 @@ function getParcelHistoryExportFilename() {
 }
 
 
-function openCalendar(username, title) {
+async function openCalendar(username, title) {
   state.calendarDate = new Date();
-  renderCalendarDialog(username, title);
+  await renderCalendarDialog(username, title);
 }
 
 
-function renderCalendarDialog(username, title) {
+async function renderCalendarDialog(username, title) {
   const year = state.calendarDate.getFullYear();
   const month = state.calendarDate.getMonth();
-  const firstDay = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const offset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
-  const weekdays = ["ორშ", "სამ", "ოთხ", "ხუთ", "პარ", "შაბ", "კვი"];
+  const monthLabel = formatMonthYear(state.calendarDate);
+  const [active, allHistory] = await Promise.all([getPins(username), getHistory(username)]);
+  const allRecords = [...active, ...allHistory];
+  const rows = [];
+  let periodTotal = 0;
 
-  let grid = weekdays.map((day) => `<div class="calendar-cell weekday">${day}</div>`).join("");
-  for (let i = 0; i < offset; i += 1) grid += `<div class="calendar-cell empty"></div>`;
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const date = toDateKey(new Date(year, month, day));
-    grid += `<button class="calendar-cell" type="button" data-action="calendarDay" data-value="${date}">${day}</button>`;
+  for (let day = daysInMonth; day >= 1; day -= 1) {
+    const dateKey = toDateKey(new Date(year, month, day));
+    const summary = calculateFinanceSummary({ records: allRecords }, { username, startDate: dateKey, endDate: dateKey });
+    if (!summary.records.length) continue;
+    const deliveredCount = summary.delivered;
+    const totalPay = summary.finalPay;
+    const unitPay = deliveredCount ? summary.basePay / deliveredCount : 0;
+    periodTotal += totalPay;
+    rows.push(`
+      <button class="history-ledger-row" type="button" data-action="calendarDay" data-value="${escapeAttr(dateKey)}">
+        <span class="history-ledger-date">${escapeHtml(formatHistoryLedgerDate(dateKey))}</span>
+        <span>${deliveredCount}</span>
+        <span>${escapeHtml(formatMoney(unitPay))}</span>
+        <span class="history-ledger-amount">
+          <strong>${escapeHtml(formatMoney(totalPay))}</strong>
+          <em>${totalPay > 0 ? "გადახდილია" : "ჩანაწერი"}</em>
+        </span>
+      </button>
+    `);
   }
 
-  const monthLabel = formatMonthYear(state.calendarDate);
   const body = `
-    <div class="calendar-panel">
-      <div class="calendar-header">
-      <button class="calendar-nav-button" type="button" data-action="previousMonth" aria-label="წინა თვე">&lt;</button>
-      <strong>${monthLabel}</strong>
-      <button class="calendar-nav-button" type="button" data-action="nextMonth" aria-label="შემდეგი თვე">&gt;</button>
+    <div class="history-ledger-screen">
+      <div class="history-ledger-toolbar">
+        <button class="calendar-nav-button history-ledger-nav" type="button" data-action="previousMonth" aria-label="წინა თვე">&lt;</button>
+        <div class="history-ledger-title">
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(monthLabel)}</span>
+        </div>
+        <button class="calendar-nav-button history-ledger-nav" type="button" data-action="nextMonth" aria-label="შემდეგი თვე">▦</button>
       </div>
-      <div class="calendar-grid">${grid}</div>
+      <div class="history-ledger-table" role="table" aria-label="${escapeAttr(title)}">
+        <div class="history-ledger-head" role="row">
+          <span>თარიღი</span>
+          <span>ამანათების რაოდენობა</span>
+          <span>1 ამანათის საფასური</span>
+          <span>ჯამი თანხა</span>
+        </div>
+        <div class="history-ledger-body">
+          ${rows.join("") || "<div class=\"history-empty history-empty-card\">ამ თვეში ისტორია არ არის.</div>"}
+        </div>
+      </div>
+      <div class="history-ledger-total">
+        <span>სულ მიღებული (ამ პერიოდის ჯამი)</span>
+        <strong>${escapeHtml(formatMoney(periodTotal))}</strong>
+      </div>
+      <div id="calendarResults" class="history-results history-ledger-details"></div>
     </div>
-    <div id="calendarResults" class="history-results"></div>
   `;
 
   showDialog(title, body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+  els.dialogModal.classList.add("history-dialog");
   bindCalendarActions(username, title);
 }
 
@@ -243,17 +276,23 @@ function bindCalendarActions(username, title) {
     button.addEventListener("click", async () => {
       if (button.dataset.action === "previousMonth") {
         state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() - 1, 1);
-        renderCalendarDialog(username, title);
+        await renderCalendarDialog(username, title);
         return;
       }
       if (button.dataset.action === "nextMonth") {
         state.calendarDate = new Date(state.calendarDate.getFullYear(), state.calendarDate.getMonth() + 1, 1);
-        renderCalendarDialog(username, title);
+        await renderCalendarDialog(username, title);
         return;
       }
       await renderHistoryForDate(username, button.dataset.value);
     });
   });
+}
+
+
+function formatHistoryLedgerDate(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return date.toLocaleDateString("ka-GE", { day: "numeric", month: "long", year: "numeric" });
 }
 
 
