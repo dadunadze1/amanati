@@ -226,8 +226,8 @@ async function renderCalendarDialog(username, title) {
     rows.push(`
       <button class="history-ledger-row" type="button" data-action="calendarDay" data-value="${escapeAttr(dateKey)}">
         <span class="history-ledger-date">${escapeHtml(formatHistoryLedgerDate(dateKey))}</span>
-        <span>${deliveredCount}</span>
-        <span>${escapeHtml(formatMoney(unitPay))}</span>
+        <span class="history-ledger-count">${deliveredCount}</span>
+        <span class="history-ledger-unit">${escapeHtml(formatMoney(unitPay))}</span>
         <span class="history-ledger-amount">
           <strong>${escapeHtml(formatMoney(totalPay))}</strong>
           <em>${totalPay > 0 ? "გადახდილია" : "ჩანაწერი"}</em>

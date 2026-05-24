@@ -9671,6 +9671,176 @@ textarea {
   }
 }
 
+@media (max-width: 768px) {
+  .modal-card:has(.history-ledger-screen) {
+    width: min(92vw, 520px) !important;
+    max-width: 92vw !important;
+    max-height: 85vh !important;
+    padding: 16px !important;
+    overflow-y: auto !important;
+    background: #ffffff !important;
+    border-radius: 16px !important;
+  }
+
+  .modal-card:has(.history-ledger-screen) .dialog-body {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .modal-card:has(.history-ledger-screen) .dialog-actions {
+    padding: 10px 0 0 !important;
+    background: #ffffff !important;
+  }
+
+  .history-ledger-screen {
+    gap: 12px !important;
+    padding: 0 !important;
+    background: #ffffff;
+  }
+
+  .history-ledger-toolbar {
+    grid-template-columns: 40px minmax(0, 1fr) 40px !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 14px !important;
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 12px !important;
+  }
+
+  .history-ledger-toolbar strong {
+    font-size: 20px !important;
+    line-height: 1.1 !important;
+  }
+
+  .history-ledger-title span {
+    font-size: 14px !important;
+    line-height: 1.1 !important;
+  }
+
+  .history-ledger-nav {
+    width: 34px !important;
+    min-height: 34px !important;
+    font-size: 1.35rem !important;
+  }
+
+  .history-ledger-nav:last-child {
+    font-size: 1.12rem !important;
+  }
+
+  .history-ledger-table {
+    overflow: visible !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .history-ledger-head {
+    display: none !important;
+  }
+
+  .history-ledger-body {
+    display: block !important;
+  }
+
+  .history-ledger-row {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-areas:
+      "date amount"
+      "countLabel countValue";
+    align-items: start !important;
+    gap: 10px 12px !important;
+    margin: 0 0 12px !important;
+    padding: 14px !important;
+    color: #111827 !important;
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 16px !important;
+    box-shadow: 0 8px 22px rgba(17, 24, 39, 0.08) !important;
+    text-align: left !important;
+  }
+
+  .history-ledger-row:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  .history-ledger-row::before {
+    content: "ამანათები";
+    grid-area: countLabel;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .history-ledger-date {
+    grid-area: date;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    white-space: normal !important;
+  }
+
+  .history-ledger-count {
+    grid-area: countValue;
+    justify-self: end;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    line-height: 1.1 !important;
+  }
+
+  .history-ledger-unit {
+    display: none !important;
+  }
+
+  .history-ledger-amount {
+    grid-area: amount;
+    justify-items: end !important;
+    gap: 0 !important;
+  }
+
+  .history-ledger-amount strong {
+    color: #2563eb !important;
+    font-size: 17px !important;
+    font-weight: 900 !important;
+    line-height: 1.12 !important;
+    white-space: nowrap;
+  }
+
+  .history-ledger-amount em {
+    display: none !important;
+  }
+
+  .history-ledger-total {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px !important;
+    padding: 18px !important;
+    background: #ffffff !important;
+    border: 1px solid #dbeafe !important;
+    border-radius: 16px !important;
+    box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08) !important;
+  }
+
+  .history-ledger-total span {
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+  }
+
+  .history-ledger-total strong {
+    justify-self: end !important;
+    color: #2563eb !important;
+    font-size: 30px !important;
+    font-weight: 950 !important;
+    line-height: 1 !important;
+  }
+}
+
 /* 2026 operations UI refresh: admin and courier only. Login/setup and partner surfaces are intentionally untouched. */
 body:has(.app-shell.is-admin-dashboard),
 body:has(.app-shell.is-courier-mobile),
