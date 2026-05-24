@@ -5,9 +5,10 @@
 const COURIER_LOCATION_REFRESH_MS = 60000;
 const COURIER_LOCATION_VISIBLE_MS = 120000;
 const DEFAULT_MAP_CENTER = [41.7151, 44.8271];
-const DEFAULT_MAP_ZOOM = 13;
-const MIN_VALID_MAP_ZOOM = 10;
+const DEFAULT_MAP_ZOOM = 15;
+const MIN_VALID_MAP_ZOOM = 12;
 const MAX_VALID_MAP_ZOOM = 19;
+const LOGIN_VIEWPORT_ENFORCE_DELAYS = [0, 80, 220, 520, 1000, 1600];
 
 
 async function initializeMap() {
@@ -61,6 +62,17 @@ function scheduleMapLayoutReady(callback) {
 }
 
 
+function scheduleRepeatedMapViewport(callback, token = state.mapViewportResetToken) {
+  LOGIN_VIEWPORT_ENFORCE_DELAYS.forEach((delay) => {
+    setTimeout(() => {
+      if (token !== state.mapViewportResetToken) return;
+      state.map?.invalidateSize({ pan: false });
+      callback?.();
+    }, delay);
+  });
+}
+
+
 function getDefaultMapCenter() {
   const configured = Array.isArray(CONFIG.center) ? CONFIG.center : DEFAULT_MAP_CENTER;
   const lat = Number(configured[0]);
@@ -91,13 +103,15 @@ function resetMapToDefaultViewport() {
 function resetMapViewportForLogin() {
   if (!state.map) return;
   state.mapViewportResetPending = true;
+  state.mapViewportResetToken += 1;
   clearMapObject(state.routeLayer);
   state.routeLayer = null;
   state.routePinId = null;
   resetMapToDefaultViewport();
-  scheduleMapLayoutReady(() => {
+  const token = state.mapViewportResetToken;
+  scheduleRepeatedMapViewport(() => {
     if (state.mapViewportResetPending) resetMapToDefaultViewport();
-  });
+  }, token);
 }
 
 
@@ -112,8 +126,9 @@ function getPinsWithMapCoords(pins) {
 function fitMapToPinsOrDefault(pins, options = {}) {
   if (!state.map || !window.L) return;
   const visiblePins = getPinsWithMapCoords(pins);
+  const token = state.mapViewportResetToken;
   const applyViewport = () => {
-    state.map.invalidateSize();
+    state.map.invalidateSize({ pan: false });
     if (visiblePins.length) {
       const bounds = L.latLngBounds(visiblePins.map((pin) => toLeafletLatLng(pin)));
       if (bounds.isValid()) {
@@ -131,7 +146,9 @@ function fitMapToPinsOrDefault(pins, options = {}) {
     state.mapViewportResetPending = false;
   };
 
+  applyViewport();
   scheduleMapLayoutReady(applyViewport);
+  scheduleRepeatedMapViewport(applyViewport, token);
 }
 
 

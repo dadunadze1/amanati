@@ -82,6 +82,8 @@ function completeLogin(payload) {
   state.courierPresenceStatus = state.isAdmin || state.isPartner ? "offline" : "online";
   state.adminDashboardHidden = false;
   els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
+  state.mapViewportResetToken += 1;
+  state.mapViewportResetPending = false;
   hideModal(els.setupModal);
   hideModal(els.authModal);
   hideModal(els.registerModal);

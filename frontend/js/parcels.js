@@ -65,7 +65,7 @@ async function refreshPinsOnce() {
   } else {
     hideSelectedParcelCard();
   }
-  if (state.mapViewportResetPending) {
+  if (state.mapViewportResetPending || !visiblePins.length) {
     fitMapToPinsOrDefault(visiblePins);
   } else {
     scheduleMapInvalidateSize(0);
