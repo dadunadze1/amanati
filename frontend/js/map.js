@@ -4,6 +4,10 @@
 
 const COURIER_LOCATION_REFRESH_MS = 60000;
 const COURIER_LOCATION_VISIBLE_MS = 120000;
+const DEFAULT_MAP_CENTER = [41.7151, 44.8271];
+const DEFAULT_MAP_ZOOM = 13;
+const MIN_VALID_MAP_ZOOM = 10;
+const MAX_VALID_MAP_ZOOM = 19;
 
 
 async function initializeMap() {
@@ -16,7 +20,11 @@ async function initializeMap() {
     return;
   }
 
-  state.map = L.map(els.map, { zoomControl: false }).setView(CONFIG.center, 14);
+  state.map = L.map(els.map, {
+    zoomControl: false,
+    minZoom: MIN_VALID_MAP_ZOOM,
+    maxZoom: MAX_VALID_MAP_ZOOM,
+  }).setView(getDefaultMapCenter(), DEFAULT_MAP_ZOOM);
   L.control.zoom({ position: "bottomleft" }).addTo(state.map);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -30,6 +38,7 @@ async function initializeMap() {
     rerenderCurrentMapPins();
   });
   bindMapResizeInvalidation();
+  resetMapToDefaultViewport();
   scheduleMapInvalidateSize();
 }
 
@@ -38,6 +47,91 @@ function scheduleMapInvalidateSize(delay = 300) {
   setTimeout(() => {
     state.map?.invalidateSize();
   }, delay);
+}
+
+
+function scheduleMapLayoutReady(callback) {
+  const run = () => {
+    state.map?.invalidateSize();
+    callback?.();
+  };
+  window.requestAnimationFrame?.(() => window.requestAnimationFrame?.(run) || setTimeout(run, 0));
+  setTimeout(run, 80);
+  setTimeout(run, 260);
+}
+
+
+function getDefaultMapCenter() {
+  const configured = Array.isArray(CONFIG.center) ? CONFIG.center : DEFAULT_MAP_CENTER;
+  const lat = Number(configured[0]);
+  const lng = Number(configured[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return DEFAULT_MAP_CENTER;
+  return [lat, lng];
+}
+
+
+function isValidMapZoom(zoom) {
+  const value = Number(zoom);
+  return Number.isFinite(value) && value >= MIN_VALID_MAP_ZOOM && value <= MAX_VALID_MAP_ZOOM;
+}
+
+
+function getSafeMapZoom(zoom, fallback = DEFAULT_MAP_ZOOM) {
+  const value = Number(zoom);
+  return isValidMapZoom(value) ? value : fallback;
+}
+
+
+function resetMapToDefaultViewport() {
+  if (!state.map) return;
+  state.map.setView(getDefaultMapCenter(), DEFAULT_MAP_ZOOM, { animate: false });
+}
+
+
+function resetMapViewportForLogin() {
+  if (!state.map) return;
+  state.mapViewportResetPending = true;
+  clearMapObject(state.routeLayer);
+  state.routeLayer = null;
+  state.routePinId = null;
+  resetMapToDefaultViewport();
+  scheduleMapLayoutReady(() => {
+    if (state.mapViewportResetPending) resetMapToDefaultViewport();
+  });
+}
+
+
+function getPinsWithMapCoords(pins) {
+  return (Array.isArray(pins) ? pins : []).filter((pin) => (
+    Number.isFinite(Number(pin?.lat ?? pin?.latitude))
+    && Number.isFinite(Number(pin?.lng ?? pin?.longitude))
+  ));
+}
+
+
+function fitMapToPinsOrDefault(pins, options = {}) {
+  if (!state.map || !window.L) return;
+  const visiblePins = getPinsWithMapCoords(pins);
+  const applyViewport = () => {
+    state.map.invalidateSize();
+    if (visiblePins.length) {
+      const bounds = L.latLngBounds(visiblePins.map((pin) => toLeafletLatLng(pin)));
+      if (bounds.isValid()) {
+        state.map.fitBounds(bounds, {
+          animate: false,
+          padding: options.padding || [48, 48],
+          maxZoom: options.maxZoom || 17,
+        });
+      } else {
+        resetMapToDefaultViewport();
+      }
+    } else {
+      resetMapToDefaultViewport();
+    }
+    state.mapViewportResetPending = false;
+  };
+
+  scheduleMapLayoutReady(applyViewport);
 }
 
 
@@ -116,6 +210,7 @@ function renderSinglePinMarker(pin) {
 function handlePinMarkerClick(pin, event) {
   stopMapClick(event);
   if (!pin?.id) return;
+  state.map?.closePopup?.();
   openParcelTab(pin.id, { closeOpenDialog: state.isAdmin, focus: true });
 }
 
@@ -409,17 +504,18 @@ function stopMapClick(event) {
 
 function setMapView(coords, zoom) {
   if (!state.map) return;
-  state.map.setView(toLeafletLatLng(coords), Number.isFinite(Number(zoom)) ? Number(zoom) : getMapZoom());
+  state.map.setView(toLeafletLatLng(coords), getSafeMapZoom(zoom, getMapZoom()));
 }
 
 
 function getMapZoom() {
-  return Number(state.map?.getZoom()) || 14;
+  return getSafeMapZoom(state.map?.getZoom(), DEFAULT_MAP_ZOOM);
 }
 
 
 function toLeafletLatLng(coords) {
-  return [Number(coords.lat), Number(coords.lng)];
+  if (Array.isArray(coords)) return [Number(coords[0]), Number(coords[1])];
+  return [Number(coords?.lat ?? coords?.latitude), Number(coords?.lng ?? coords?.longitude)];
 }
 
 

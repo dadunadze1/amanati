@@ -3,6 +3,7 @@
 const state = {
   map: null,
   markers: null,
+  mapViewportResetPending: false,
   currentUser: null,
   currentUserProfile: null,
   authToken: null,

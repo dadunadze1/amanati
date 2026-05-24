@@ -87,22 +87,30 @@ function completeLogin(payload) {
   hideModal(els.registerModal);
   resetMapSelectionUi();
   renderActions();
-  renderAdminDashboard();
-  renderPartnerDashboard().catch(() => {});
-  renderCourierMobileDashboard().catch(() => {});
-  if (!state.isPartner) startLocationWatch();
-  if (!state.isPartner) startCourierLocationServices();
-  if (!state.isPartner) {
-    runAutoDayClose(getPreviousDateKey()).catch((error) => {
-      console.warn("Auto day close failed", error);
+  Promise.allSettled([
+    Promise.resolve(renderAdminDashboard()),
+    renderPartnerDashboard(),
+    renderCourierMobileDashboard(),
+  ]).then(() => {
+    resetMapViewportForLogin();
+    if (!state.isPartner) startLocationWatch();
+    if (!state.isPartner) startCourierLocationServices();
+    if (!state.isPartner) {
+      runAutoDayClose(getPreviousDateKey()).catch((error) => {
+        console.warn("Auto day close failed", error);
+      });
+      runAutoRetentionCleanup().catch((error) => {
+        console.warn("Retention cleanup failed", error);
+      });
+    }
+    refreshPins().catch((error) => {
+      console.warn("Pin refresh failed", error);
+      fitMapToPinsOrDefault([]);
     });
-    runAutoRetentionCleanup().catch((error) => {
-      console.warn("Retention cleanup failed", error);
-    });
-  }
-  refreshPins();
-  scheduleMapInvalidateSize();
-  scheduleMidnightRefresh();
+    scheduleMapInvalidateSize(0);
+    scheduleMapInvalidateSize(120);
+    scheduleMidnightRefresh();
+  });
 }
 
 

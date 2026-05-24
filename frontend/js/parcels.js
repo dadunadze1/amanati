@@ -65,6 +65,11 @@ async function refreshPinsOnce() {
   } else {
     hideSelectedParcelCard();
   }
+  if (state.mapViewportResetPending) {
+    fitMapToPinsOrDefault(visiblePins);
+  } else {
+    scheduleMapInvalidateSize(0);
+  }
   scheduleMapInvalidateSize();
 }
 
@@ -932,6 +937,7 @@ function openParcelTab(pinId, options = {}) {
   if (!pin) return;
 
   closeActions();
+  state.map?.closePopup?.();
   if (options.closeOpenDialog && els.dialogModal?.classList.contains("active")) closeDialog();
   showSelectedParcelCard(pin.id, { focus: Boolean(options.focus) });
 }
@@ -1068,7 +1074,6 @@ function renderSelectedParcelCard() {
           <span>სტატუსი</span>
           <strong class="status-${pin.status}">${statusText}</strong>
         </div>
-        ${statusControls}
       </section>
       <section class="nearest-detail-section">
         <h3>თანხა</h3>
@@ -1103,6 +1108,7 @@ function renderSelectedParcelCard() {
         </section>
       ` : ""}
     </div>
+    ${statusControls}
   `;
 }
 
