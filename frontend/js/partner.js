@@ -116,8 +116,10 @@ function getPartnerCashAdjustments(partner) {
 
 function calculatePartnerCashSummary(partner, records = []) {
   const orders = (Array.isArray(records) ? records : []).filter((order) => orderBelongsToPartner(order, partner));
+  const cashOrders = orders.filter((order) => getPaymentAmount(order) > 0);
   const deliveredOrders = orders.filter((order) => order.status === "delivered");
   const pendingOrders = orders.filter((order) => order.status !== "delivered" && order.status !== "failed");
+  const totalCash = safeMoney(cashOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const baseCash = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const pendingCash = safeMoney(pendingOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const adjustmentTotal = safeMoney(getPartnerCashAdjustments(partner).reduce((sum, adjustment) => sum + getAdjustmentSignedAmount(adjustment), 0));
@@ -125,6 +127,8 @@ function calculatePartnerCashSummary(partner, records = []) {
     orders,
     deliveredOrders,
     pendingOrders,
+    cashOrders,
+    totalCash,
     baseCash,
     pendingCash,
     adjustmentTotal,
@@ -151,11 +155,9 @@ async function renderPartnerDashboard(pins = state.activePins) {
     return;
   }
 
-  await loadPartnerCashAdjustments();
   const orders = Array.isArray(pins) ? pins : await getPins("");
-  const cashRecords = await getAllPartnerCashRecords().catch(() => orders);
   const partner = state.currentUserProfile || { username: state.currentUser };
-  const cash = calculatePartnerCashSummary(partner, cashRecords);
+  const cash = calculatePartnerCashSummary(partner, orders);
   els.appShell?.classList.add("is-partner-dashboard");
   els.partnerDashboard.hidden = false;
 
@@ -179,10 +181,7 @@ async function renderPartnerDashboard(pins = state.activePins) {
       ${renderPartnerStat("აქტიური შეკვეთები", activeOrders.length)}
       ${renderPartnerStat("ჩაბარებული", deliveredOrders.length)}
       ${renderPartnerStat("ვერ ჩაბარდა", failedOrders.length)}
-      ${renderPartnerStat("მისაცემი ქეში", formatMoney(cash.cashDue))}
-      ${renderPartnerStat("კორექტირება", formatMoney(cash.adjustmentTotal))}
-      ${renderPartnerStat("მოლოდინში ქეში", formatMoney(cash.pendingCash))}
-      ${renderPartnerStat("ჩაბარებული ქეში", formatMoney(cash.baseCash))}
+      ${renderPartnerStat("სულ ქეში", formatMoney(cash.totalCash))}
     </div>
     <section class="partner-panel">
       <div class="partner-panel-head">
