@@ -338,7 +338,7 @@ async function renderHistoryForDate(username, dateKey) {
         <span><b>${failed}</b> არ ჩაბარდა</span>
         <span><b>${escapeHtml(formatMoney(outstandingCash))}</b> ჩასაბარებელი ქეში</span>
         <span><b>${escapeHtml(formatMoney(basePay))}</b> საბაზისო გამომუშავება</span>
-        <span><b>${escapeHtml(formatMoney(payAdjustment))}</b> კორექტირება</span>
+        <span><b>${escapeHtml(formatAdjustmentDisplay(payAdjustment))}</b> ${escapeHtml(getAdjustmentDirectionLabel(payAdjustment))}</span>
         <span><b>${escapeHtml(formatMoney(courierPay))}</b> საბოლოო გამომუშავება</span>
       </div>
     </div>
@@ -356,7 +356,7 @@ async function confirmEndDay() {
   const basePay = summary.basePay;
   const courierPay = summary.finalPay;
   const payAdjustment = summary.adjustmentTotal;
-  showDialog("დღის დახურვა", `<p>ისტორიაში გადავიდეს მხოლოდ ჩაბარებული ამანათები?</p><div class="stats-card">ქეში: <strong>${formatMoney(companyTotal)}</strong></div><div class="stats-card">საბაზისო გამომუშავება: <strong>${formatMoney(basePay)}</strong></div><div class="stats-card">კორექტირება: <strong>${formatMoney(payAdjustment)}</strong></div><div class="stats-card">საბოლოო გამომუშავება: <strong>${formatMoney(courierPay)}</strong></div>`, [
+  showDialog("დღის დახურვა", `<p>ისტორიაში გადავიდეს მხოლოდ ჩაბარებული ამანათები?</p><div class="stats-card">ქეში: <strong>${formatMoney(companyTotal)}</strong></div><div class="stats-card">საბაზისო გამომუშავება: <strong>${formatMoney(basePay)}</strong></div><div class="stats-card">${getAdjustmentDirectionLabel(payAdjustment)}: <strong>${formatAdjustmentDisplay(payAdjustment)}</strong></div><div class="stats-card">საბოლოო გამომუშავება: <strong>${formatMoney(courierPay)}</strong></div>`, [
     { label: "დახურვა", variant: "primary", action: archiveDay },
     { label: "გაუქმება", variant: "secondary", action: closeDialog },
   ]);
@@ -483,7 +483,7 @@ function renderParcelHistorySummary(parcels) {
     <div class="parcel-history-summary-item"><span>არ ჩაბარებული</span><strong>${failed}</strong></div>
     <div class="parcel-history-summary-item"><span>ჩასაბარებელი ქეში</span><strong>${escapeHtml(formatMoney(outstandingCash))}</strong></div>
     <div class="parcel-history-summary-item"><span>საბაზისო გამომუშავება</span><strong>${escapeHtml(formatMoney(basePay))}</strong></div>
-    <div class="parcel-history-summary-item"><span>კორექტირება</span><strong>${escapeHtml(formatMoney(payAdjustment))}</strong></div>
+    <div class="parcel-history-summary-item"><span>${escapeHtml(getAdjustmentDirectionLabel(payAdjustment))}</span><strong>${escapeHtml(formatAdjustmentDisplay(payAdjustment))}</strong></div>
     <div class="parcel-history-summary-item"><span>საბოლოო გამომუშავება</span><strong>${escapeHtml(formatMoney(courierPay))}</strong></div>
   `;
 }

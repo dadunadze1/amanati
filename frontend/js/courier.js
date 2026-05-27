@@ -416,7 +416,7 @@ async function renderStats(stats) {
         <span><b>${stats.records.length}</b> ამანათი</span>
         <span><b>${escapeHtml(formatMoney(stats.outstandingCash ?? stats.companyTotal))}</b> ჩასაბარებელი ქეში</span>
         <span><b>${escapeHtml(formatMoney(basePay))}</b> საბაზისო გამომუშავება</span>
-        <span><b>${escapeHtml(formatMoney(payAdjustment))}</b> კორექტირება</span>
+        <span><b>${escapeHtml(formatAdjustmentDisplay(payAdjustment))}</b> ${escapeHtml(getAdjustmentDirectionLabel(payAdjustment))}</span>
         <span><b>${escapeHtml(formatMoney(stats.courierPay))}</b> საბოლოო გამომუშავება</span>
       </div>
     </div>

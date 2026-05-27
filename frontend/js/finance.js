@@ -135,8 +135,8 @@ function calculateFinanceSummary(data = {}, filters = {}) {
   const deliveryFees = sumDeliveryTotals(deliveredRecords);
   const courierBasePay = sumCourierPay(deliveredRecords);
   const adminProfit = sumAdminProfit(deliveredRecords);
-  const cashReceived = safeMoney(totalOrdersAmount + cashAdjustmentTotal);
-  const finalPay = safeMoney(courierBasePay + payAdjustmentTotal);
+  const cashReceived = Math.max(0, safeMoney(totalOrdersAmount + cashAdjustmentTotal));
+  const finalPay = Math.max(0, safeMoney(courierBasePay + payAdjustmentTotal));
   const finalTotal = safeMoney(totalOrdersAmount + deliveryFees + cashReceived + positiveCorrections - negativeCorrections);
 
   const summary = {
@@ -184,6 +184,30 @@ function calculateFinanceSummary(data = {}, filters = {}) {
   }
 
   return summary;
+}
+
+
+function getAdjustmentDirectionLabel(total) {
+  const amount = safeMoney(total);
+  if (amount > 0) return "მიმატებული";
+  if (amount < 0) return "ჩამოკლებული";
+  return "კორექტირება";
+}
+
+
+function formatAdjustmentDisplay(total) {
+  return formatMoney(Math.abs(safeMoney(total)));
+}
+
+
+function renderAdjustmentModeSelect(id) {
+  return `
+    <label for="${escapeAttr(id)}">მოქმედება</label>
+    <select class="finance-input" id="${escapeAttr(id)}">
+      <option value="subtract" selected>ჩამოკლება</option>
+      <option value="add">მიმატება</option>
+    </select>
+  `;
 }
 
 
@@ -482,7 +506,7 @@ function renderFinanceAdjustmentHistorySection(username, startDate, endDate) {
       <div class="finance-adjustments-list">
         ${adjustments.length ? adjustments.map((adjustment) => `
           <article class="finance-card finance-mini-card finance-adjustment-row">
-            <span class="finance-tag finance-adjustment-badge ${Number(adjustment.delta) >= 0 ? "is-positive" : "is-negative"}">${escapeHtml(formatMoney(Number(adjustment.delta) || 0))}</span>
+            <span class="finance-tag finance-adjustment-badge ${Number(adjustment.delta) >= 0 ? "is-positive" : "is-negative"}">${escapeHtml(formatMoney(Math.abs(Number(adjustment.delta) || 0)))}</span>
             <div class="finance-adjustment-main">
               <strong>${escapeHtml(formatMoney(Number(adjustment.targetAmount) || 0))}</strong>
               <small>${escapeHtml(formatDateTime(adjustment.updatedAt || adjustment.createdAt))}</small>
@@ -651,7 +675,7 @@ async function openFinanceDashboard() {
       <section class="finance-section finance-explain-grid">
         <div class="finance-explain-row"><strong>ქეში</strong><span>შეკვეთის თანხა, რომელიც კომპანიას უნდა დაუბრუნდეს.</span></div>
         <div class="finance-explain-row"><strong>ანაზღაურება</strong><span>კურიერის ხელფასი/გამომუშავება, ქეშისგან ცალკეა.</span></div>
-        <div class="finance-explain-row"><strong>კორექტირება</strong><span>ადმინის ხელით შესწორება ცალკე ინახება და შესაბამის ჯამს ემატება.</span></div>
+        <div class="finance-explain-row"><strong>კორექტირება</strong><span>ადმინი ირჩევს მიმატებას ან ჩამოკლებას. ჩამოკლება ნაშთს 0-ს ქვემოთ არ უშვებს.</span></div>
       </section>
   `;
   const body = renderFinanceModalLayout({ content });
@@ -710,8 +734,8 @@ async function openFinanceCourier(username) {
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--compact finance-summary-item--adjustment",
           icon: "↺",
-          label: "კორექტირება",
-          value: formatMoney(adjustmentTotal),
+          label: getAdjustmentDirectionLabel(adjustmentTotal),
+          value: formatAdjustmentDisplay(adjustmentTotal),
         })}
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--compact finance-summary-item--period",
@@ -800,7 +824,7 @@ async function openFinanceCash() {
               <span>${escapeHtml(userDisplayName(courier))}</span>
               <small>ჩასაბარებელი ქეში</small>
               <strong>${escapeHtml(formatMoney(cash))}</strong>
-              <small>შეკვეთები: ${escapeHtml(formatMoney(courierSummary.totalOrdersAmount))} · კორექტირება: ${escapeHtml(formatMoney(courierSummary.cashAdjustmentTotal))}</small>
+              <small>შეკვეთები: ${escapeHtml(formatMoney(courierSummary.totalOrdersAmount))} · ${escapeHtml(getAdjustmentDirectionLabel(courierSummary.cashAdjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(courierSummary.cashAdjustmentTotal))}</small>
               <button class="mini-button finance-button-primary" type="button" data-action="adjustCourierCash" data-value="${escapeAttr(username)}">რედაქტირება</button>
             </article>
           `;
@@ -857,8 +881,8 @@ async function openFinanceCourierPay() {
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--adjustment",
           icon: "↺",
-          label: "კორექტირება",
-          value: formatMoney(adjustmentTotal),
+          label: getAdjustmentDirectionLabel(adjustmentTotal),
+          value: formatAdjustmentDisplay(adjustmentTotal),
         })}
   `;
   const content = `
@@ -869,7 +893,7 @@ async function openFinanceCourierPay() {
             <span>${escapeHtml(userDisplayName(courier))}</span>
             <small>საბოლოო ანაზღაურება</small>
             <strong>${escapeHtml(formatMoney(courierSummary.finalPay))}</strong>
-            <small>საბაზისო: ${escapeHtml(formatMoney(courierSummary.basePay))} · კორექტირება: ${escapeHtml(formatMoney(courierSummary.adjustmentTotal))}</small>
+            <small>საბაზისო: ${escapeHtml(formatMoney(courierSummary.basePay))} · ${escapeHtml(getAdjustmentDirectionLabel(courierSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(courierSummary.adjustmentTotal))}</small>
             <div class="finance-card-actions">
               <button class="mini-button finance-button-primary" type="button" data-action="adjustCourierPay" data-value="${escapeAttr(courier.username)}">რედაქტირება</button>
               <button class="mini-button" type="button" data-action="openFinanceCourier" data-value="${escapeAttr(courier.username)}">დეტალურად</button>
@@ -923,8 +947,8 @@ async function openFinancePartnerCash() {
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--adjustment",
           icon: "↺",
-          label: "კორექტირება",
-          value: formatMoney(adjustmentTotal),
+          label: getAdjustmentDirectionLabel(adjustmentTotal),
+          value: formatAdjustmentDisplay(adjustmentTotal),
         })}
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--period",
@@ -941,7 +965,7 @@ async function openFinancePartnerCash() {
             <span>${escapeHtml(partnerName(partner))}</span>
             <small>კომპანიისთვის მისაცემი ქეში</small>
             <strong>${escapeHtml(formatMoney(partnerSummary.cashDue))}</strong>
-            <small>ჩაბარებული: ${escapeHtml(formatMoney(partnerSummary.baseCash))} · კორექტირება: ${escapeHtml(formatMoney(partnerSummary.adjustmentTotal))}</small>
+            <small>ჩაბარებული: ${escapeHtml(formatMoney(partnerSummary.baseCash))} · ${escapeHtml(getAdjustmentDirectionLabel(partnerSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(partnerSummary.adjustmentTotal))}</small>
             <small>მოლოდინში: ${escapeHtml(formatMoney(partnerSummary.pendingCash))}</small>
             <button class="mini-button finance-button-primary" type="button" data-action="adjustPartnerCash" data-value="${escapeAttr(partner.username)}">რედაქტირება</button>
           </article>
@@ -1062,9 +1086,11 @@ async function openCashAdjustmentDialog(username) {
     <div class="finance-card finance-mini-card finance-section stats-card">
       <strong>${escapeHtml(username)}</strong>
       <span>ამჟამინდელი ჩასაბარებელი ქეში: ${escapeHtml(formatMoney(currentCash))}</span>
+      <small>აირჩიეთ მიმატება ან ჩამოკლება. ჩამოკლება ნაშთს 0-ს ქვემოთ არ უშვებს.</small>
     </div>
-    <label for="cashAdjustmentAmount">ახალი თანხა</label>
-    <input class="finance-input" id="cashAdjustmentAmount" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(String(currentCash))}">
+    ${renderAdjustmentModeSelect("cashAdjustmentMode")}
+    <label for="cashAdjustmentAmount">თანხა</label>
+    <input class="finance-input" id="cashAdjustmentAmount" type="text" inputmode="decimal" autocomplete="off" value="">
     <p class="form-message" id="cashAdjustmentMessage" role="alert"></p>
   `;
   const body = renderFinanceModalLayout({ content });
@@ -1083,25 +1109,44 @@ async function saveCashAdjustment(username) {
     if (message) message.textContent = "შეიყვანეთ სწორი თანხა.";
     return;
   }
-  await addCashAdjustment(username, value);
+  const mode = document.getElementById("cashAdjustmentMode")?.value === "add" ? "add" : "subtract";
+  await addCashAdjustment(username, value, mode);
   await openFinanceCourier(username);
 }
 
 
 async function resetCashAdjustment(username) {
-  await addCashAdjustment(username, 0);
+  await zeroCashAdjustment(username);
   await openFinanceCourier(username);
 }
 
 
-async function addCashAdjustment(username, targetAmount) {
+function calculateAdjustmentDelta(currentAmount, amount, mode = "subtract", rawCurrentAmount = currentAmount) {
+  const current = Math.max(0, safeMoney(currentAmount));
+  const rawCurrent = safeMoney(rawCurrentAmount);
+  const normalizedAmount = Math.max(0, safeMoney(amount));
+  const nextAmount = mode === "add"
+    ? safeMoney(current + normalizedAmount)
+    : Math.max(0, safeMoney(current - Math.min(normalizedAmount, current)));
+  return {
+    currentAmount: current,
+    correctionAmount: mode === "add" ? normalizedAmount : Math.min(normalizedAmount, current),
+    mode: mode === "add" ? "add" : "subtract",
+    nextAmount,
+    nextDelta: safeMoney(nextAmount - rawCurrent),
+  };
+}
+
+
+async function addCashAdjustment(username, amount, mode = "subtract") {
   const range = getFinanceCourierRange();
   const records = await getAllFinanceRecords();
-  const currentCash = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end }).cashReceived;
+  const summary = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
+  const currentCash = summary.cashReceived;
+  const rawCash = safeMoney(summary.totalOrdersAmount + summary.cashAdjustmentTotal);
   const dateKey = range.start;
   const now = new Date().toISOString();
-  const nextAmount = safeMoney(targetAmount);
-  const nextDelta = safeMoney(nextAmount - currentCash);
+  const { correctionAmount, mode: appliedMode, nextAmount, nextDelta } = calculateAdjustmentDelta(currentCash, amount, mode, rawCash);
   if (Math.abs(nextDelta) < 0.005) return;
   const adjustment = {
     id: createFinanceEntryId("cash"),
@@ -1110,6 +1155,8 @@ async function addCashAdjustment(username, targetAmount) {
     amount: nextDelta,
     delta: nextDelta,
     targetAmount: nextAmount,
+    correctionAmount,
+    correctionMode: appliedMode,
     type: nextDelta < 0 ? "negative" : "positive",
     category: "cash",
     dateKey,
@@ -1121,6 +1168,14 @@ async function addCashAdjustment(username, targetAmount) {
     createdAt: now,
   };
   writeCashAdjustments([...readCashAdjustments(), adjustment]);
+}
+
+
+async function zeroCashAdjustment(username) {
+  const range = getFinanceCourierRange();
+  const records = await getAllFinanceRecords();
+  const currentCash = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end }).cashReceived;
+  await addCashAdjustment(username, currentCash);
 }
 
 
@@ -1152,8 +1207,8 @@ async function openPayAdjustmentDialog(username) {
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--adjustment",
           icon: "↺",
-          label: "კორექტირება",
-          value: formatMoney(adjustmentTotal),
+          label: getAdjustmentDirectionLabel(adjustmentTotal),
+          value: formatAdjustmentDisplay(adjustmentTotal),
         })}
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--hero finance-summary-item--final",
@@ -1164,14 +1219,15 @@ async function openPayAdjustmentDialog(username) {
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--cash",
           icon: "₾",
-          label: "შესაყვანი თანხა",
+          label: "კორექტირების თანხა",
           value: formatMoney(finalPay),
         })}
   `;
   const content = `
       <section class="finance-section finance-adjustment-panel">
-        <label for="payAdjustmentAmount">ახალი თანხა</label>
-        <input class="finance-input" id="payAdjustmentAmount" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(String(finalPay))}">
+        ${renderAdjustmentModeSelect("payAdjustmentMode")}
+        <label for="payAdjustmentAmount">თანხა</label>
+        <input class="finance-input" id="payAdjustmentAmount" type="text" inputmode="decimal" autocomplete="off" value="">
         <p class="form-message" id="payAdjustmentMessage" role="alert"></p>
       </section>
       ${recentAdjustments}
@@ -1208,7 +1264,8 @@ async function savePayAdjustment(username) {
       if (message) message.textContent = "შეიყვანეთ სწორი თანხა.";
       return;
     }
-    await addPayAdjustment(username, value);
+    const mode = document.getElementById("payAdjustmentMode")?.value === "add" ? "add" : "subtract";
+    await addPayAdjustment(username, value, mode);
     await openFinanceCourier(username);
   } finally {
     payAdjustmentSaveLock = false;
@@ -1226,7 +1283,7 @@ async function resetPayAdjustment(username) {
     button.disabled = true;
   });
   try {
-    await addPayAdjustment(username, 0);
+    await zeroPayAdjustment(username);
     await openFinanceCourier(username);
   } finally {
     payAdjustmentSaveLock = false;
@@ -1237,12 +1294,13 @@ async function resetPayAdjustment(username) {
 }
 
 
-async function addPayAdjustment(username, targetAmount) {
+async function addPayAdjustment(username, amount, mode = "subtract") {
   const range = getFinanceCourierRange();
   const records = [...await getPins(""), ...await getHistory("")];
-  const { finalPay: currentPay } = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
-  const nextAmount = safeMoney(targetAmount);
-  const nextDelta = safeMoney(nextAmount - currentPay);
+  const summary = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
+  const currentPay = summary.finalPay;
+  const rawPay = safeMoney(summary.basePay + summary.adjustmentTotal);
+  const { correctionAmount, mode: appliedMode, nextAmount, nextDelta } = calculateAdjustmentDelta(currentPay, amount, mode, rawPay);
   const now = new Date().toISOString();
 
   if (Math.abs(nextDelta) < 0.005) return;
@@ -1254,6 +1312,8 @@ async function addPayAdjustment(username, targetAmount) {
     amount: nextDelta,
     delta: nextDelta,
     targetAmount: nextAmount,
+    correctionAmount,
+    correctionMode: appliedMode,
     type: nextDelta < 0 ? "negative" : "positive",
     category: "pay",
     dateKey: range.start,
@@ -1266,4 +1326,12 @@ async function addPayAdjustment(username, targetAmount) {
     updatedAt: now,
   };
   writePayAdjustments([...readPayAdjustments(), adjustment]);
+}
+
+
+async function zeroPayAdjustment(username) {
+  const range = getFinanceCourierRange();
+  const records = [...await getPins(""), ...await getHistory("")];
+  const { finalPay: currentPay } = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
+  await addPayAdjustment(username, currentPay);
 }

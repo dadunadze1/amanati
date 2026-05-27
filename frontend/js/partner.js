@@ -123,7 +123,7 @@ function calculatePartnerCashSummary(partner, records = []) {
   const baseCash = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const pendingCash = safeMoney(pendingOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const adjustmentTotal = safeMoney(getPartnerCashAdjustments(partner).reduce((sum, adjustment) => sum + getAdjustmentSignedAmount(adjustment), 0));
-  const correctedTotalCash = safeMoney(totalCash + adjustmentTotal);
+  const correctedTotalCash = Math.max(0, safeMoney(totalCash + adjustmentTotal));
   return {
     orders,
     deliveredOrders,
@@ -134,7 +134,7 @@ function calculatePartnerCashSummary(partner, records = []) {
     baseCash,
     pendingCash,
     adjustmentTotal,
-    cashDue: safeMoney(baseCash + adjustmentTotal),
+    cashDue: Math.max(0, safeMoney(baseCash + adjustmentTotal)),
   };
 }
 
@@ -357,7 +357,7 @@ function renderPartnerCard(partner) {
       <span class="admin-user-name">${escapeHtml(partnerName(partner))}</span>
       <small>ლოგინი: ${escapeHtml(partner.username)}</small>
       <small>კომპანიისთვის მისაცემი ქეში: ${escapeHtml(formatMoney(cash.cashDue))}</small>
-      <small>კორექტირება: ${escapeHtml(formatMoney(cash.adjustmentTotal))}</small>
+      <small>${escapeHtml(getAdjustmentDirectionLabel(cash.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(cash.adjustmentTotal))}</small>
       <small>მოლოდინში ქეში: ${escapeHtml(formatMoney(cash.pendingCash))}</small>
       <small>კონტაქტი: ${escapeHtml(partner.contactPerson || "არ არის")}</small>
       <small>ტელეფონი: ${escapeHtml(partner.phone || "არ არის")}</small>
@@ -389,11 +389,13 @@ async function openPartnerCashAdjustmentDialog(username) {
       <strong>${escapeHtml(partnerName(partner))}</strong>
       <span>კომპანიისთვის მისაცემი ქეში: ${escapeHtml(formatMoney(summary.cashDue))}</span>
       <small>ჩაბარებული შეკვეთების ქეში: ${escapeHtml(formatMoney(summary.baseCash))}</small>
-      <small>კორექტირება: ${escapeHtml(formatMoney(summary.adjustmentTotal))}</small>
+      <small>${escapeHtml(getAdjustmentDirectionLabel(summary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(summary.adjustmentTotal))}</small>
       <small>მოლოდინში ქეში: ${escapeHtml(formatMoney(summary.pendingCash))}</small>
+      <small>აირჩიეთ მიმატება ან ჩამოკლება. ჩამოკლება ნაშთს 0-ს ქვემოთ არ უშვებს.</small>
     </div>
-    <label for="partnerCashAdjustmentAmount">ახალი მისაცემი თანხა</label>
-    <input class="finance-input" id="partnerCashAdjustmentAmount" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(String(summary.cashDue))}">
+    ${renderAdjustmentModeSelect("partnerCashAdjustmentMode")}
+    <label for="partnerCashAdjustmentAmount">თანხა</label>
+    <input class="finance-input" id="partnerCashAdjustmentAmount" type="text" inputmode="decimal" autocomplete="off" value="">
     <p class="form-message" id="partnerCashAdjustmentMessage" role="alert"></p>
   `;
   showDialog("პარტნიორის ქეშის კორექტირება", content, [
@@ -411,18 +413,19 @@ async function savePartnerCashAdjustment(username) {
     if (message) message.textContent = "შეიყვანეთ სწორი თანხა.";
     return;
   }
-  await addPartnerCashAdjustment(username, value);
+  const mode = document.getElementById("partnerCashAdjustmentMode")?.value === "add" ? "add" : "subtract";
+  await addPartnerCashAdjustment(username, value, mode);
   await openPartnerManagement();
 }
 
 
 async function resetPartnerCashAdjustment(username) {
-  await addPartnerCashAdjustment(username, 0);
+  await zeroPartnerCashAdjustment(username);
   await openPartnerManagement();
 }
 
 
-async function addPartnerCashAdjustment(username, targetAmount) {
+async function addPartnerCashAdjustment(username, amount, mode = "subtract") {
   const [partners, records] = await Promise.all([
     getPartners(),
     getAllPartnerCashRecords(),
@@ -432,8 +435,8 @@ async function addPartnerCashAdjustment(username, targetAmount) {
   if (!partner) return;
 
   const summary = calculatePartnerCashSummary(partner, records);
-  const nextAmount = safeMoney(targetAmount);
-  const nextDelta = safeMoney(nextAmount - summary.cashDue);
+  const rawCashDue = safeMoney(summary.baseCash + summary.adjustmentTotal);
+  const { correctionAmount, mode: appliedMode, nextAmount, nextDelta } = calculateAdjustmentDelta(summary.cashDue, amount, mode, rawCashDue);
   if (Math.abs(nextDelta) < 0.005) return;
 
   const now = new Date().toISOString();
@@ -445,6 +448,8 @@ async function addPartnerCashAdjustment(username, targetAmount) {
     amount: nextDelta,
     delta: nextDelta,
     targetAmount: nextAmount,
+    correctionAmount,
+    correctionMode: appliedMode,
     type: nextDelta < 0 ? "negative" : "positive",
     category: "partnerCash",
     dateKey: toDateKey(new Date()),
@@ -454,6 +459,19 @@ async function addPartnerCashAdjustment(username, targetAmount) {
     createdAt: now,
   };
   await savePartnerCashAdjustmentToServer(adjustment);
+}
+
+
+async function zeroPartnerCashAdjustment(username) {
+  const [partners, records] = await Promise.all([
+    getPartners(),
+    getAllPartnerCashRecords(),
+    loadPartnerCashAdjustments(),
+  ]);
+  const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
+  if (!partner) return;
+  const summary = calculatePartnerCashSummary(partner, records);
+  await addPartnerCashAdjustment(username, summary.cashDue);
 }
 
 

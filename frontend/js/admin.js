@@ -403,7 +403,7 @@ function renderCourierStatsSummary(parcels, history, rangeStart, rangeEnd) {
       <div class="courier-stats-summary-item"><span>პროცესში</span><strong>${pending}</strong></div>
       <div class="courier-stats-summary-item"><span>ჩასაბარებელი ქეში</span><strong>${escapeHtml(formatMoney(outstandingCash))}</strong></div>
       <div class="courier-stats-summary-item"><span>საბაზისო გამომუშავება</span><strong>${escapeHtml(formatMoney(basePay))}</strong></div>
-      <div class="courier-stats-summary-item"><span>კორექტირება</span><strong>${escapeHtml(formatMoney(payAdjustment))}</strong></div>
+      <div class="courier-stats-summary-item"><span>${escapeHtml(getAdjustmentDirectionLabel(payAdjustment))}</span><strong>${escapeHtml(formatAdjustmentDisplay(payAdjustment))}</strong></div>
       <div class="courier-stats-summary-item"><span>საბოლოო გამომუშავება</span><strong>${escapeHtml(formatMoney(courierPay))}</strong></div>
     </section>
   `;
@@ -1076,7 +1076,7 @@ function renderCloseDayCourierStats(stats) {
           <span>არ ჩაბარდა: ${failed}</span>
           <span>ქეში: ${escapeHtml(formatMoney(summary.cashReceived))}</span>
           <span>საბაზისო გამომუშავება: ${escapeHtml(formatMoney(basePay))}</span>
-          <span>კორექტირება: ${escapeHtml(formatMoney(payAdjustment))}</span>
+          <span>${escapeHtml(getAdjustmentDirectionLabel(payAdjustment))}: ${escapeHtml(formatAdjustmentDisplay(payAdjustment))}</span>
           <span>საბოლოო გამომუშავება: ${escapeHtml(formatMoney(courierPay))}</span>
         </div>
       </div>
