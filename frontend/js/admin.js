@@ -149,6 +149,12 @@ function openAdminStatsChoice(username) {
 
 
 async function openLiveCouriersDialog() {
+  if (CONFIG.enableCourierLiveTracking === false) {
+    showDialog("Live კურიერები", `<div class="history-empty history-empty-card">Live tracking დროებით დაპაუზებულია Firebase-ის დატვირთვის შესამცირებლად.</div>`, [
+      { label: "დახურვა", variant: "secondary", action: closeDialog },
+    ]);
+    return;
+  }
   try {
     const couriers = await getCouriers();
     const rows = couriers.map(renderLiveCourierRow).join("");
@@ -199,6 +205,7 @@ function renderLiveCourierRow(courier) {
 
 
 function getLiveCourierStatus(username) {
+  if (CONFIG.enableCourierLiveTracking === false) return { isOnline: false, label: "დაპაუზებულია" };
   const location = Object.values(state.courierLocations || {})
     .find((item) => normalizeUsername(item?.username) === normalizeUsername(username));
   if (!location) return { isOnline: false, label: "ლოკაცია არ არის" };
@@ -217,6 +224,7 @@ function getLiveCourierStatus(username) {
 
 
 function getOnlineCourierCount(couriers = []) {
+  if (CONFIG.enableCourierLiveTracking === false) return 0;
   return couriers.filter((courier) => getLiveCourierStatus(courier.username).isOnline).length;
 }
 

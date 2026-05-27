@@ -12,6 +12,7 @@ const CONFIG = {
   useReverseGeocoding: true,
   useExternalAddressSearch: true,
   useOverpassSearch: false,
+  enableCourierLiveTracking: false,
   dataRetentionMonths: 8,
   zoneAssignmentsStorageKey: "deliveryZoneAssignments:v1",
   cashAdjustmentsStorageKey: "deliveryCashAdjustments:v1",

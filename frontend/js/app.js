@@ -100,7 +100,7 @@ function renderActions() {
       label: "რუკა",
       actions: [
         ["showAllAdminPins", "რუკა", "⌖", "ყველა პინის ჩვენება"],
-        ["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"],
+        ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["adminMap", "ფილტრები", "◉", "რუკის ფილტრები"],
       ],
     },
@@ -456,7 +456,7 @@ async function renderAdminDashboard(pins = state.activePins) {
     { label: "ჩაბარებული", value: pins.filter((pin) => pin.status === "delivered").length, tone: "success", action: "adminMapSetStatus", dataValue: "delivered", active: filters.status === "delivered" },
     { label: "ვერ ჩაბარებული", value: pins.filter((pin) => pin.status === "failed").length, tone: "danger", action: "adminMapSetStatus", dataValue: "failed", active: filters.status === "failed" },
     { label: "მიუბმელი", value: unassignedCount, tone: "warning", action: "showUnassignedAdminPins", active: filters.showUnassigned && filters.status === "all" && !filters.selectedCouriers.length },
-    { label: "ონლაინ", value: onlineCourierCount, tone: "success", action: "liveCouriers" },
+    ...(CONFIG.enableCourierLiveTracking === false ? [] : [{ label: "ონლაინ", value: onlineCourierCount, tone: "success", action: "liveCouriers" }]),
     { label: "კურიერები", value: courierCount, tone: "primary", action: "adminUsers" },
     { label: "დღიური თანხა", value: formatMoney(dailyCash), tone: "warning", action: "adminFinance" },
   ];

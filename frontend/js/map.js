@@ -1244,6 +1244,11 @@ function notifyLocationWatchError(error = {}) {
 
 function startCourierLocationServices() {
   stopCourierLocationServices();
+  if (CONFIG.enableCourierLiveTracking === false) {
+    state.courierLocations = {};
+    clearCourierLocationOverlays();
+    return;
+  }
   if (!state.currentUser) return;
   if (state.isAdmin) {
     startAdminCourierLocationListener();
@@ -1265,13 +1270,14 @@ async function stopCourierLocationServices(options = {}) {
   state.courierLocationUnsubscribe = null;
   clearCourierLocationOverlays();
 
-  if (options.markOffline && !state.isAdmin && state.currentUser) {
+  if (CONFIG.enableCourierLiveTracking !== false && options.markOffline && !state.isAdmin && state.currentUser) {
     await publishCourierLocation({ status: "offline", force: true }).catch(() => {});
   }
 }
 
 
 function startCourierLocationPublishing() {
+  if (CONFIG.enableCourierLiveTracking === false) return;
   window.clearInterval(state.courierLocationRefreshTimer);
   state.courierLocationRefreshTimer = window.setInterval(() => {
     maybePublishCourierLocation({ force: true });
@@ -1283,6 +1289,7 @@ function startCourierLocationPublishing() {
 function handleCourierPresenceChange() {
   if (state.isAdmin || !state.currentUser) return;
   renderCourierMobileDashboard().catch(() => {});
+  if (CONFIG.enableCourierLiveTracking === false) return;
   if (state.courierPresenceStatus === "offline") {
     publishCourierLocation({ status: "offline", force: true }).catch(() => {});
     return;
@@ -1292,6 +1299,7 @@ function handleCourierPresenceChange() {
 
 
 function maybePublishCourierLocation(options = {}) {
+  if (CONFIG.enableCourierLiveTracking === false) return;
   if (state.isAdmin || !state.currentUser || state.courierPresenceStatus === "offline") return;
   if (!state.hasCurrentPosition || document.hidden) return;
   const now = Date.now();
@@ -1301,6 +1309,7 @@ function maybePublishCourierLocation(options = {}) {
 
 
 async function publishCourierLocation(options = {}) {
+  if (CONFIG.enableCourierLiveTracking === false) return false;
   if (state.isAdmin || !state.currentUser || typeof saveFirebaseCourierLocation !== "function") return false;
   if (!state.hasCurrentPosition) return false;
   if (document.hidden && options.status !== "offline") return false;
@@ -1321,6 +1330,11 @@ async function publishCourierLocation(options = {}) {
 
 
 function startAdminCourierLocationListener() {
+  if (CONFIG.enableCourierLiveTracking === false) {
+    state.courierLocations = {};
+    clearCourierLocationOverlays();
+    return;
+  }
   if (typeof startFirebaseCourierLocationsListener !== "function") return;
   startFirebaseCourierLocationsListener((locations) => {
     state.courierLocations = locations || {};
@@ -1342,6 +1356,7 @@ function startAdminCourierLocationListener() {
 
 function renderCourierLocationMarkers() {
   clearCourierLocationOverlays();
+  if (CONFIG.enableCourierLiveTracking === false) return;
   if (!state.isAdmin || !state.map) return;
 
   Object.values(state.courierLocations || {}).forEach((location) => {
@@ -1402,5 +1417,6 @@ function renderCourierLocationMarkers() {
 
 
 document.addEventListener("visibilitychange", () => {
+  if (CONFIG.enableCourierLiveTracking === false) return;
   if (!document.hidden) maybePublishCourierLocation({ force: true });
 });

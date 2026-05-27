@@ -205,6 +205,7 @@ function getCourierLocationKey(username) {
 }
 
 async function saveFirebaseCourierLocation(location) {
+  if (CONFIG.enableCourierLiveTracking === false) return false;
   const db = await initializeFirebaseStorage();
   if (!db || !location?.username) return false;
 
@@ -234,6 +235,10 @@ async function saveFirebaseCourierLocation(location) {
 }
 
 async function startFirebaseCourierLocationsListener(onLocationsChange) {
+  if (CONFIG.enableCourierLiveTracking === false) {
+    onLocationsChange?.({});
+    return null;
+  }
   if (firebaseCourierLocationsUnsubscribe) return firebaseCourierLocationsUnsubscribe;
   const db = await initializeFirebaseStorage();
   if (!db) return null;

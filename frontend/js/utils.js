@@ -254,6 +254,40 @@ function openUrlInBlankWindow(url) {
 }
 
 
+function isMobileExternalNavigationContext() {
+  const ua = navigator.userAgent || "";
+  return /Android|iPhone|iPad|iPod|Mobile|wv/i.test(ua)
+    || window.matchMedia?.("(max-width: 820px)")?.matches
+    || window.navigator?.standalone === true;
+}
+
+
+function openUrlExternally(url) {
+  const cordovaBrowser = window.cordova?.InAppBrowser;
+  if (cordovaBrowser?.open) {
+    cordovaBrowser.open(url, "_system", "location=yes");
+    return true;
+  }
+
+  const systemWindow = window.open(url, "_system", "noopener,noreferrer");
+  if (systemWindow) {
+    try {
+      systemWindow.opener = null;
+    } catch {
+      // Native WebViews may not expose the opened window object.
+    }
+    return true;
+  }
+
+  if (isMobileExternalNavigationContext()) {
+    window.location.assign(url);
+    return true;
+  }
+
+  return openUrlInBlankWindow(url);
+}
+
+
 function openExternalUrl(url) {
   const targetUrl = String(url || "").trim();
   if (!targetUrl) return false;
@@ -264,12 +298,12 @@ function openExternalUrl(url) {
 
   if (appLauncher?.openUrl) {
     appLauncher.openUrl({ url: targetUrl }).catch(() => {
-      openUrlInBlankWindow(targetUrl);
+      openUrlExternally(targetUrl);
     });
     return true;
   }
 
-  return openUrlInBlankWindow(targetUrl);
+  return openUrlExternally(targetUrl);
 }
 
 
