@@ -50,13 +50,13 @@ async function refreshPinsOnce() {
     if (storedAddress) state.parcelAddressCache[pin.id] = storedAddress;
   });
   state.activePins = pins;
-  const visiblePins = state.isAdmin ? filterPinsForAdminMap(pins) : pins;
+  const visiblePins = getVisiblePinsForCurrentRole(pins);
   renderParcelMarkers(visiblePins);
   hydratePinAddresses(pins);
   await renderCourierStatsCard(pins);
   await renderAdminDashboard(pins);
   await renderPartnerDashboard(pins);
-  await renderCourierMobileDashboard(pins);
+  await renderCourierMobileDashboard(getCourierLivePins(pins));
   if (state.routePinId && !pins.some((pin) => pin.id === state.routePinId)) clearActiveRoute();
   clearHistoryPreviewMarker();
 
@@ -71,6 +71,18 @@ async function refreshPinsOnce() {
     scheduleMapInvalidateSize(0);
   }
   scheduleMapInvalidateSize();
+}
+
+
+function getCourierLivePins(pins = state.activePins) {
+  return (Array.isArray(pins) ? pins : []).filter((pin) => pin?.status !== "delivered" && !pin?.archivedAt);
+}
+
+
+function getVisiblePinsForCurrentRole(pins = state.activePins) {
+  if (state.isAdmin && typeof filterPinsForAdminMap === "function") return filterPinsForAdminMap(pins);
+  if (state.isPartner) return pins;
+  return getCourierLivePins(pins);
 }
 
 
@@ -1509,7 +1521,7 @@ async function hydratePinAddresses(pins) {
 
   if (state.activePins !== pins) return;
   clearAdminMapPins();
-  renderParcelMarkers(state.isAdmin ? filterPinsForAdminMap(pins) : pins);
+  renderParcelMarkers(getVisiblePinsForCurrentRole(pins));
   if (state.selectedPinId) renderSelectedParcelCard();
 }
 

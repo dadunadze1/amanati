@@ -64,7 +64,7 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
   els.courierOrdersSheet.textContent = "";
   els.courierOrdersSheet.classList.remove("is-expanded");
 
-  const activePins = Array.isArray(pins) ? pins : [];
+  const activePins = typeof getCourierLivePins === "function" ? getCourierLivePins(pins) : (Array.isArray(pins) ? pins : []);
   const sortedPins = sortCourierPinsByStatusAndDistance(activePins);
   const todayStats = await calculateTodayStats(state.currentUser).catch(() => ({
     courierPay: 0,
@@ -201,7 +201,7 @@ async function openTodayStats() {
 
 
 async function openCourierParcels() {
-  const pins = await getPins(state.currentUser);
+  const pins = getCourierLivePins(await getPins(state.currentUser));
   const sortedPins = sortCourierPinsByStatusAndDistance(pins);
   const rows = (await Promise.all(sortedPins.map((pin) => renderCourierParcelCard(pin, { includeCash: true, includePhone: true })))).join("");
 
@@ -232,7 +232,7 @@ async function openNearestParcel() {
 
 
 async function openCourierStatusPanel() {
-  const pins = await getPins(state.currentUser);
+  const pins = getCourierLivePins(await getPins(state.currentUser));
   const sortedPins = sortCourierPinsByStatusAndDistance(pins);
   const rows = (await Promise.all(sortedPins.map((pin) => renderCourierParcelCard(pin, { includeCash: false, includePhone: false })))).join("");
 
@@ -279,7 +279,7 @@ async function renderCourierParcelCard(pin, options = {}) {
 
 
 async function openCourierRoute() {
-  const pins = await getPins(state.currentUser);
+  const pins = getCourierLivePins(await getPins(state.currentUser));
   const sortedPins = [...pins].sort((a, b) => {
     const statusDiff = getStatusSortValue(a.status) - getStatusSortValue(b.status);
     if (statusDiff) return statusDiff;

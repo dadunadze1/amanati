@@ -1404,6 +1404,79 @@ body.auth-loading .app-shell {
   grid-column: 1 / -1;
 }
 
+.finance-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--finance-gap);
+}
+
+.finance-flow-card {
+  min-height: 164px;
+  align-content: center;
+  padding: 18px;
+}
+
+.finance-flow-card strong {
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.finance-card--partner .finance-summary-icon {
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+}
+
+.finance-card--day .finance-summary-icon,
+.finance-summary-item--final .finance-summary-icon {
+  background: linear-gradient(135deg, #16a34a, #2563eb);
+}
+
+.finance-explain-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.finance-explain-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.35fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--finance-border);
+  border-radius: var(--finance-radius-sm);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.finance-explain-row strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.finance-explain-row span {
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.finance-card-actions,
+.finance-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.finance-action-grid {
+  padding: var(--finance-padding);
+  background: #fff;
+  border: 1px solid var(--finance-border);
+  border-radius: var(--finance-radius);
+  box-shadow: var(--finance-shadow);
+}
+
 .finance-card,
 .finance-summary-item {
   background: var(--finance-surface);
@@ -1599,6 +1672,12 @@ button.finance-card {
   color: var(--finance-danger-strong);
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.finance-card--partner strong,
+.finance-card--day strong,
+.finance-summary-item--final strong {
+  color: var(--finance-primary-strong);
 }
 
 .finance-card--final strong {
@@ -3827,6 +3906,7 @@ button,
 
   .finance-card-list,
   .finance-card-list--dashboard,
+  .finance-flow-grid,
   .finance-modal .modal-summary-grid,
   .finance-summary-grid,
   .finance-summary-grid--dashboard,
@@ -3870,6 +3950,17 @@ button,
   .finance-card,
   .finance-summary-item {
     min-height: auto;
+    padding: 11px;
+  }
+
+  .finance-flow-card {
+    min-height: 138px;
+    padding: 14px;
+  }
+
+  .finance-explain-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
     padding: 11px;
   }
 

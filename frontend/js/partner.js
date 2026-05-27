@@ -123,12 +123,14 @@ function calculatePartnerCashSummary(partner, records = []) {
   const baseCash = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const pendingCash = safeMoney(pendingOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const adjustmentTotal = safeMoney(getPartnerCashAdjustments(partner).reduce((sum, adjustment) => sum + getAdjustmentSignedAmount(adjustment), 0));
+  const correctedTotalCash = safeMoney(totalCash + adjustmentTotal);
   return {
     orders,
     deliveredOrders,
     pendingOrders,
     cashOrders,
     totalCash,
+    correctedTotalCash,
     baseCash,
     pendingCash,
     adjustmentTotal,
@@ -156,6 +158,7 @@ async function renderPartnerDashboard(pins = state.activePins) {
   }
 
   const orders = Array.isArray(pins) ? pins : await getPins("");
+  await loadPartnerCashAdjustments();
   const partner = state.currentUserProfile || { username: state.currentUser };
   const cash = calculatePartnerCashSummary(partner, orders);
   els.appShell?.classList.add("is-partner-dashboard");
@@ -181,7 +184,7 @@ async function renderPartnerDashboard(pins = state.activePins) {
       ${renderPartnerStat("აქტიური შეკვეთები", activeOrders.length)}
       ${renderPartnerStat("ჩაბარებული", deliveredOrders.length)}
       ${renderPartnerStat("ვერ ჩაბარდა", failedOrders.length)}
-      ${renderPartnerStat("სულ ქეში", formatMoney(cash.totalCash))}
+      ${renderPartnerStat("სულ ქეში", formatMoney(cash.correctedTotalCash))}
     </div>
     <section class="partner-panel">
       <div class="partner-panel-head">

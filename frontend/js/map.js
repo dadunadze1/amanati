@@ -382,7 +382,9 @@ function collapseDeliveredPinLabels() {
 function rerenderCurrentMapPins() {
   if (!state.map) return;
   clearAdminMapPins();
-  const visiblePins = state.isAdmin ? filterPinsForAdminMap(state.activePins) : state.activePins;
+  const visiblePins = typeof getVisiblePinsForCurrentRole === "function"
+    ? getVisiblePinsForCurrentRole(state.activePins)
+    : state.activePins;
   renderParcelMarkers(visiblePins);
   renderCourierLocationMarkers();
 }
