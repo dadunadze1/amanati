@@ -100,7 +100,35 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
   `;
   els.courierDashboard.querySelector("[data-courier-current-order]")?.addEventListener("click", openNearestCurrentCourierOrder);
 
+  scheduleCourierViewportStabilization();
   scheduleMapInvalidateSize();
+}
+
+
+function updateCourierViewportVars() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const viewport = window.visualViewport;
+  const height = Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0);
+  const width = Math.round(window.innerWidth || document.documentElement.clientWidth || viewport?.width || 0);
+  if (height > 0) document.documentElement.style.setProperty("--app-viewport-height", `${height}px`);
+  if (width > 0) document.documentElement.style.setProperty("--app-viewport-width", `${width}px`);
+}
+
+
+function scheduleCourierViewportStabilization() {
+  if (state.isAdmin || state.isPartner || !state.currentUser) return;
+  [0, 80, 220, 520, 1000].forEach((delay) => {
+    window.setTimeout(() => {
+      updateCourierViewportVars();
+      state.map?.invalidateSize?.({ pan: false });
+    }, delay);
+  });
+}
+
+
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", updateCourierViewportVars, { passive: true });
+  window.visualViewport?.addEventListener("resize", updateCourierViewportVars, { passive: true });
 }
 
 
