@@ -156,7 +156,7 @@ async function openLiveCouriersDialog() {
     const body = `
       <div class="live-courier-panel">
         <div class="live-courier-summary">
-          <span>Online</span>
+          <span>ონლაინ</span>
           <strong>${onlineCount}/${couriers.length}</strong>
         </div>
         <div class="live-courier-list">
@@ -186,7 +186,7 @@ function renderLiveCourierRow(courier) {
         <span>${escapeHtml(courier.phone || "ტელეფონი არ არის")}</span>
       </div>
       <div class="live-courier-meta">
-        <span>${live.isOnline ? "Online" : "Offline"}</span>
+        <span>${live.isOnline ? "ონლაინ" : "ოფლაინ"}</span>
         <small>${escapeHtml(live.label)}</small>
       </div>
       <div class="live-courier-orders">

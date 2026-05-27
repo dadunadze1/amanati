@@ -129,8 +129,8 @@ async function handleRegistration(event) {
   try {
     await api("/api/register", { method: "POST", body: { username, firstName, lastName, phone, password } });
     els.registerForm.reset();
-    setMessage(els.regError, "რეგისტრაცია დასრულდა. შეგიძლიათ შეხვიდეთ.", false);
-    window.setTimeout(() => switchModal("login"), 700);
+    setMessage(els.regError, "რეგისტრაცია მიღებულია. შესვლამდე ადმინმა უნდა დაგადასტუროთ.", false);
+    window.setTimeout(() => switchModal("login"), 1400);
   } catch (error) {
     setMessage(els.regError, error.message, true);
   }

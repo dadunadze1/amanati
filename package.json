@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "start": "node backend/server.mjs",
-    "check": "node --check frontend/script.js && node --check backend/server.mjs"
+    "check": "node --check backend/server.mjs && node -e \"const { readdirSync } = require('fs'); const { join } = require('path'); const { execFileSync } = require('child_process'); for (const file of readdirSync('frontend/js').filter((name) => name.endsWith('.js'))) execFileSync(process.execPath, ['--check', join('frontend/js', file)], { stdio: 'inherit' });\""
   }
 }

@@ -8932,6 +8932,48 @@ textarea {
   opacity: 0.9;
 }
 
+.swift-brand-mark svg {
+  width: 100%;
+  height: 100%;
+  color: #2563eb;
+  fill: currentColor;
+}
+
+@media (min-width: 721px) {
+  .app-shell.is-partner-dashboard .partner-dashboard {
+    padding-bottom: 118px;
+  }
+
+  .app-shell.is-partner-dashboard .bottom-nav {
+    position: fixed;
+    right: auto;
+    bottom: 18px;
+    left: 50%;
+    z-index: 620;
+    width: auto;
+    min-width: min(560px, calc(100vw - 40px));
+    display: grid;
+    grid-template-columns: repeat(4, minmax(92px, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border-radius: 18px;
+    transform: translateX(-50%);
+  }
+
+  .app-shell.is-partner-dashboard .bottom-nav[hidden] {
+    display: none;
+  }
+
+  .app-shell.is-partner-dashboard .bottom-nav-item {
+    min-height: 48px;
+    grid-template-columns: 30px minmax(0, auto);
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 14px;
+  }
+}
+
 .app-sidebar-section,
 .admin-mobile-drawer-section {
   display: grid;
@@ -10913,6 +10955,22 @@ body:has(.app-shell.is-courier-mobile) #dialogModal * {
 
 .app-shell.is-admin-dashboard .swift-brand-mark i {
   opacity: 1;
+}
+
+.app-shell.is-admin-dashboard .swift-brand-mark:has(svg) {
+  display: grid;
+  place-items: center;
+  padding: 7px;
+  color: #2563eb;
+  background: #fff;
+}
+
+.app-shell.is-admin-dashboard .swift-brand-mark svg {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
 }
 
 .app-shell.is-admin-dashboard .app-sidebar-brand strong {

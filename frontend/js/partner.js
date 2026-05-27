@@ -83,7 +83,9 @@ async function savePartnerCashAdjustmentToServer(adjustment) {
   }
   const payload = await api("/api/partner-cash-adjustments", { method: "POST", body: adjustment });
   const saved = normalizeFinanceAdjustment(payload.adjustment || adjustment, "partnerCash");
-  state.partnerCashAdjustments = normalizeFinanceAdjustmentList([...readPartnerCashAdjustments(), saved], "partnerCash");
+  state.partnerCashAdjustmentsLoaded = false;
+  const latest = await loadPartnerCashAdjustments().catch(() => null);
+  state.partnerCashAdjustments = normalizeFinanceAdjustmentList(latest || [...readPartnerCashAdjustments(), saved], "partnerCash");
   state.partnerCashAdjustmentsLoaded = true;
   return saved;
 }
@@ -316,13 +318,14 @@ async function savePartnerOrder() {
   const address = [city, district, street].filter(Boolean).join(", ");
 
   try {
-    await api("/api/parcels", {
+    const payload = await api("/api/parcels", {
       method: "POST",
       body: { city, district, streetAddress: street, address, fullAddress: address, fullName, phone, paymentAmount },
     });
     closeDialog();
     await refreshPins();
-    showToast("შეკვეთა გაიგზავნა ადმინთან.");
+    const assigned = payload?.parcel?.courierUsername;
+    showToast(assigned ? "შეკვეთა დაემატა და კურიერს მიება." : (payload?.assignmentMessage || "შეკვეთა დაემატა."));
   } catch (error) {
     if (message) message.textContent = error.message || STRINGS.serverFailed;
   }
@@ -413,15 +416,40 @@ async function savePartnerCashAdjustment(username) {
     if (message) message.textContent = "შეიყვანეთ სწორი თანხა.";
     return;
   }
-  const mode = document.getElementById("partnerCashAdjustmentMode")?.value === "add" ? "add" : "subtract";
-  await addPartnerCashAdjustment(username, value, mode);
-  await openPartnerManagement();
+  document.querySelectorAll("#dialogActions button").forEach((button) => {
+    button.disabled = true;
+  });
+  try {
+    const mode = document.getElementById("partnerCashAdjustmentMode")?.value === "add" ? "add" : "subtract";
+    await addPartnerCashAdjustment(username, value, mode);
+    await loadPartnerCashAdjustments();
+    await openPartnerManagement();
+  } catch (error) {
+    if (message) message.textContent = error.message || STRINGS.serverFailed;
+  } finally {
+    document.querySelectorAll("#dialogActions button").forEach((button) => {
+      button.disabled = false;
+    });
+  }
 }
 
 
 async function resetPartnerCashAdjustment(username) {
-  await zeroPartnerCashAdjustment(username);
-  await openPartnerManagement();
+  const message = document.getElementById("partnerCashAdjustmentMessage");
+  document.querySelectorAll("#dialogActions button").forEach((button) => {
+    button.disabled = true;
+  });
+  try {
+    await zeroPartnerCashAdjustment(username);
+    await loadPartnerCashAdjustments();
+    await openPartnerManagement();
+  } catch (error) {
+    if (message) message.textContent = error.message || STRINGS.serverFailed;
+  } finally {
+    document.querySelectorAll("#dialogActions button").forEach((button) => {
+      button.disabled = false;
+    });
+  }
 }
 
 

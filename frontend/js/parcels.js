@@ -306,7 +306,7 @@ async function openParcelDetailsDialog() {
     ${state.isAdmin ? `
       <label for="parcelPartner">პარტნიორი</label>
       <select id="parcelPartner">
-        <option value="">No Partner / Private</option>
+        <option value="">პარტნიორი არ არის / პირადი</option>
         ${partnerOptions}
       </select>
       <label for="parcelCourier">კურიერზე მიბმა</label>
@@ -994,10 +994,10 @@ function renderSelectedParcelCard() {
   const locationAccuracy = pin.locationAccuracy || (hasLocation ? "confirmed" : "missing");
   const isEditingLocation = state.mode === "editingParcelLocation" && state.locationEditParcelId === pin.id;
   const locationLabel = locationAccuracy === "confirmed"
-    ? "Confirmed"
+    ? "დადასტურებული"
     : locationAccuracy === "approximate"
-      ? "Approximate"
-      : "Location needs admin correction";
+      ? "მიახლოებითი"
+      : "ლოკაცია საჭიროებს ადმინის გასწორებას";
   const statusControls = state.isAdmin || pin.status !== "delivered"
     ? `<div class="nearest-status-actions">
         <button class="nearest-status-button delivered" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">ჩაბარდა</button>
@@ -1042,7 +1042,7 @@ function renderSelectedParcelCard() {
         </div>
         ${!state.isAdmin && pin.partnerName ? `
           <div class="nearest-detail">
-            <span>Partner</span>
+            <span>პარტნიორი</span>
             <strong>${escapeHtml(pin.partnerName)}</strong>
           </div>
         ` : ""}
@@ -1057,25 +1057,25 @@ function renderSelectedParcelCard() {
           </div>
           <div class="nearest-detail">
             <span>პარტნიორი</span>
-            <strong>${escapeHtml(pin.partnerName || "Private")}</strong>
+            <strong>${escapeHtml(pin.partnerName || "პირადი")}</strong>
           </div>
           <div class="nearest-detail">
-            <span>Location</span>
+            <span>ლოკაცია</span>
             <strong class="location-${escapeAttr(locationAccuracy)}">${escapeHtml(locationLabel)}</strong>
           </div>
           <div class="nearest-detail">
-            <span>Pin</span>
-            <strong>${hasLocation ? `${Number(pin.lat).toFixed(5)}, ${Number(pin.lng).toFixed(5)}` : "Missing"}</strong>
+            <span>პინი</span>
+            <strong>${hasLocation ? `${Number(pin.lat).toFixed(5)}, ${Number(pin.lng).toFixed(5)}` : "არ არის"}</strong>
           </div>
           <div class="nearest-status-actions">
             ${isEditingLocation
               ? `
-                <button class="nearest-status-button delivered" type="button" data-action="saveParcelLocation">Save Pin</button>
-                <button class="nearest-status-button failed" type="button" data-action="cancelParcelLocation">Cancel</button>
+                <button class="nearest-status-button delivered" type="button" data-action="saveParcelLocation">შენახვა</button>
+                <button class="nearest-status-button failed" type="button" data-action="cancelParcelLocation">გაუქმება</button>
               `
               : `
-                <button class="nearest-status-button" type="button" data-action="editParcelLocation" data-value="${escapeAttr(pin.id)}">${hasLocation ? "Edit Pin" : "Set Pin"}</button>
-                ${hasLocation && locationAccuracy !== "confirmed" ? `<button class="nearest-status-button delivered" type="button" data-action="confirmParcelLocation" data-value="${escapeAttr(pin.id)}">Confirm Location</button>` : ""}
+                <button class="nearest-status-button" type="button" data-action="editParcelLocation" data-value="${escapeAttr(pin.id)}">${hasLocation ? "პინის შეცვლა" : "პინის დასმა"}</button>
+                ${hasLocation && locationAccuracy !== "confirmed" ? `<button class="nearest-status-button delivered" type="button" data-action="confirmParcelLocation" data-value="${escapeAttr(pin.id)}">ლოკაციის დადასტურება</button>` : ""}
               `}
           </div>
         ` : ""}
@@ -1160,7 +1160,7 @@ async function saveParcelLocationEdit() {
     resetMapSelectionUi();
     await refreshPins();
     showSelectedParcelCard(editedId, { focus: true });
-    showToast("Location confirmed.");
+    showToast("ლოკაცია დადასტურდა.");
   } catch (error) {
     showToast(error.message || STRINGS.serverFailed);
   }
@@ -1190,7 +1190,7 @@ async function confirmParcelLocation(parcelId) {
     });
     await refreshPins();
     showSelectedParcelCard(parcelId, { focus: true });
-    showToast("Location confirmed.");
+    showToast("ლოკაცია დადასტურდა.");
   } catch (error) {
     showToast(error.message || STRINGS.serverFailed);
   }

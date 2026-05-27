@@ -2,6 +2,7 @@
 
 const STATIC_DEPLOY_STORAGE_KEY = "deliveryStaticBootstrap:v1";
 const STATIC_SESSION_STORAGE_KEY = "deliveryStaticSession:v1";
+const STATIC_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const STATIC_DEMO_COURIER_USERNAMES = new Set(["courier1", "courier2"]);
 const STATIC_DEMO_COURIER_IDS = new Set(["static-courier-1", "static-courier-2"]);
 const STATIC_DEMO_COURIER_PHONES = new Set(["+995555000001", "+995555000002"]);
@@ -211,6 +212,7 @@ function mergeStaticFinanceData(baseFinance, nextFinance) {
     ...base,
     ...next,
     cashAdjustments: mergeStaticRecordsByKey(base.cashAdjustments, next.cashAdjustments, getStaticAdjustmentKey),
+    partnerCashAdjustments: mergeStaticRecordsByKey(base.partnerCashAdjustments, next.partnerCashAdjustments, getStaticAdjustmentKey),
     payAdjustments: mergeStaticRecordsByKey(base.payAdjustments, next.payAdjustments, getStaticAdjustmentKey),
   };
 }
@@ -581,6 +583,11 @@ function saveStaticSession(user) {
 function loadStaticSessionPayload() {
   const session = loadData(STATIC_SESSION_STORAGE_KEY);
   if (!session?.user?.username) return null;
+  const savedAt = Date.parse(session.savedAt || "");
+  if (!Number.isFinite(savedAt) || Date.now() - savedAt > STATIC_SESSION_TTL_MS) {
+    clearStaticSession();
+    return null;
+  }
   return { token: session.token || createStaticToken(session.user), user: session.user, staticMode: true };
 }
 
@@ -612,7 +619,11 @@ async function staticApi(path, options = {}) {
   if (method === "POST" && apiPath === "/api/login") {
     const requestedUsername = body.username || store.settings.defaultUser || store.users.find((user) => user.role === "admin")?.username || store.users[0]?.username;
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(requestedUsername));
-    if (!user || user.status !== "active" || !verifyStaticPassword(user, body.password)) throw new Error(STRINGS.invalidLogin);
+    const pendingUser = store.pending.find((item) => normalizeUsername(item.username) === normalizeUsername(requestedUsername));
+    const loginUser = user || pendingUser;
+    if (!loginUser || !verifyStaticPassword(loginUser, body.password)) throw new Error(STRINGS.invalidLogin);
+    if (loginUser.status === "pending") throw new Error("\u10d0\u10dc\u10d2\u10d0\u10e0\u10d8\u10e8\u10d8 \u10d0\u10d3\u10db\u10d8\u10dc\u10d8\u10e1 \u10d3\u10d0\u10d3\u10d0\u10e1\u10e2\u10e3\u10e0\u10d4\u10d1\u10d0\u10e1 \u10d4\u10da\u10dd\u10d3\u10d4\u10d1\u10d0.");
+    if (loginUser.status !== "active") throw new Error("\u10d0\u10dc\u10d2\u10d0\u10e0\u10d8\u10e8\u10d8 \u10d0\u10e0\u10d0\u10d0\u10e5\u10e2\u10d8\u10e3\u10e0\u10d8\u10d0.");
     return { ...saveStaticSession(user), staticMode: true };
   }
 
@@ -626,8 +637,8 @@ async function staticApi(path, options = {}) {
   }
 
   if (method === "POST" && apiPath === "/api/register") {
-    const existing = store.users.find((user) => normalizeUsername(user.username) === normalizeUsername(body.username));
-    if (existing) throw new Error("მომხმარებელი უკვე არსებობს.");
+    const existing = [...store.users, ...store.pending].find((user) => normalizeUsername(user.username) === normalizeUsername(body.username));
+    if (existing) throw new Error("\u10db\u10dd\u10db\u10ee\u10db\u10d0\u10e0\u10d4\u10d1\u10d4\u10da\u10d8 \u10e3\u10d9\u10d5\u10d4 \u10d0\u10e0\u10e1\u10d4\u10d1\u10dd\u10d1\u10e1.");
     const now = new Date().toISOString();
     const user = {
       id: `user-${Date.now()}`,
@@ -637,12 +648,12 @@ async function staticApi(path, options = {}) {
       lastName: body.lastName || "",
       phone: body.phone || "",
       role: "courier",
-      status: "active",
+      status: "pending",
       requestedAt: now,
-      approvedAt: now,
+      approvedAt: "",
       createdAt: now,
     };
-    store.users.push(user);
+    store.pending.push(user);
     saveStaticBootstrap();
     return { ok: true, user: publicStaticUser(user) };
   }
@@ -675,7 +686,7 @@ async function staticApi(path, options = {}) {
   }
 
   if (method === "POST" && apiPath === "/api/partner-cash-adjustments") {
-    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია პარტნიორის ქეშის კორექტირება.");
+    if (!state.isAdmin) throw new Error("\u10db\u10ee\u10dd\u10da\u10dd\u10d3 \u10d0\u10d3\u10db\u10d8\u10dc\u10e1 \u10e8\u10d4\u10e3\u10eb\u10da\u10d8\u10d0 \u10de\u10d0\u10e0\u10e2\u10dc\u10d8\u10dd\u10e0\u10d8\u10e1 \u10e5\u10d4\u10e8\u10d8\u10e1 \u10d9\u10dd\u10e0\u10d4\u10e5\u10e2\u10d8\u10e0\u10d4\u10d1\u10d0.");
     const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
     const adjustments = normalizeFinanceAdjustmentList(financeData.partnerCashAdjustments || [], "partnerCash");
     const adjustment = normalizeFinanceAdjustment(body, "partnerCash", adjustments.length);
@@ -886,9 +897,13 @@ async function staticApi(path, options = {}) {
     const lngValue = Number(body.lng ?? body.longitude ?? geocoded?.lng);
     const hasCoords = Number.isFinite(latValue) && Number.isFinite(lngValue);
     const fullAddress = stripStaticPartnerAddressNoise(body.fullAddress || body.address || [body.city, body.district || body.area, body.streetAddress || body.street].filter(Boolean).join(", "));
+    const assignment = hasCoords && typeof applyAutoAssignByZone === "function"
+      ? await applyAutoAssignByZone({ lat: latValue, lng: lngValue, courierUsername: body.courierUsername || "" })
+      : {};
+    const assignedCourierUsername = body.courierUsername || assignment.courierUsername || "";
     const parcel = {
       id: `parcel-${Date.now()}`,
-      courierUsername: body.courierUsername || "",
+      courierUsername: assignedCourierUsername,
       ...(hasCoords ? { lat: latValue, lng: lngValue, latitude: latValue, longitude: lngValue } : {}),
       address: state.isPartner ? fullAddress : body.address || fullAddress,
       fullAddress,
@@ -912,12 +927,12 @@ async function staticApi(path, options = {}) {
       paymentAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       cashAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       codAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
-      zoneId: body.zoneId || "",
-      zoneName: body.zoneName || "",
-      autoAssigned: Boolean(body.autoAssigned),
+      zoneId: body.zoneId || assignment.zoneId || "",
+      zoneName: body.zoneName || assignment.zoneName || "",
+      autoAssigned: Boolean(assignment.autoAssigned || body.autoAssigned),
       status: "pending",
       createdAt: now,
-      assignedAt: body.courierUsername ? now : "",
+      assignedAt: assignedCourierUsername ? now : "",
     };
     store.parcels.push(parcel);
     saveStaticBootstrap();

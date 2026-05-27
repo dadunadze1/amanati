@@ -1,6 +1,6 @@
 ﻿import { createServer } from "node:http";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +12,8 @@ const projectRoot = resolve(backendRoot, "..");
 const frontendRoot = resolve(projectRoot, "frontend");
 const dbFile = process.env.DB_FILE ? resolve(process.env.DB_FILE) : resolve(backendRoot, "data", "delivery-db.json");
 const sessions = new Map();
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+let apiQueue = Promise.resolve();
 
 const contentTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -111,7 +113,23 @@ async function readDb() {
 
 async function writeDb(db) {
   await mkdir(dirname(dbFile), { recursive: true });
-  await writeFile(dbFile, `${JSON.stringify(db, null, 2)}\n`, "utf8");
+  const tempFile = `${dbFile}.${process.pid}.tmp`;
+  await writeFile(tempFile, `${JSON.stringify(db, null, 2)}\n`, "utf8");
+  await rename(tempFile, dbFile);
+}
+
+async function runQueuedApiOperation(operation) {
+  const previous = apiQueue;
+  let release;
+  apiQueue = new Promise((resolveRelease) => {
+    release = resolveRelease;
+  });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
 }
 
 function hashPassword(password) {
@@ -228,15 +246,21 @@ function partnerCashIdentity(user = {}) {
 }
 
 function publicPartnerCashAdjustment(adjustment) {
+  const delta = Number(adjustment.delta ?? adjustment.amount ?? 0);
+  const targetAmount = Number(adjustment.targetAmount || 0);
+  const correctionAmount = Number(adjustment.correctionAmount ?? Math.abs(delta));
+  const correctionMode = adjustment.correctionMode === "add" ? "add" : "subtract";
   return {
     id: adjustment.id || "",
     username: adjustment.username || adjustment.partnerUsername || "",
     partnerUsername: adjustment.partnerUsername || adjustment.username || "",
     partnerId: adjustment.partnerId || "",
-    amount: Number(adjustment.amount || adjustment.delta || 0),
-    delta: Number(adjustment.delta || adjustment.amount || 0),
-    targetAmount: Number(adjustment.targetAmount || 0),
-    type: adjustment.type || (Number(adjustment.delta || adjustment.amount || 0) < 0 ? "negative" : "positive"),
+    amount: delta,
+    delta,
+    targetAmount,
+    correctionAmount: Number.isFinite(correctionAmount) ? Math.max(0, correctionAmount) : Math.abs(delta),
+    correctionMode,
+    type: adjustment.type || (delta < 0 ? "negative" : "positive"),
     category: "partnerCash",
     dateKey: adjustment.dateKey || adjustment.date || "",
     date: adjustment.date || adjustment.dateKey || "",
@@ -638,6 +662,10 @@ function getSession(request) {
   const header = request.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   const session = token ? sessions.get(token) : null;
+  if (session && Date.now() - Number(session.createdAt || 0) > SESSION_TTL_MS) {
+    sessions.delete(token);
+    return null;
+  }
   return session ? { ...session, token } : null;
 }
 
@@ -745,9 +773,11 @@ async function handleApi(request, response, url) {
   if (method === "POST" && path === "/api/login") {
     const body = await readJsonBody(request);
     const user = findUser(db, body.username);
-    if (!user || user.status !== "active" || !verifyPassword(String(body.password || ""), user.passwordHash)) {
+    if (!user || !verifyPassword(String(body.password || ""), user.passwordHash)) {
       throw httpError(401, "ლოგინი ან პაროლი არასწორია.");
     }
+    if (user.status === "pending") throw httpError(403, "ანგარიში ადმინის დადასტურებას ელოდება.");
+    if (user.status !== "active") throw httpError(403, "ანგარიში არააქტიურია.");
     const token = createToken(user);
     sendJson(response, 200, { token, user: publicUser(user) });
     return;
@@ -773,11 +803,11 @@ async function handleApi(request, response, url) {
       id: randomBytes(12).toString("hex"),
       username,
       role: "courier",
-      status: "active",
+      status: "pending",
       passwordHash: hashPassword(password),
       ...profile,
       requestedAt: now,
-      approvedAt: now,
+      approvedAt: "",
       createdAt: now,
     });
     await writeDb(db);
@@ -891,6 +921,8 @@ async function handleApi(request, response, url) {
       amount: delta,
       delta,
       targetAmount,
+      correctionAmount: body.correctionAmount,
+      correctionMode: body.correctionMode,
       type: delta < 0 ? "negative" : "positive",
       category: "partnerCash",
       dateKey,
@@ -1158,7 +1190,7 @@ async function handleApi(request, response, url) {
     const detectedZone = hasCoords ? detectTbilisiZone({ lat, lng }) : null;
     let autoAssigned = false;
     let assignmentMessage = "";
-    if (session.role === "admin" && !courierUsername) {
+    if ((session.role === "admin" || session.role === "partner") && !courierUsername) {
       if (!detectedZone) {
         assignmentMessage = "ამ მისამართისთვის ზონა ვერ მოიძებნა";
       } else {
@@ -1424,7 +1456,7 @@ const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url || "/", `http://${host}:${currentPort}`);
     if (url.pathname.startsWith("/api/")) {
-      await handleApi(request, response, url);
+      await runQueuedApiOperation(() => handleApi(request, response, url));
       return;
     }
     await handleStatic(request, response, url);

@@ -183,7 +183,7 @@ function highlightCourierOrderPin(pin) {
 
 function getCourierPresenceStatus(pins) {
   const key = state.courierPresenceStatus === "offline" ? "offline" : "online";
-  return { key, label: key === "online" ? "Online" : "Offline" };
+  return { key, label: key === "online" ? "ონლაინ" : "ოფლაინ" };
 }
 
 

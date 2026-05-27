@@ -22,10 +22,10 @@ function getStatusLabel(status) {
 
 
 function getPartnerOrderStatusLabel(parcel) {
-  if (parcel?.status === "delivered") return "Delivered";
-  if (parcel?.status === "failed") return "Failed Delivery";
-  if (!parcel?.courierUsername) return "Pending Admin Approval";
-  return "Assigned to Courier";
+  if (parcel?.status === "delivered") return "ჩაბარდა";
+  if (parcel?.status === "failed") return "ვერ ჩაბარდა";
+  if (!parcel?.courierUsername) return "ელოდება ადმინის დადასტურებას";
+  return "კურიერზე მიბმულია";
 }
 
 

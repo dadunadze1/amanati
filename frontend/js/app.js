@@ -58,7 +58,7 @@ function bindEvents() {
     const presenceToggle = event.target.closest("[data-courier-presence-toggle]");
     if (presenceToggle) {
       const modes = ["online", "offline"];
-      const labels = { online: "Online", offline: "Offline" };
+      const labels = { online: "ონლაინ", offline: "ოფლაინ" };
       const current = modes.includes(presenceToggle.dataset.mode) ? presenceToggle.dataset.mode : "online";
       const next = modes[(modes.indexOf(current) + 1) % modes.length];
       state.courierPresenceStatus = next;
@@ -151,9 +151,7 @@ function renderActions() {
     },
   ];
   const partnerActions = [
-    ["partnerDashboard", "მთავარი", "▥"],
     ["partnerNewOrder", "ახალი", "+"],
-    ["partnerOrders", "შეკვეთები", "▣"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
@@ -197,10 +195,10 @@ function renderActions() {
     ? `
       <div class="app-sidebar-brand">
         <span class="swift-brand-mark" aria-hidden="true">
-          <i></i>
-          <i></i>
-          <i></i>
-          <i></i>
+          <svg viewBox="0 0 64 64" focusable="false" aria-hidden="true">
+            <path d="M37.4 4 9 36.8h18.4L24.7 60l30.1-35.1H36.5L37.4 4z"></path>
+            <path d="M19 27.8h16.2c1.4 0 2.3 1.5 1.7 2.7l-2.4 4.8c-.3.7-1.1 1.1-1.8 1.1H16.7c-1.5 0-2.4-1.6-1.7-2.9l2.3-4.1c.4-.9 1.3-1.6 1.9-1.6z"></path>
+          </svg>
         </span>
         <div>
           <strong>Swift Delivery</strong>
@@ -458,7 +456,7 @@ async function renderAdminDashboard(pins = state.activePins) {
     { label: "ჩაბარებული", value: pins.filter((pin) => pin.status === "delivered").length, tone: "success", action: "adminMapSetStatus", dataValue: "delivered", active: filters.status === "delivered" },
     { label: "ვერ ჩაბარებული", value: pins.filter((pin) => pin.status === "failed").length, tone: "danger", action: "adminMapSetStatus", dataValue: "failed", active: filters.status === "failed" },
     { label: "მიუბმელი", value: unassignedCount, tone: "warning", action: "showUnassignedAdminPins", active: filters.showUnassigned && filters.status === "all" && !filters.selectedCouriers.length },
-    { label: "Online", value: onlineCourierCount, tone: "success", action: "liveCouriers" },
+    { label: "ონლაინ", value: onlineCourierCount, tone: "success", action: "liveCouriers" },
     { label: "კურიერები", value: courierCount, tone: "primary", action: "adminUsers" },
     { label: "დღიური თანხა", value: formatMoney(dailyCash), tone: "warning", action: "adminFinance" },
   ];

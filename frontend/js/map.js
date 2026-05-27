@@ -1359,7 +1359,7 @@ function renderCourierLocationMarkers() {
     }
     const coords = { lat, lng };
     const fillColor = "#0f766e";
-    const labelStatus = "Online";
+    const labelStatus = "ონლაინ";
     const phone = location.phone || "ტელეფონი არ არის";
     const displayName = location.displayName || location.username || "კურიერი";
 
