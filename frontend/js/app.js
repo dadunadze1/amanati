@@ -170,8 +170,6 @@ function renderActions() {
       ? partnerActions
       : [
         ["courierParcels", "ჩემი ამანათები", "□"],
-        ["today", "ჩემი დღე", "◷"],
-        ["courierFinance", "ქეში", "₾"],
         ["history", "ისტორია", "↺"],
         ["logout", "გასვლა", "←"],
       ];
