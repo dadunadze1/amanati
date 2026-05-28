@@ -393,6 +393,56 @@ function renderFinanceModalLayout({ header = "", filters = "", summary = "", con
 }
 
 
+function addDaysToDateKey(dateKey, days) {
+  const date = new Date(`${normalizeDateKey(dateKey) || toDateKey(new Date())}T00:00:00`);
+  date.setDate(date.getDate() + Number(days || 0));
+  return toDateKey(date);
+}
+
+
+function getPartnerCashAdjustmentsForRange(partner, startDate, endDate) {
+  if (typeof getPartnerCashAdjustments !== "function") return [];
+  return getPartnerCashAdjustments(partner).filter((adjustment) => adjustmentMatchesDateRange(adjustment, startDate, endDate));
+}
+
+
+function calculatePartnerCashSummaryForRange(partner, records = [], startDate, endDate) {
+  if (typeof orderBelongsToPartner !== "function") {
+    return {
+      orders: [],
+      deliveredOrders: [],
+      pendingOrders: [],
+      baseCash: 0,
+      pendingCash: 0,
+      adjustmentTotal: 0,
+      cashDue: 0,
+    };
+  }
+
+  const range = normalizeDateRange(startDate, endDate);
+  const orders = (Array.isArray(records) ? records : [])
+    .filter((order) => orderBelongsToPartner(order, partner))
+    .filter((order) => parcelMatchesStatsDateRange(order, range.start, range.end));
+  const deliveredOrders = orders.filter((order) => order.status === "delivered");
+  const pendingOrders = orders.filter((order) => order.status !== "delivered" && order.status !== "failed");
+  const baseCash = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
+  const pendingCash = safeMoney(pendingOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
+  const adjustments = getPartnerCashAdjustmentsForRange(partner, range.start, range.end);
+  const adjustmentTotal = safeMoney(adjustments.reduce((sum, adjustment) => sum + getAdjustmentSignedAmount(adjustment), 0));
+
+  return {
+    orders,
+    deliveredOrders,
+    pendingOrders,
+    adjustments,
+    baseCash,
+    pendingCash,
+    adjustmentTotal,
+    cashDue: Math.max(0, safeMoney(baseCash + adjustmentTotal)),
+  };
+}
+
+
 function isFinanceMobileViewport() {
   return typeof window !== "undefined" && window.matchMedia?.("(max-width: 640px)")?.matches;
 }
@@ -680,6 +730,181 @@ async function openFinanceDashboard() {
   `;
   const body = renderFinanceModalLayout({ content });
   showDialog("ფინანსები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+}
+
+
+async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(new Date())) {
+  if (!state.isAdmin) return;
+  const selectedDate = normalizeDateKey(dateKey) || toDateKey(new Date());
+  state.financeDate = selectedDate;
+  setFinanceCourierRange(selectedDate, selectedDate);
+
+  const [users, records, partners, partnerRecords] = await Promise.all([
+    getUsers().catch(() => []),
+    getAllFinanceRecords(),
+    typeof getPartners === "function" ? getPartners().catch(() => []) : [],
+    typeof getAllPartnerCashRecords === "function" ? getAllPartnerCashRecords().catch(() => []) : getAllFinanceRecords(),
+    typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
+  ]);
+
+  const couriers = users.filter((user) => user.role === "courier");
+  const courierSummaries = couriers.map((courier) => ({
+    courier,
+    summary: calculateFinanceSummary({ records }, { username: courier.username, startDate: selectedDate, endDate: selectedDate }),
+  }));
+  const partnerSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
+    partner,
+    summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, selectedDate, selectedDate),
+  }));
+  const daySummary = calculateFinanceSummary({ records }, { startDate: selectedDate, endDate: selectedDate });
+  const deliveredOrders = daySummary.deliveredRecords || [];
+  const totalCourierPay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
+  const courierBasePay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.basePay, 0));
+  const courierAdjustments = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
+  const totalPartnerCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.cashDue, 0));
+  const partnerBaseCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.baseCash, 0));
+  const partnerAdjustments = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
+  const adjustedProfit = safeMoney(daySummary.deliveryFees - totalCourierPay);
+
+  const filters = `
+    <div class="finance-toolbar finance-range-toolbar">
+      <label>
+        <span>დღე</span>
+        <input class="finance-input" id="dailyBalanceDate" type="date" value="${escapeAttr(selectedDate)}" aria-label="დღიური ბალანსის თარიღი">
+      </label>
+      <button class="mini-button finance-button-primary" type="button" data-daily-balance-apply>ნახვა</button>
+      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(toDateKey(new Date()))}">დღეს</button>
+      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(addDaysToDateKey(toDateKey(new Date()), -1))}">გუშინ</button>
+      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(addDaysToDateKey(selectedDate, -1))}">წინა დღე</button>
+      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(addDaysToDateKey(selectedDate, 1))}">შემდეგი დღე</button>
+    </div>
+  `;
+
+  const summary = `
+        ${renderFinanceSummaryItem({
+          className: "finance-summary-item--hero finance-summary-item--final",
+          icon: "₾",
+          label: "კურიერებზე გადასახდელი",
+          value: formatMoney(totalCourierPay),
+        })}
+        ${renderFinanceSummaryItem({
+          className: "finance-summary-item--hero finance-summary-item--cash finance-summary-item--alert",
+          icon: "₾",
+          label: "ობიექტების ქეში",
+          value: formatMoney(totalPartnerCash),
+        })}
+        ${renderFinanceSummaryItem({
+          className: "finance-summary-item--hero finance-summary-item--delivered",
+          icon: "Σ",
+          label: "ჩემი მოგება",
+          value: formatMoney(adjustedProfit),
+        })}
+        ${renderFinanceSummaryItem({
+          className: "finance-summary-item--compact",
+          icon: "✓",
+          label: "ჩაბარებული შეკვეთები",
+          value: String(daySummary.delivered),
+        })}
+        ${renderFinanceSummaryItem({
+          className: "finance-summary-item--compact",
+          icon: "₾",
+          label: "მიტანის ჯამი",
+          value: formatMoney(daySummary.deliveryFees),
+        })}
+        ${renderFinanceSummaryItem({
+          className: "finance-summary-item--compact",
+          icon: "◷",
+          label: "თარიღი",
+          value: selectedDate,
+        })}
+  `;
+
+  const courierRows = courierSummaries.map(({ courier, summary: courierSummary }) => `
+    <article class="finance-card finance-mini-card finance-static-card finance-card--final">
+      <span class="finance-summary-icon finance-summary-icon--final" aria-hidden="true">₾</span>
+      <span>${escapeHtml(userDisplayName(courier))}</span>
+      <small>ჩაბარებული: ${escapeHtml(String(courierSummary.delivered))}</small>
+      <strong>${escapeHtml(formatMoney(courierSummary.finalPay))}</strong>
+      <small>საბაზისო: ${escapeHtml(formatMoney(courierSummary.basePay))} · ${escapeHtml(getAdjustmentDirectionLabel(courierSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(courierSummary.adjustmentTotal))}</small>
+    </article>
+  `).join("");
+
+  const partnerRows = partnerSummaries.map(({ partner, summary: partnerSummary }) => `
+    <article class="finance-card finance-mini-card finance-static-card finance-card--partner ${partnerSummary.cashDue > 0 ? "finance-card--alert" : ""}">
+      <span class="finance-summary-icon finance-summary-icon--cash" aria-hidden="true">₾</span>
+      <span>${escapeHtml(partnerName(partner))}</span>
+      <small>ჩაბარებული: ${escapeHtml(String(partnerSummary.deliveredOrders.length))}</small>
+      <strong>${escapeHtml(formatMoney(partnerSummary.cashDue))}</strong>
+      <small>ქეში: ${escapeHtml(formatMoney(partnerSummary.baseCash))} · ${escapeHtml(getAdjustmentDirectionLabel(partnerSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(partnerSummary.adjustmentTotal))}</small>
+      <small>მოლოდინში: ${escapeHtml(formatMoney(partnerSummary.pendingCash))}</small>
+    </article>
+  `).join("");
+
+  const orderRows = deliveredOrders.map((order) => `
+    <article class="finance-card finance-mini-card finance-static-card">
+      <span class="finance-summary-icon" aria-hidden="true">✓</span>
+      <span>${escapeHtml(order.fullName || "უსახელო")}</span>
+      <small>კურიერი: ${escapeHtml(order.courierName || order.courierUsername || "მიუბმელი")}</small>
+      <small>ობიექტი: ${escapeHtml(orderPartnerName(order))}</small>
+      <strong>${escapeHtml(formatMoney(getAdminProfit(order)))}</strong>
+      <small>ქეში: ${escapeHtml(formatMoney(getPaymentAmount(order)))} · კურიერი: ${escapeHtml(formatMoney(getCourierPay(order)))} · მიტანა: ${escapeHtml(formatMoney(getDeliveryTotal(order)))}</small>
+    </article>
+  `).join("");
+
+  const content = `
+    ${renderFinanceCollapsibleSection({
+      title: "კურიერები",
+      subtitle: `საბაზისო ${formatMoney(courierBasePay)}, კორექტირება ${formatAdjustmentDisplay(courierAdjustments)}`,
+      badge: formatMoney(totalCourierPay),
+      className: "finance-collapsible--couriers",
+      content: `<section class="finance-section finance-card-list finance-card-list--dashboard">${courierRows || "<div class=\"history-empty history-empty-card\">კურიერი ჯერ არ არის დამატებული</div>"}</section>`,
+    })}
+    ${renderFinanceCollapsibleSection({
+      title: "ობიექტები / პარტნიორები",
+      subtitle: `ქეში ${formatMoney(partnerBaseCash)}, კორექტირება ${formatAdjustmentDisplay(partnerAdjustments)}`,
+      badge: formatMoney(totalPartnerCash),
+      className: "finance-collapsible--partners",
+      content: `<section class="finance-section finance-card-list finance-card-list--dashboard">${partnerRows || "<div class=\"history-empty history-empty-card\">პარტნიორი ჯერ არ არის დამატებული</div>"}</section>`,
+    })}
+    ${renderFinanceCollapsibleSection({
+      title: "ჩემი მოგება",
+      subtitle: "პარტნიორის ქეში მოგებაში არ შედის",
+      badge: formatMoney(adjustedProfit),
+      className: "finance-collapsible--profit",
+      content: `
+        <section class="finance-section finance-explain-grid">
+          <div class="finance-explain-row"><strong>მიტანის ჯამი</strong><span>${escapeHtml(formatMoney(daySummary.deliveryFees))}</span></div>
+          <div class="finance-explain-row"><strong>კურიერებზე გადასახდელი</strong><span>${escapeHtml(formatMoney(totalCourierPay))}</span></div>
+          <div class="finance-explain-row"><strong>ჩემი მოგება</strong><span>${escapeHtml(formatMoney(adjustedProfit))}</span></div>
+          <div class="finance-explain-row"><strong>საბაზისო მოგება</strong><span>${escapeHtml(formatMoney(daySummary.adminProfit))}</span></div>
+        </section>
+      `,
+    })}
+    ${renderFinanceCollapsibleSection({
+      title: "დღის ჩაბარებული შეკვეთები",
+      subtitle: `${deliveredOrders.length} ჩანაწერი`,
+      badge: formatMoney(daySummary.deliveryFees),
+      className: "finance-collapsible--orders",
+      collapseOnMobile: true,
+      content: `<section class="finance-section finance-card-list finance-card-list--dashboard">${orderRows || "<div class=\"history-empty history-empty-card\">ამ დღეს ჩაბარებული შეკვეთა არ არის</div>"}</section>`,
+    })}
+  `;
+
+  const body = renderFinanceModalLayout({ filters, summary, content });
+  showDialog("დღიური ბალანსი", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+  bindAdminDailyBalanceEvents();
+}
+
+
+function bindAdminDailyBalanceEvents() {
+  document.querySelector("[data-daily-balance-apply]")?.addEventListener("click", async () => {
+    await openAdminDailyBalance(document.getElementById("dailyBalanceDate")?.value);
+  });
+  document.querySelectorAll("[data-daily-balance-date]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await openAdminDailyBalance(button.dataset.dailyBalanceDate);
+    });
+  });
 }
 
 

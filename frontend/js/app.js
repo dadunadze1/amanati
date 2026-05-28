@@ -133,6 +133,7 @@ function renderActions() {
       label: "ფინანსები",
       actions: [
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
+        ["adminDailyBalance", "დღიური ბალანსი", "▦", "კურიერის, პარტნიორის ქეშისა და მოგების დღიური ანგარიში"],
       ],
     },
     {
@@ -555,6 +556,7 @@ async function handleAction(action, value, sourceElement) {
     adminUsers: openUserManagement,
     zoneManagement: openZoneManagement,
     adminFinance: openFinanceDashboard,
+    adminDailyBalance: openAdminDailyBalance,
     adminPartners: openPartnerManagement,
     adminPartnerOrders: openAdminPartnerOrders,
     addParcel: openAdminAddParcel,
