@@ -82,6 +82,7 @@ function completeLogin(payload) {
   state.courierPresenceStatus = state.isAdmin || state.isPartner ? "offline" : "online";
   state.adminDashboardHidden = false;
   els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
+  updateAppViewportVars();
   state.mapViewportResetToken += 1;
   state.mapViewportResetPending = false;
   hideModal(els.setupModal);
@@ -94,6 +95,7 @@ function completeLogin(payload) {
     renderPartnerDashboard(),
     renderCourierMobileDashboard(),
   ]).then(() => {
+    stabilizeAppViewportAfterLogin();
     resetMapViewportForLogin();
     if (!state.isPartner) startLocationWatch();
     if (!state.isPartner) startCourierLocationServices();

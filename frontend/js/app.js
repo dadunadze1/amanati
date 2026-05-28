@@ -772,6 +772,7 @@ async function logout() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   cacheElements();
+  bindAppViewportVars();
   bindEvents();
   await initializeMap();
   checkDayChange();

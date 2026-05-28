@@ -13,6 +13,44 @@ function roleLabel(role) {
 }
 
 
+function updateAppViewportVars() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const viewport = window.visualViewport;
+  const height = Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0);
+  const width = Math.round(window.innerWidth || document.documentElement.clientWidth || viewport?.width || 0);
+  if (height > 0) document.documentElement.style.setProperty("--app-viewport-height", `${height}px`);
+  if (width > 0) document.documentElement.style.setProperty("--app-viewport-width", `${width}px`);
+}
+
+
+function bindAppViewportVars() {
+  if (typeof window === "undefined") return;
+  if (bindAppViewportVars.bound) {
+    updateAppViewportVars();
+    return;
+  }
+  bindAppViewportVars.bound = true;
+  updateAppViewportVars();
+  window.addEventListener("resize", updateAppViewportVars, { passive: true });
+  window.addEventListener("orientationchange", () => {
+    [0, 120, 360].forEach((delay) => window.setTimeout(updateAppViewportVars, delay));
+  }, { passive: true });
+  window.visualViewport?.addEventListener("resize", updateAppViewportVars, { passive: true });
+  window.visualViewport?.addEventListener("scroll", updateAppViewportVars, { passive: true });
+}
+
+
+function stabilizeAppViewportAfterLogin() {
+  if (typeof window === "undefined") return;
+  [0, 60, 160, 360, 720, 1200].forEach((delay) => {
+    window.setTimeout(() => {
+      updateAppViewportVars();
+      state.map?.invalidateSize?.({ pan: false });
+    }, delay);
+  });
+}
+
+
 function getStatusLabel(status) {
   if (status === "partner_pending") return "ადმინის დასადასტურებელია";
   if (status === "delivered") return "ჩაბარდა";

@@ -178,24 +178,27 @@ function renderSinglePinMarker(pin) {
   if (!pin) return;
   const isSelected = pin.id && pin.id === state.selectedPinId;
   const locationClass = `dispatch-pin-location-${pin.locationAccuracy || "confirmed"}`;
+  const partnerUnconfirmedClass = isPartnerUnconfirmedPin(pin) ? "dispatch-pin-partner-unconfirmed" : "";
+  const fillColor = getPinMarkerColor(pin);
+  const strokeColor = getPinMarkerStrokeColor(pin, isSelected);
   if (isSelected) {
     addParcelOverlay(createCircleMarker(pin, {
       radius: 18,
-      fillColor: getStatusColor(pin.status),
-      color: "#2563eb",
+      fillColor,
+      color: strokeColor,
       weight: 2,
       fillOpacity: 0.12,
       opacity: 0.62,
-      className: "selected-pin-pulse",
+      className: `selected-pin-pulse ${partnerUnconfirmedClass}`,
     }));
   }
   const marker = createCircleMarker(pin, {
     radius: isSelected ? 12 : 9,
-    fillColor: getStatusColor(pin.status),
-    color: isSelected ? "#2563eb" : "#fff",
+    fillColor,
+    color: strokeColor,
     weight: isSelected ? 4 : 2,
     fillOpacity: 0.92,
-    className: `${isSelected ? "selected-pin-marker" : "dispatch-pin-marker"} dispatch-pin-status-${pin.status || "pending"} ${locationClass}`,
+    className: `${isSelected ? "selected-pin-marker" : "dispatch-pin-marker"} dispatch-pin-status-${pin.status || "pending"} ${locationClass} ${partnerUnconfirmedClass}`,
   });
 
   addParcelOverlay(marker);
@@ -748,6 +751,25 @@ function getStatusColor(status) {
   if (status === "delivered") return "#16a34a";
   if (status === "failed") return "#dc2626";
   return "#2563eb";
+}
+
+
+function isPartnerUnconfirmedPin(pin) {
+  if (!pin || pin.locationConfirmedByAdmin) return false;
+  const isPartnerLocation = pin.createdByRole === "partner" || pin.locationSource === "partner_address_geocoded";
+  return isPartnerLocation && pin.locationAccuracy === "approximate";
+}
+
+
+function getPinMarkerColor(pin) {
+  if (state.isAdmin && isPartnerUnconfirmedPin(pin)) return "#f59e0b";
+  return getStatusColor(pin?.status);
+}
+
+
+function getPinMarkerStrokeColor(pin, isSelected = false) {
+  if (state.isAdmin && isPartnerUnconfirmedPin(pin)) return isSelected ? "#b45309" : "#fff";
+  return isSelected ? "#2563eb" : "#fff";
 }
 
 

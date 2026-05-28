@@ -106,12 +106,7 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
 
 
 function updateCourierViewportVars() {
-  if (typeof window === "undefined" || typeof document === "undefined") return;
-  const viewport = window.visualViewport;
-  const height = Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 0);
-  const width = Math.round(window.innerWidth || document.documentElement.clientWidth || viewport?.width || 0);
-  if (height > 0) document.documentElement.style.setProperty("--app-viewport-height", `${height}px`);
-  if (width > 0) document.documentElement.style.setProperty("--app-viewport-width", `${width}px`);
+  updateAppViewportVars();
 }
 
 
