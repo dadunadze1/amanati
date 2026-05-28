@@ -155,7 +155,8 @@ function cleanUsername(username) {
 }
 
 function publicUser(user) {
-  const zoneId = String(user.zoneId || "");
+  const zoneIds = getUserZoneIds(user);
+  const zoneId = zoneIds[0] || "";
   return {
     id: user.id,
     username: user.username,
@@ -167,8 +168,9 @@ function publicUser(user) {
     lastName: user.lastName || "",
     phone: user.phone || "",
     bankDetails: user.bankDetails || "",
+    zoneIds,
     zoneId,
-    zoneName: getZoneName(zoneId),
+    zoneName: getZoneNames(zoneIds),
     createdAt: user.createdAt,
     requestedAt: user.requestedAt,
     approvedAt: user.approvedAt,
@@ -487,6 +489,25 @@ function getZoneName(zoneId) {
   return TBILISI_ZONES[zoneId]?.name || "";
 }
 
+function getZoneNames(zoneIds) {
+  return (Array.isArray(zoneIds) ? zoneIds : [])
+    .map(getZoneName)
+    .filter(Boolean)
+    .join(", ");
+}
+
+function getUserZoneIds(user) {
+  const values = [
+    ...(Array.isArray(user?.zoneIds) ? user.zoneIds : []),
+    user?.zoneId,
+  ];
+  return [...new Set(values.map((zoneId) => String(zoneId || "").trim()).filter((zoneId) => TBILISI_ZONES[zoneId]))];
+}
+
+function userHasZone(user, zoneId) {
+  return getUserZoneIds(user).includes(String(zoneId || "").trim());
+}
+
 function publicZone(db, zoneId, zone) {
   return {
     id: zoneId,
@@ -494,7 +515,7 @@ function publicZone(db, zoneId, zone) {
     districts: zone.districts,
     polygon: zone.polygon,
     couriers: db.users
-      .filter((user) => user.role === "courier" && user.status === "active" && user.zoneId === zoneId)
+      .filter((user) => user.role === "courier" && user.status === "active" && userHasZone(user, zoneId))
       .map(publicUser),
   };
 }
@@ -533,7 +554,7 @@ function findLeastBusyCourierForZone(db, zoneId) {
   const couriers = db.users.filter((user) => (
     user.role === "courier"
     && user.status === "active"
-    && user.zoneId === zoneId
+    && userHasZone(user, zoneId)
   ));
   return couriers
     .map((courier) => ({ courier, activeCount: getActiveParcelCount(db, courier.username) }))
@@ -545,6 +566,11 @@ function cleanZoneId(zoneId) {
   if (!value) return "";
   if (!TBILISI_ZONES[value]) throw httpError(400, "ზონა ვერ მოიძებნა.");
   return value;
+}
+
+function cleanZoneIds(zoneIds) {
+  const values = Array.isArray(zoneIds) ? zoneIds : [zoneIds];
+  return [...new Set(values.map(cleanZoneId).filter(Boolean))];
 }
 
 function buildNominatimUrl(endpoint, params) {
@@ -861,7 +887,7 @@ async function handleApi(request, response, url) {
     sendJson(response, 200, {
       zones,
       unassignedCouriers: db.users
-        .filter((user) => user.role === "courier" && user.status === "active" && !user.zoneId)
+        .filter((user) => user.role === "courier" && user.status === "active" && !getUserZoneIds(user).length)
         .map(publicUser),
     });
     return;
@@ -1026,7 +1052,9 @@ async function handleApi(request, response, url) {
     const user = findUser(db, username);
     if (!user || user.role !== "courier" || user.status !== "active") throw httpError(404, "კურიერი ვერ მოიძებნა.");
     const body = await readJsonBody(request);
-    user.zoneId = cleanZoneId(body.zoneId);
+    const zoneIds = cleanZoneIds(body.zoneIds !== undefined ? body.zoneIds : body.zoneId);
+    user.zoneIds = zoneIds;
+    user.zoneId = zoneIds[0] || "";
     await writeDb(db);
     sendJson(response, 200, { user: publicUser(user) });
     return;

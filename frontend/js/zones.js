@@ -131,12 +131,30 @@ function getZoneById(zoneId, zones) {
 }
 
 
-function getCourierZoneId(courier, zones = []) {
-  const directZoneId = normalizeZoneId(courier?.zoneId || courier?.zoneCode || courier?.zone);
-  if (directZoneId) return directZoneId;
+function getCourierZoneIds(courier, zones = []) {
+  const directZoneIds = Array.isArray(courier?.zoneIds) ? courier.zoneIds.map(normalizeZoneId).filter(Boolean) : [];
+  const legacyZoneId = normalizeZoneId(courier?.zoneId || courier?.zoneCode || courier?.zone);
   const zoneName = normalizeZoneText(courier?.zoneName || "");
-  const zone = (zones || []).find((item) => normalizeZoneText(getZoneName(item)) === zoneName);
-  return zone ? getZoneId(zone) : "";
+  const zoneByName = (zones || []).find((item) => normalizeZoneText(getZoneName(item)) === zoneName);
+  return [...new Set([
+    ...directZoneIds,
+    legacyZoneId,
+    zoneByName ? getZoneId(zoneByName) : "",
+  ].filter(Boolean))];
+}
+
+
+function getCourierZoneId(courier, zones = []) {
+  return getCourierZoneIds(courier, zones)[0] || "";
+}
+
+
+function getCourierZoneLabel(courier, zones = []) {
+  const zoneIds = getCourierZoneIds(courier, zones);
+  const names = zoneIds
+    .map((zoneId) => getZoneName(getZoneById(zoneId, zones)) || getZoneName(getZoneById(zoneId, DEFAULT_ZONES)))
+    .filter(Boolean);
+  return names.join(", ") || courier?.zoneName || "მიუბმელი";
 }
 
 
@@ -170,7 +188,8 @@ function applyLocalZoneAssignments(users = []) {
     if (!assignment || user.role !== "courier") return user;
     return {
       ...user,
-      zoneId: assignment.zoneId || "",
+      zoneIds: Array.isArray(assignment.zoneIds) ? assignment.zoneIds : (assignment.zoneId ? [assignment.zoneId] : []),
+      zoneId: assignment.zoneId || (Array.isArray(assignment.zoneIds) ? assignment.zoneIds[0] : "") || "",
       zoneName: assignment.zoneName || "",
     };
   });
@@ -180,11 +199,13 @@ function applyLocalZoneAssignments(users = []) {
 function saveLocalCourierZone(username, zoneBody) {
   const assignments = readLocalZoneAssignments();
   const key = normalizeUsername(username);
-  if (zoneBody.zoneId) {
+  const zoneIds = Array.isArray(zoneBody.zoneIds) ? zoneBody.zoneIds.filter(Boolean) : (zoneBody.zoneId ? [zoneBody.zoneId] : []);
+  if (zoneIds.length) {
     assignments[key] = {
       username,
-      zoneId: zoneBody.zoneId,
-      zoneName: zoneBody.zoneName || getZoneName(getZoneById(zoneBody.zoneId, DEFAULT_ZONES)),
+      zoneIds,
+      zoneId: zoneIds[0],
+      zoneName: zoneBody.zoneName || zoneIds.map((zoneId) => getZoneName(getZoneById(zoneId, DEFAULT_ZONES))).filter(Boolean).join(", "),
     };
   } else {
     delete assignments[key];
@@ -210,13 +231,16 @@ async function detectZoneByCoords(coords) {
 
 
 async function getCourierForZone(zoneId, zoneName) {
-  const couriers = await getCouriers().catch(() => []);
+  const [couriers, zones] = await Promise.all([
+    getCouriers().catch(() => []),
+    getZones().catch(() => DEFAULT_ZONES),
+  ]);
   const normalizedZoneId = normalizeZoneId(zoneId);
   const normalizedZoneName = normalizeZoneText(zoneName);
   const zoneCouriers = couriers.filter((courier) => {
-    const courierZoneId = normalizeZoneId(courier.zoneId || courier.zoneCode || courier.zone);
+    const courierZoneIds = getCourierZoneIds(courier, zones);
     const courierZoneName = normalizeZoneText(courier.zoneName || "");
-    return (normalizedZoneId && courierZoneId === normalizedZoneId) || (normalizedZoneName && courierZoneName === normalizedZoneName);
+    return (normalizedZoneId && courierZoneIds.includes(normalizedZoneId)) || (normalizedZoneName && courierZoneName === normalizedZoneName);
   });
   if (!zoneCouriers.length) return null;
   return [...zoneCouriers].sort((a, b) => countActiveCourierPins(a.username) - countActiveCourierPins(b.username))[0];
@@ -355,10 +379,15 @@ function renderZoneCourierRows(couriers, zones) {
   return `
     <div class="zone-courier-list">
       ${couriers.map((courier) => {
-        const selectedZoneId = getCourierZoneId(courier, zones);
+        const selectedZoneIds = new Set(getCourierZoneIds(courier, zones));
         const zoneOptions = zones.map((zone) => {
           const zoneId = getZoneId(zone);
-          return `<option value="${escapeAttr(zoneId)}" ${zoneId === selectedZoneId ? "selected" : ""}>${escapeHtml(getZoneName(zone))}</option>`;
+          return `
+            <label class="zone-checkbox-option">
+              <input type="checkbox" value="${escapeAttr(zoneId)}" data-zone-courier="${escapeAttr(courier.username)}" ${selectedZoneIds.has(zoneId) ? "checked" : ""}>
+              <span>${escapeHtml(getZoneName(zone))}</span>
+            </label>
+          `;
         }).join("");
         return `
           <article class="zone-courier-row">
@@ -366,15 +395,14 @@ function renderZoneCourierRows(couriers, zones) {
               <strong>${escapeHtml([courier.firstName, courier.lastName].filter(Boolean).join(" ") || courier.username)}</strong>
               <small>username: ${escapeHtml(courier.username)}</small>
               <small>ტელეფონი: ${escapeHtml(courier.phone || "არ არის")}</small>
-              <small>ამჟამინდელი ზონა: ${escapeHtml(getZoneName(getZoneById(selectedZoneId, zones)) || courier.zoneName || "მიუბმელი")}</small>
+              <small>ამჟამინდელი ზონები: ${escapeHtml(getCourierZoneLabel(courier, zones))}</small>
             </span>
             <div class="zone-courier-controls">
-              <select id="zoneSelect-${escapeAttr(courier.username)}" data-zone-courier="${escapeAttr(courier.username)}" aria-label="${escapeAttr(userDisplayName(courier))} ზონა">
-                <option value="">მიუბმელი</option>
+              <div class="zone-checkbox-grid" aria-label="${escapeAttr(userDisplayName(courier))} ზონები">
                 ${zoneOptions}
-              </select>
+              </div>
               <button class="button primary" type="button" data-action="saveCourierZone" data-value="${escapeAttr(courier.username)}">შენახვა</button>
-              <button class="button danger" type="button" data-action="removeCourierZone" data-value="${escapeAttr(courier.username)}">ზონის მოხსნა</button>
+              <button class="button danger" type="button" data-action="removeCourierZone" data-value="${escapeAttr(courier.username)}">ზონების მოხსნა</button>
             </div>
           </article>
         `;
@@ -387,26 +415,27 @@ function renderZoneCourierRows(couriers, zones) {
 async function saveCourierZone(username) {
   const message = document.getElementById("zoneManagementMessage");
   const zones = await getZones();
-  const select = [...document.querySelectorAll("[data-zone-courier]")].find((item) => item.dataset.zoneCourier === username);
-  const zone = getZoneById(select?.value || "", zones);
-  if (!zone) {
-    if (message) message.textContent = "აირჩიეთ ზონა.";
-    return;
-  }
-  await updateCourierZone(username, { zoneId: getZoneId(zone), zoneName: getZoneName(zone) }, message);
+  const selectedZones = [...document.querySelectorAll('input[type="checkbox"][data-zone-courier]:checked')]
+    .filter((input) => input.dataset.zoneCourier === username)
+    .map((input) => getZoneById(input.value, zones))
+    .filter(Boolean);
+  const zoneIds = selectedZones.map(getZoneId);
+  const zoneName = selectedZones.map(getZoneName).join(", ");
+  await updateCourierZone(username, { zoneIds, zoneId: zoneIds[0] || "", zoneName }, message);
 }
 
 
 async function removeCourierZone(username) {
   const message = document.getElementById("zoneManagementMessage");
-  await updateCourierZone(username, { zoneId: "", zoneName: "" }, message);
+  await updateCourierZone(username, { zoneIds: [], zoneId: "", zoneName: "" }, message);
 }
 
 
 async function updateCourierZone(username, zoneBody, message) {
   try {
     await saveCourierZoneRequest(username, zoneBody);
-    showToast(zoneBody.zoneId ? "კურიერს ზონა მიენიჭა." : "კურიერს ზონა მოეხსნა.");
+    const zoneCount = Array.isArray(zoneBody.zoneIds) ? zoneBody.zoneIds.length : (zoneBody.zoneId ? 1 : 0);
+    showToast(zoneCount ? "კურიერს ზონები მიენიჭა." : "კურიერს ზონები მოეხსნა.");
     await refreshPins();
     await openZoneManagement();
   } catch (error) {

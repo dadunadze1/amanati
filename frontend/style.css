@@ -1079,6 +1079,38 @@ body.auth-loading .app-shell {
   gap: 8px;
 }
 
+.zone-checkbox-grid {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.zone-checkbox-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.zone-checkbox-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.zone-checkbox-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-map-panel {
   display: grid;
   gap: 12px;
@@ -5912,7 +5944,8 @@ button,
     left: 10px;
     z-index: 660;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 92px));
+    justify-content: center;
     gap: 7px;
     min-height: 64px;
     padding: 8px;

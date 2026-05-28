@@ -371,6 +371,7 @@ function runStaticRetentionCleanup(store, cutoffDate) {
 }
 
 function publicStaticUser(user) {
+  const zoneIds = getStaticUserZoneIds(user);
   return {
     id: user.id || user.username,
     username: user.username,
@@ -382,12 +383,29 @@ function publicStaticUser(user) {
     lastName: user.lastName || "",
     phone: user.phone || "",
     bankDetails: user.bankDetails || "",
-    zoneId: user.zoneId || "",
-    zoneName: user.zoneName || "",
+    zoneIds,
+    zoneId: zoneIds[0] || "",
+    zoneName: getStaticZoneNames(zoneIds) || user.zoneName || "",
     createdAt: user.createdAt || "",
     requestedAt: user.requestedAt || "",
     approvedAt: user.approvedAt || "",
   };
+}
+
+function getStaticUserZoneIds(user) {
+  const values = [
+    ...(Array.isArray(user?.zoneIds) ? user.zoneIds : []),
+    user?.zoneId,
+  ];
+  const allowed = new Set((Array.isArray(DEFAULT_ZONES) ? DEFAULT_ZONES : []).map((zone) => String(zone.id || "").trim()));
+  return [...new Set(values.map((zoneId) => String(zoneId || "").trim()).filter((zoneId) => zoneId && (!allowed.size || allowed.has(zoneId))))];
+}
+
+function getStaticZoneNames(zoneIds) {
+  return (Array.isArray(zoneIds) ? zoneIds : [])
+    .map((zoneId) => (DEFAULT_ZONES || []).find((zone) => String(zone.id || "") === zoneId)?.name || "")
+    .filter(Boolean)
+    .join(", ");
 }
 
 function publicStaticParcel(store, parcel) {
@@ -781,6 +799,7 @@ async function staticApi(path, options = {}) {
       lastName: body.lastName || "",
       phone: body.phone || "",
       bankDetails: body.bankDetails || "",
+      zoneIds: Array.isArray(body.zoneIds) ? body.zoneIds : (body.zoneId ? [body.zoneId] : []),
       zoneId: body.zoneId || "",
       zoneName: body.zoneName || "",
       requestedAt: now,
@@ -869,7 +888,12 @@ async function staticApi(path, options = {}) {
   if (zoneMatch && method === "PUT") {
     const username = decodeURIComponent(zoneMatch[1]);
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
-    if (user) Object.assign(user, { zoneId: body.zoneId || "", zoneName: body.zoneName || "" });
+    const zoneIds = Array.isArray(body.zoneIds) ? body.zoneIds.filter(Boolean) : (body.zoneId ? [body.zoneId] : []);
+    if (user) Object.assign(user, {
+      zoneIds,
+      zoneId: zoneIds[0] || "",
+      zoneName: body.zoneName || getStaticZoneNames(zoneIds) || "",
+    });
     saveStaticBootstrap();
     return { user: user ? publicStaticUser(user) : null };
   }
