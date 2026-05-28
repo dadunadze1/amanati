@@ -18,6 +18,7 @@ const CONFIG = {
   cashAdjustmentsStorageKey: "deliveryCashAdjustments:v1",
   partnerCashAdjustmentsStorageKey: "deliveryPartnerCashAdjustments:v1",
   payAdjustmentsStorageKey: "deliveryPayAdjustments:v1",
+  dailyBalanceLedgerStorageKey: "deliveryDailyBalanceLedger:v1",
 };
 
 const firebaseConfig = {

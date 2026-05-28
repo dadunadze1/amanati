@@ -443,6 +443,123 @@ function calculatePartnerCashSummaryForRange(partner, records = [], startDate, e
 }
 
 
+function normalizeDailyBalanceEntry(entry = {}) {
+  const now = new Date().toISOString();
+  const type = ["courier", "partner", "snapshot"].includes(entry.type) ? entry.type : "snapshot";
+  return {
+    ...entry,
+    id: entry.id || createFinanceEntryId("daily-balance"),
+    type,
+    status: entry.status || (type === "snapshot" ? "saved" : "paid"),
+    dateKey: normalizeDateKey(entry.dateKey || entry.rangeStart) || toDateKey(new Date()),
+    rangeStart: normalizeDateKey(entry.rangeStart || entry.dateKey) || toDateKey(new Date()),
+    rangeEnd: normalizeDateKey(entry.rangeEnd || entry.dateKey || entry.rangeStart) || normalizeDateKey(entry.rangeStart || entry.dateKey) || toDateKey(new Date()),
+    username: entry.username || "",
+    partnerUsername: entry.partnerUsername || "",
+    partnerId: entry.partnerId || "",
+    label: entry.label || "",
+    amount: safeMoney(entry.amount),
+    delivered: Number(entry.delivered || 0),
+    payload: entry.payload && typeof entry.payload === "object" ? entry.payload : {},
+    note: entry.note || "",
+    createdAt: entry.createdAt || now,
+    updatedAt: entry.updatedAt || entry.createdAt || now,
+  };
+}
+
+
+function readDailyBalanceLedger() {
+  try {
+    const parsed = typeof loadData === "function"
+      ? loadData(CONFIG.dailyBalanceLedgerStorageKey) || []
+      : JSON.parse(localStorage.getItem(CONFIG.dailyBalanceLedgerStorageKey) || "[]");
+    return (Array.isArray(parsed) ? parsed : []).map(normalizeDailyBalanceEntry);
+  } catch {
+    return [];
+  }
+}
+
+
+function writeDailyBalanceLedger(entries) {
+  const normalized = (Array.isArray(entries) ? entries : []).map(normalizeDailyBalanceEntry);
+  if (typeof saveData === "function") saveData(CONFIG.dailyBalanceLedgerStorageKey, normalized);
+  else localStorage.setItem(CONFIG.dailyBalanceLedgerStorageKey, JSON.stringify(normalized));
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    saveStaticFinanceData({ ...getStaticFinanceData(), dailyBalanceLedger: normalized });
+  }
+  return normalized;
+}
+
+
+async function loadDailyBalanceLedger() {
+  try {
+    const payload = await api("/api/daily-balance-ledger");
+    const entries = (payload.entries || []).map(normalizeDailyBalanceEntry);
+    writeDailyBalanceLedger(entries);
+    return entries;
+  } catch {
+    return readDailyBalanceLedger();
+  }
+}
+
+
+async function saveDailyBalanceEntry(entry) {
+  const normalized = normalizeDailyBalanceEntry(entry);
+  try {
+    const payload = await api("/api/daily-balance-ledger", { method: "POST", body: normalized });
+    const saved = normalizeDailyBalanceEntry(payload.entry || normalized);
+    const entries = readDailyBalanceLedger().filter((item) => item.id !== saved.id);
+    writeDailyBalanceLedger([...entries, saved]);
+    return saved;
+  } catch (error) {
+    const entries = readDailyBalanceLedger().filter((item) => item.id !== normalized.id);
+    writeDailyBalanceLedger([...entries, normalized]);
+    return normalized;
+  }
+}
+
+
+async function deleteDailyBalanceEntry(id) {
+  if (!id) return;
+  try {
+    await api(`/api/daily-balance-ledger/${encodeURIComponent(id)}`, { method: "DELETE" });
+  } catch {
+    // Local fallback below keeps static/offline mode usable.
+  }
+  writeDailyBalanceLedger(readDailyBalanceLedger().filter((entry) => entry.id !== id));
+}
+
+
+function createDailyBalanceEntryId(type, range, identity) {
+  return ["daily-balance", type, range.start, range.end, normalizeUsername(identity)].join("|");
+}
+
+
+function findDailyBalanceEntry(entries, type, range, identity) {
+  const id = createDailyBalanceEntryId(type, range, identity);
+  return (Array.isArray(entries) ? entries : []).find((entry) => entry.id === id && entry.status === "paid");
+}
+
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+
+function downloadFinanceCsv(filename, rows) {
+  const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
+
 function isFinanceMobileViewport() {
   return typeof window !== "undefined" && window.matchMedia?.("(max-width: 640px)")?.matches;
 }
@@ -733,30 +850,33 @@ async function openFinanceDashboard() {
 }
 
 
-async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(new Date())) {
+async function openAdminDailyBalance(startDate = state.financeRangeStart || state.financeDate || toDateKey(new Date()), endDate = state.financeRangeEnd || startDate) {
   if (!state.isAdmin) return;
-  const selectedDate = normalizeDateKey(dateKey) || toDateKey(new Date());
-  state.financeDate = selectedDate;
-  setFinanceCourierRange(selectedDate, selectedDate);
+  const range = normalizeDateRange(startDate, endDate);
+  state.financeDate = range.start;
+  setFinanceCourierRange(range.start, range.end);
 
-  const [users, records, partners, partnerRecords] = await Promise.all([
+  const [users, records, partners, partnerRecords, ledger] = await Promise.all([
     getUsers().catch(() => []),
     getAllFinanceRecords(),
     typeof getPartners === "function" ? getPartners().catch(() => []) : [],
     typeof getAllPartnerCashRecords === "function" ? getAllPartnerCashRecords().catch(() => []) : getAllFinanceRecords(),
-    typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
+    (async () => {
+      if (typeof loadPartnerCashAdjustments === "function") await loadPartnerCashAdjustments().catch(() => []);
+      return loadDailyBalanceLedger();
+    })(),
   ]);
 
   const couriers = users.filter((user) => user.role === "courier");
   const courierSummaries = couriers.map((courier) => ({
     courier,
-    summary: calculateFinanceSummary({ records }, { username: courier.username, startDate: selectedDate, endDate: selectedDate }),
+    summary: calculateFinanceSummary({ records }, { username: courier.username, startDate: range.start, endDate: range.end }),
   }));
   const partnerSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
     partner,
-    summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, selectedDate, selectedDate),
+    summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end),
   }));
-  const daySummary = calculateFinanceSummary({ records }, { startDate: selectedDate, endDate: selectedDate });
+  const daySummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
   const deliveredOrders = daySummary.deliveredRecords || [];
   const totalCourierPay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
   const courierBasePay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.basePay, 0));
@@ -765,18 +885,34 @@ async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(ne
   const partnerBaseCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.baseCash, 0));
   const partnerAdjustments = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
   const adjustedProfit = safeMoney(daySummary.deliveryFees - totalCourierPay);
+  const paidCourierTotal = safeMoney(courierSummaries.reduce((sum, item) => (
+    sum + (findDailyBalanceEntry(ledger, "courier", range, item.courier.username)?.amount || 0)
+  ), 0));
+  const paidPartnerTotal = safeMoney(partnerSummaries.reduce((sum, item) => (
+    sum + (findDailyBalanceEntry(ledger, "partner", range, item.partner.username || item.partner.id)?.amount || 0)
+  ), 0));
+  const snapshots = ledger
+    .filter((entry) => entry.type === "snapshot" && entry.rangeStart === range.start && entry.rangeEnd === range.end)
+    .sort((a, b) => Date.parse(b.createdAt || "") - Date.parse(a.createdAt || ""));
+  const snapshotCount = snapshots.length;
 
   const filters = `
     <div class="finance-toolbar finance-range-toolbar">
       <label>
-        <span>დღე</span>
-        <input class="finance-input" id="dailyBalanceDate" type="date" value="${escapeAttr(selectedDate)}" aria-label="დღიური ბალანსის თარიღი">
+        <span>საწყისი</span>
+        <input class="finance-input" id="dailyBalanceStartDate" type="date" value="${escapeAttr(range.start)}" aria-label="საწყისი თარიღი">
+      </label>
+      <label>
+        <span>დასასრული</span>
+        <input class="finance-input" id="dailyBalanceEndDate" type="date" value="${escapeAttr(range.end)}" aria-label="დასრულების თარიღი">
       </label>
       <button class="mini-button finance-button-primary" type="button" data-daily-balance-apply>ნახვა</button>
-      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(toDateKey(new Date()))}">დღეს</button>
-      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(addDaysToDateKey(toDateKey(new Date()), -1))}">გუშინ</button>
-      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(addDaysToDateKey(selectedDate, -1))}">წინა დღე</button>
-      <button class="mini-button" type="button" data-daily-balance-date="${escapeAttr(addDaysToDateKey(selectedDate, 1))}">შემდეგი დღე</button>
+      <button class="mini-button" type="button" data-daily-balance-range="${escapeAttr(toDateKey(new Date()))}|${escapeAttr(toDateKey(new Date()))}">დღეს</button>
+      <button class="mini-button" type="button" data-daily-balance-range="${escapeAttr(addDaysToDateKey(toDateKey(new Date()), -1))}|${escapeAttr(addDaysToDateKey(toDateKey(new Date()), -1))}">გუშინ</button>
+      <button class="mini-button" type="button" data-daily-balance-range="${escapeAttr(addDaysToDateKey(toDateKey(new Date()), -6))}|${escapeAttr(toDateKey(new Date()))}">7 დღე</button>
+      <button class="mini-button" type="button" data-daily-balance-range="${escapeAttr(toDateKey(new Date()).slice(0, 8) + "01")}|${escapeAttr(toDateKey(new Date()))}">თვე</button>
+      <button class="mini-button" type="button" data-daily-balance-export>CSV</button>
+      <button class="mini-button" type="button" data-daily-balance-snapshot>Snapshot</button>
     </div>
   `;
 
@@ -814,8 +950,8 @@ async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(ne
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--compact",
           icon: "◷",
-          label: "თარიღი",
-          value: selectedDate,
+          label: "პერიოდი",
+          value: formatDateRangeLabel(range.start, range.end),
         })}
   `;
 
@@ -826,6 +962,7 @@ async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(ne
       <small>ჩაბარებული: ${escapeHtml(String(courierSummary.delivered))}</small>
       <strong>${escapeHtml(formatMoney(courierSummary.finalPay))}</strong>
       <small>საბაზისო: ${escapeHtml(formatMoney(courierSummary.basePay))} · ${escapeHtml(getAdjustmentDirectionLabel(courierSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(courierSummary.adjustmentTotal))}</small>
+      ${renderDailyBalancePaidControl("courier", range, courier.username, userDisplayName(courier), courierSummary.finalPay, courierSummary.delivered, ledger)}
     </article>
   `).join("");
 
@@ -837,6 +974,7 @@ async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(ne
       <strong>${escapeHtml(formatMoney(partnerSummary.cashDue))}</strong>
       <small>ქეში: ${escapeHtml(formatMoney(partnerSummary.baseCash))} · ${escapeHtml(getAdjustmentDirectionLabel(partnerSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(partnerSummary.adjustmentTotal))}</small>
       <small>მოლოდინში: ${escapeHtml(formatMoney(partnerSummary.pendingCash))}</small>
+      ${renderDailyBalancePaidControl("partner", range, partner.username || partner.id, partnerName(partner), partnerSummary.cashDue, partnerSummary.deliveredOrders.length, ledger, { partnerId: partner.id || "", partnerUsername: partner.username || "" })}
     </article>
   `).join("");
 
@@ -850,19 +988,28 @@ async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(ne
       <small>ქეში: ${escapeHtml(formatMoney(getPaymentAmount(order)))} · კურიერი: ${escapeHtml(formatMoney(getCourierPay(order)))} · მიტანა: ${escapeHtml(formatMoney(getDeliveryTotal(order)))}</small>
     </article>
   `).join("");
+  const snapshotRows = snapshots.map((entry) => `
+    <article class="finance-card finance-mini-card finance-static-card">
+      <span class="finance-summary-icon" aria-hidden="true">▦</span>
+      <span>${escapeHtml(entry.label || "Snapshot")}</span>
+      <small>${escapeHtml(formatOptionalDateTime(entry.createdAt))}</small>
+      <strong>${escapeHtml(formatMoney(entry.amount))}</strong>
+      <small>ჩაბარებული: ${escapeHtml(String(entry.delivered || entry.payload?.delivered || 0))} · კურიერები: ${escapeHtml(formatMoney(entry.payload?.totalCourierPay || 0))} · ობიექტები: ${escapeHtml(formatMoney(entry.payload?.totalPartnerCash || 0))}</small>
+    </article>
+  `).join("");
 
   const content = `
     ${renderFinanceCollapsibleSection({
       title: "კურიერები",
       subtitle: `საბაზისო ${formatMoney(courierBasePay)}, კორექტირება ${formatAdjustmentDisplay(courierAdjustments)}`,
-      badge: formatMoney(totalCourierPay),
+      badge: `${formatMoney(paidCourierTotal)} / ${formatMoney(totalCourierPay)}`,
       className: "finance-collapsible--couriers",
       content: `<section class="finance-section finance-card-list finance-card-list--dashboard">${courierRows || "<div class=\"history-empty history-empty-card\">კურიერი ჯერ არ არის დამატებული</div>"}</section>`,
     })}
     ${renderFinanceCollapsibleSection({
       title: "ობიექტები / პარტნიორები",
       subtitle: `ქეში ${formatMoney(partnerBaseCash)}, კორექტირება ${formatAdjustmentDisplay(partnerAdjustments)}`,
-      badge: formatMoney(totalPartnerCash),
+      badge: `${formatMoney(paidPartnerTotal)} / ${formatMoney(totalPartnerCash)}`,
       className: "finance-collapsible--partners",
       content: `<section class="finance-section finance-card-list finance-card-list--dashboard">${partnerRows || "<div class=\"history-empty history-empty-card\">პარტნიორი ჯერ არ არის დამატებული</div>"}</section>`,
     })}
@@ -877,8 +1024,17 @@ async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(ne
           <div class="finance-explain-row"><strong>კურიერებზე გადასახდელი</strong><span>${escapeHtml(formatMoney(totalCourierPay))}</span></div>
           <div class="finance-explain-row"><strong>ჩემი მოგება</strong><span>${escapeHtml(formatMoney(adjustedProfit))}</span></div>
           <div class="finance-explain-row"><strong>საბაზისო მოგება</strong><span>${escapeHtml(formatMoney(daySummary.adminProfit))}</span></div>
+          <div class="finance-explain-row"><strong>Snapshot-ები</strong><span>${escapeHtml(String(snapshotCount))}</span></div>
         </section>
       `,
+    })}
+    ${renderFinanceCollapsibleSection({
+      title: "Snapshot არქივი",
+      subtitle: `${snapshotCount} შენახული snapshot`,
+      badge: String(snapshotCount),
+      className: "finance-collapsible--snapshots",
+      collapseOnMobile: true,
+      content: `<section class="finance-section finance-card-list finance-card-list--dashboard">${snapshotRows || "<div class=\"history-empty history-empty-card\">ამ პერიოდზე snapshot ჯერ არ არის შენახული</div>"}</section>`,
     })}
     ${renderFinanceCollapsibleSection({
       title: "დღის ჩაბარებული შეკვეთები",
@@ -892,19 +1048,175 @@ async function openAdminDailyBalance(dateKey = state.financeDate || toDateKey(ne
 
   const body = renderFinanceModalLayout({ filters, summary, content });
   showDialog("დღიური ბალანსი", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
-  bindAdminDailyBalanceEvents();
+  bindAdminDailyBalanceEvents({
+    range,
+    courierSummaries,
+    partnerSummaries,
+    deliveredOrders,
+    totals: {
+      totalCourierPay,
+      totalPartnerCash,
+      deliveryFees: daySummary.deliveryFees,
+      adjustedProfit,
+      delivered: daySummary.delivered,
+    },
+  });
 }
 
 
-function bindAdminDailyBalanceEvents() {
+function renderDailyBalancePaidControl(type, range, identity, label, amount, delivered, ledger, extra = {}) {
+  const paid = findDailyBalanceEntry(ledger, type, range, identity);
+  if (paid) {
+    return `
+      <small class="finance-tag is-positive">გადახდილია: ${escapeHtml(formatMoney(paid.amount))} · ${escapeHtml(formatOptionalDateTime(paid.updatedAt || paid.createdAt))}</small>
+      <button class="mini-button" type="button" data-daily-balance-unpay data-entry-id="${escapeAttr(paid.id)}">მონიშვნის მოხსნა</button>
+    `;
+  }
+  if (safeMoney(amount) <= 0) return `<small class="finance-tag">გადასახდელი არ არის</small>`;
+  return `
+    <button class="mini-button finance-button-primary" type="button"
+      data-daily-balance-pay
+      data-type="${escapeAttr(type)}"
+      data-identity="${escapeAttr(identity)}"
+      data-label="${escapeAttr(label)}"
+      data-amount="${escapeAttr(safeMoney(amount))}"
+      data-delivered="${escapeAttr(delivered)}"
+      data-partner-id="${escapeAttr(extra.partnerId || "")}"
+      data-partner-username="${escapeAttr(extra.partnerUsername || "")}">
+      გადახდილად მონიშვნა
+    </button>
+  `;
+}
+
+
+function bindAdminDailyBalanceEvents(report) {
   document.querySelector("[data-daily-balance-apply]")?.addEventListener("click", async () => {
-    await openAdminDailyBalance(document.getElementById("dailyBalanceDate")?.value);
+    await openAdminDailyBalance(
+      document.getElementById("dailyBalanceStartDate")?.value,
+      document.getElementById("dailyBalanceEndDate")?.value,
+    );
   });
-  document.querySelectorAll("[data-daily-balance-date]").forEach((button) => {
+  document.querySelectorAll("[data-daily-balance-range]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await openAdminDailyBalance(button.dataset.dailyBalanceDate);
+      const [start, end] = String(button.dataset.dailyBalanceRange || "").split("|");
+      await openAdminDailyBalance(start, end);
     });
   });
+  document.querySelector("[data-daily-balance-export]")?.addEventListener("click", () => {
+    exportAdminDailyBalanceCsv(report);
+  });
+  document.querySelector("[data-daily-balance-snapshot]")?.addEventListener("click", async () => {
+    await saveAdminDailyBalanceSnapshot(report);
+  });
+  document.querySelectorAll("[data-daily-balance-pay]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await markDailyBalancePaid(report.range, button.dataset);
+    });
+  });
+  document.querySelectorAll("[data-daily-balance-unpay]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await deleteDailyBalanceEntry(button.dataset.entryId);
+      showToast("გადახდის მონიშვნა მოიხსნა");
+      await openAdminDailyBalance(report.range.start, report.range.end);
+    });
+  });
+}
+
+
+async function markDailyBalancePaid(range, dataset) {
+  const type = dataset.type === "partner" ? "partner" : "courier";
+  const identity = dataset.identity || "";
+  const amount = safeMoney(dataset.amount);
+  const label = dataset.label || identity;
+  if (!identity || amount <= 0) return;
+  await saveDailyBalanceEntry({
+    id: createDailyBalanceEntryId(type, range, identity),
+    type,
+    status: "paid",
+    dateKey: range.start,
+    rangeStart: range.start,
+    rangeEnd: range.end,
+    username: type === "courier" ? identity : "",
+    partnerUsername: dataset.partnerUsername || (type === "partner" ? identity : ""),
+    partnerId: dataset.partnerId || "",
+    label,
+    amount,
+    delivered: Number(dataset.delivered || 0),
+    note: "daily balance paid",
+  });
+  showToast(`${label}: მონიშნულია გადახდილად`);
+  await openAdminDailyBalance(range.start, range.end);
+}
+
+
+async function saveAdminDailyBalanceSnapshot(report) {
+  const { range, totals } = report;
+  await saveDailyBalanceEntry({
+    id: createFinanceEntryId("daily-balance-snapshot"),
+    type: "snapshot",
+    status: "saved",
+    dateKey: range.start,
+    rangeStart: range.start,
+    rangeEnd: range.end,
+    label: `Snapshot ${formatDateRangeLabel(range.start, range.end)}`,
+    amount: totals.adjustedProfit,
+    delivered: totals.delivered,
+    payload: totals,
+    note: "daily balance snapshot",
+  });
+  showToast("დღიური ბალანსის snapshot შენახულია");
+  await openAdminDailyBalance(range.start, range.end);
+}
+
+
+function exportAdminDailyBalanceCsv(report) {
+  const { range, courierSummaries, partnerSummaries, deliveredOrders, totals } = report;
+  const rows = [
+    ["section", "name", "delivered", "amount", "base", "adjustment", "cash", "courier_pay", "delivery", "profit", "period"],
+    ["summary", "კურიერებზე გადასახდელი", totals.delivered, totals.totalCourierPay, "", "", "", "", totals.deliveryFees, totals.adjustedProfit, formatDateRangeLabel(range.start, range.end)],
+    ["summary", "ობიექტების ქეში", "", totals.totalPartnerCash, "", "", totals.totalPartnerCash, "", "", "", formatDateRangeLabel(range.start, range.end)],
+    ...courierSummaries.map(({ courier, summary }) => [
+      "courier",
+      userDisplayName(courier),
+      summary.delivered,
+      summary.finalPay,
+      summary.basePay,
+      summary.adjustmentTotal,
+      "",
+      summary.finalPay,
+      "",
+      "",
+      formatDateRangeLabel(range.start, range.end),
+    ]),
+    ...partnerSummaries.map(({ partner, summary }) => [
+      "partner",
+      partnerName(partner),
+      summary.deliveredOrders.length,
+      summary.cashDue,
+      summary.baseCash,
+      summary.adjustmentTotal,
+      summary.cashDue,
+      "",
+      "",
+      "",
+      formatDateRangeLabel(range.start, range.end),
+    ]),
+    ...deliveredOrders.map((order) => [
+      "order",
+      order.fullName || "",
+      1,
+      getPaymentAmount(order),
+      "",
+      "",
+      getPaymentAmount(order),
+      getCourierPay(order),
+      getDeliveryTotal(order),
+      getAdminProfit(order),
+      getParcelStatsDateKey(order),
+    ]),
+  ];
+  downloadFinanceCsv(`daily-balance-${range.start}-${range.end}.csv`, rows);
+  showToast("CSV ექსპორტი მზადაა");
 }
 
 

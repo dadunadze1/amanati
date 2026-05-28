@@ -243,6 +243,16 @@ function setPartnerCashAdjustments(db, adjustments) {
   db.settings.partnerCashAdjustments = Array.isArray(adjustments) ? adjustments : [];
 }
 
+function getDailyBalanceLedger(db) {
+  const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+  return Array.isArray(settings.dailyBalanceLedger) ? settings.dailyBalanceLedger : [];
+}
+
+function setDailyBalanceLedger(db, entries) {
+  db.settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+  db.settings.dailyBalanceLedger = Array.isArray(entries) ? entries : [];
+}
+
 function partnerCashIdentity(user = {}) {
   return user.id || user.username || "";
 }
@@ -280,6 +290,30 @@ function partnerCashAdjustmentBelongsTo(adjustment, partner) {
     || (username && normalizeUsername(adjustment.partnerId) === normalizeUsername(username))
     || (username && normalizeUsername(adjustment.partnerUsername || adjustment.username) === normalizeUsername(username))
   );
+}
+
+function publicDailyBalanceEntry(entry) {
+  const type = ["courier", "partner", "snapshot"].includes(entry.type) ? entry.type : "snapshot";
+  const amount = Number(entry.amount ?? 0);
+  const now = new Date().toISOString();
+  return {
+    id: entry.id || "",
+    type,
+    status: entry.status === "paid" || entry.status === "saved" ? entry.status : type === "snapshot" ? "saved" : "paid",
+    dateKey: entry.dateKey || entry.rangeStart || "",
+    rangeStart: entry.rangeStart || entry.dateKey || "",
+    rangeEnd: entry.rangeEnd || entry.dateKey || entry.rangeStart || "",
+    username: entry.username || "",
+    partnerUsername: entry.partnerUsername || "",
+    partnerId: entry.partnerId || "",
+    label: entry.label || "",
+    amount: Number.isFinite(amount) ? amount : 0,
+    delivered: Number(entry.delivered || 0),
+    payload: entry.payload && typeof entry.payload === "object" ? entry.payload : {},
+    note: entry.note || "",
+    createdAt: entry.createdAt || now,
+    updatedAt: entry.updatedAt || entry.createdAt || now,
+  };
 }
 
 function findPartnerByIdOrUsername(db, value) {
@@ -960,6 +994,43 @@ async function handleApi(request, response, url) {
     setPartnerCashAdjustments(db, [...getPartnerCashAdjustments(db), adjustment]);
     await writeDb(db);
     sendJson(response, 201, { adjustment });
+    return;
+  }
+
+  if (method === "GET" && path === "/api/daily-balance-ledger") {
+    requireAdmin(request);
+    sendJson(response, 200, { entries: getDailyBalanceLedger(db).map(publicDailyBalanceEntry) });
+    return;
+  }
+
+  if (method === "POST" && path === "/api/daily-balance-ledger") {
+    requireAdmin(request);
+    const body = await readJsonBody(request);
+    const now = new Date().toISOString();
+    const entry = publicDailyBalanceEntry({
+      ...body,
+      id: body.id || randomBytes(12).toString("hex"),
+      createdAt: body.createdAt || now,
+      updatedAt: now,
+    });
+    const entries = getDailyBalanceLedger(db).map(publicDailyBalanceEntry);
+    const nextEntries = entries.filter((item) => item.id !== entry.id);
+    nextEntries.push(entry);
+    setDailyBalanceLedger(db, nextEntries);
+    await writeDb(db);
+    sendJson(response, 201, { entry });
+    return;
+  }
+
+  const dailyBalanceLedgerMatch = path.match(/^\/api\/daily-balance-ledger\/([^/]+)$/);
+  if (dailyBalanceLedgerMatch && method === "DELETE") {
+    requireAdmin(request);
+    const id = decodeURIComponent(dailyBalanceLedgerMatch[1]);
+    const before = getDailyBalanceLedger(db).map(publicDailyBalanceEntry);
+    const entries = before.filter((entry) => entry.id !== id);
+    setDailyBalanceLedger(db, entries);
+    await writeDb(db);
+    sendJson(response, 200, { ok: true, deleted: before.length - entries.length });
     return;
   }
 

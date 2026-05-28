@@ -214,6 +214,7 @@ function mergeStaticFinanceData(baseFinance, nextFinance) {
     cashAdjustments: mergeStaticRecordsByKey(base.cashAdjustments, next.cashAdjustments, getStaticAdjustmentKey),
     partnerCashAdjustments: mergeStaticRecordsByKey(base.partnerCashAdjustments, next.partnerCashAdjustments, getStaticAdjustmentKey),
     payAdjustments: mergeStaticRecordsByKey(base.payAdjustments, next.payAdjustments, getStaticAdjustmentKey),
+    dailyBalanceLedger: mergeStaticRecordsByKey(base.dailyBalanceLedger, next.dailyBalanceLedger, getStaticAdjustmentKey),
   };
 }
 
@@ -305,6 +306,9 @@ function hydrateStaticFinanceStorage(financeData = {}) {
   if (loadData(CONFIG.payAdjustmentsStorageKey) === null && Array.isArray(financeData.payAdjustments)) {
     saveData(CONFIG.payAdjustmentsStorageKey, financeData.payAdjustments);
   }
+  if (loadData(CONFIG.dailyBalanceLedgerStorageKey) === null && Array.isArray(financeData.dailyBalanceLedger)) {
+    saveData(CONFIG.dailyBalanceLedgerStorageKey, financeData.dailyBalanceLedger);
+  }
 }
 
 function getStaticFinanceData() {
@@ -345,6 +349,7 @@ function runStaticRetentionCleanup(store, cutoffDate) {
   const beforeCashAdjustments = Array.isArray(financeData.cashAdjustments) ? financeData.cashAdjustments.length : 0;
   const beforePartnerCashAdjustments = Array.isArray(financeData.partnerCashAdjustments) ? financeData.partnerCashAdjustments.length : 0;
   const beforePayAdjustments = Array.isArray(financeData.payAdjustments) ? financeData.payAdjustments.length : 0;
+  const beforeDailyBalanceLedger = Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger.length : 0;
 
   store.history = store.history.filter((parcel) => !isStaticRetentionParcelExpired(parcel, cutoffDate));
   store.parcels = store.parcels.filter((parcel) => !parcel.archivedAt || !isStaticRetentionParcelExpired(parcel, cutoffDate));
@@ -352,21 +357,25 @@ function runStaticRetentionCleanup(store, cutoffDate) {
   const cashAdjustments = filterStaticRetentionAdjustments(financeData.cashAdjustments, cutoffDate);
   const partnerCashAdjustments = filterStaticRetentionAdjustments(financeData.partnerCashAdjustments, cutoffDate);
   const payAdjustments = filterStaticRetentionAdjustments(financeData.payAdjustments, cutoffDate);
+  const dailyBalanceLedger = filterStaticRetentionAdjustments(financeData.dailyBalanceLedger, cutoffDate);
   store.financeData = {
     ...financeData,
     cashAdjustments,
     partnerCashAdjustments,
     payAdjustments,
+    dailyBalanceLedger,
   };
   saveData(CONFIG.cashAdjustmentsStorageKey, normalizeFinanceAdjustmentList(cashAdjustments, "cash"));
   saveData(CONFIG.partnerCashAdjustmentsStorageKey, normalizeFinanceAdjustmentList(partnerCashAdjustments, "partnerCash"));
   saveData(CONFIG.payAdjustmentsStorageKey, normalizeFinanceAdjustmentList(payAdjustments, "pay"));
+  saveData(CONFIG.dailyBalanceLedgerStorageKey, dailyBalanceLedger);
 
   return {
     deletedParcels: (beforeHistory - store.history.length) + (beforeParcels - store.parcels.length),
     deletedCashAdjustments: beforeCashAdjustments - cashAdjustments.length,
     deletedPartnerCashAdjustments: beforePartnerCashAdjustments - partnerCashAdjustments.length,
     deletedPayAdjustments: beforePayAdjustments - payAdjustments.length,
+    deletedDailyBalanceLedger: beforeDailyBalanceLedger - dailyBalanceLedger.length,
   };
 }
 
@@ -715,6 +724,46 @@ async function staticApi(path, options = {}) {
     saveData(CONFIG.partnerCashAdjustmentsStorageKey, store.financeData.partnerCashAdjustments);
     saveStaticBootstrap();
     return { adjustment };
+  }
+
+  if (method === "GET" && apiPath === "/api/daily-balance-ledger") {
+    const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
+    return { entries: Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger : [] };
+  }
+
+  if (method === "POST" && apiPath === "/api/daily-balance-ledger") {
+    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია დღიური ბალანსის შენახვა.");
+    const now = new Date().toISOString();
+    const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
+    const entries = Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger : [];
+    const entry = {
+      ...body,
+      id: body.id || `daily-balance-${Date.now()}`,
+      createdAt: body.createdAt || now,
+      updatedAt: now,
+    };
+    store.financeData = {
+      ...financeData,
+      dailyBalanceLedger: [...entries.filter((item) => item.id !== entry.id), entry],
+    };
+    saveData(CONFIG.dailyBalanceLedgerStorageKey, store.financeData.dailyBalanceLedger);
+    saveStaticBootstrap();
+    return { entry };
+  }
+
+  const dailyBalanceMatch = apiPath.match(/^\/api\/daily-balance-ledger\/([^/]+)$/);
+  if (dailyBalanceMatch && method === "DELETE") {
+    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია დღიური ბალანსის შეცვლა.");
+    const id = decodeURIComponent(dailyBalanceMatch[1]);
+    const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
+    const entries = Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger : [];
+    store.financeData = {
+      ...financeData,
+      dailyBalanceLedger: entries.filter((entry) => entry.id !== id),
+    };
+    saveData(CONFIG.dailyBalanceLedgerStorageKey, store.financeData.dailyBalanceLedger);
+    saveStaticBootstrap();
+    return { ok: true };
   }
 
   if (method === "GET" && apiPath === "/api/couriers") {
