@@ -342,7 +342,7 @@ function filterStaticRetentionAdjustments(adjustments, cutoffDate) {
   });
 }
 
-function runStaticRetentionCleanup(store, cutoffDate) {
+function runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate = cutoffDate) {
   const beforeHistory = store.history.length;
   const beforeParcels = store.parcels.length;
   const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
@@ -351,11 +351,14 @@ function runStaticRetentionCleanup(store, cutoffDate) {
   const beforePayAdjustments = Array.isArray(financeData.payAdjustments) ? financeData.payAdjustments.length : 0;
   const beforeDailyBalanceLedger = Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger.length : 0;
 
-  store.history = store.history.filter((parcel) => !isStaticRetentionParcelExpired(parcel, cutoffDate));
-  store.parcels = store.parcels.filter((parcel) => !parcel.archivedAt || !isStaticRetentionParcelExpired(parcel, cutoffDate));
+  store.history = store.history.filter((parcel) => !isStaticRetentionParcelExpired(parcel, isStaticPartnerParcel(parcel) ? partnerOrderCutoffDate : cutoffDate));
+  store.parcels = store.parcels.filter((parcel) => {
+    if (!parcel.archivedAt) return true;
+    return !isStaticRetentionParcelExpired(parcel, isStaticPartnerParcel(parcel) ? partnerOrderCutoffDate : cutoffDate);
+  });
 
   const cashAdjustments = filterStaticRetentionAdjustments(financeData.cashAdjustments, cutoffDate);
-  const partnerCashAdjustments = filterStaticRetentionAdjustments(financeData.partnerCashAdjustments, cutoffDate);
+  const partnerCashAdjustments = filterStaticRetentionAdjustments(financeData.partnerCashAdjustments, partnerOrderCutoffDate);
   const payAdjustments = filterStaticRetentionAdjustments(financeData.payAdjustments, cutoffDate);
   const dailyBalanceLedger = filterStaticRetentionAdjustments(financeData.dailyBalanceLedger, cutoffDate);
   store.financeData = {
@@ -1116,18 +1119,23 @@ async function staticApi(path, options = {}) {
   if (method === "POST" && apiPath === "/api/maintenance/retention") {
     if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია ძველი მონაცემების გასუფთავება.");
     const cutoffDate = normalizeDateKey(body.cutoffDate);
+    const partnerOrderCutoffDate = normalizeDateKey(body.partnerOrderCutoffDate) || cutoffDate;
     if (!cutoffDate) throw new Error("გასუფთავების თარიღი არასწორია.");
-    const result = runStaticRetentionCleanup(store, cutoffDate);
+    const result = runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate);
     const now = new Date().toISOString();
     store.settings.lastRetentionCleanupDate = toDateKey(new Date());
     store.settings.lastRetentionCleanupAt = now;
     store.settings.retentionCutoffDate = cutoffDate;
     store.settings.retentionMonths = Number(body.retentionMonths || CONFIG.dataRetentionMonths || 8);
+    store.settings.partnerOrderRetentionCutoffDate = partnerOrderCutoffDate;
+    store.settings.partnerOrderRetentionMonths = Number(body.partnerOrderRetentionMonths || CONFIG.partnerOrderRetentionMonths || 1);
     saveStaticBootstrap();
     return {
       ...result,
       cutoffDate,
       retentionMonths: store.settings.retentionMonths,
+      partnerOrderCutoffDate,
+      partnerOrderRetentionMonths: store.settings.partnerOrderRetentionMonths,
     };
   }
 

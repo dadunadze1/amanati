@@ -118,14 +118,15 @@ function getPartnerCashAdjustments(partner) {
 
 function calculatePartnerCashSummary(partner, records = []) {
   const orders = (Array.isArray(records) ? records : []).filter((order) => orderBelongsToPartner(order, partner));
-  const cashOrders = orders.filter((order) => getPaymentAmount(order) > 0);
+  const cashOrders = orders.filter((order) => order.status === "delivered" && getPaymentAmount(order) > 0);
   const deliveredOrders = orders.filter((order) => order.status === "delivered");
   const pendingOrders = orders.filter((order) => order.status !== "delivered" && order.status !== "failed");
+  const pendingCashOrders = pendingOrders.filter((order) => getPaymentAmount(order) > 0);
   const totalCash = safeMoney(cashOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const baseCash = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
-  const pendingCash = safeMoney(pendingOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
+  const pendingCash = safeMoney(pendingCashOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const adjustmentTotal = safeMoney(getPartnerCashAdjustments(partner).reduce((sum, adjustment) => sum + getAdjustmentSignedAmount(adjustment), 0));
-  const correctedTotalCash = Math.max(0, safeMoney(totalCash + adjustmentTotal));
+  const correctedTotalCash = Math.max(0, safeMoney(baseCash + adjustmentTotal));
   return {
     orders,
     deliveredOrders,
@@ -142,11 +143,53 @@ function calculatePartnerCashSummary(partner, records = []) {
 
 
 async function getAllPartnerCashRecords() {
+  return getPartnerOrderRecords();
+}
+
+
+function getPartnerOrderRetentionCutoffDateKey(referenceDate = new Date()) {
+  const cutoff = new Date(referenceDate);
+  cutoff.setHours(12, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - Number(CONFIG.partnerOrderRetentionMonths || 1));
+  return toDateKey(cutoff);
+}
+
+
+function getPartnerOrderDisplayDateKey(order) {
+  return normalizeDateKey(order?.archivedAt || order?.completedAt || order?.deliveredAt || order?.failedAt || order?.updatedAt || order?.createdAt);
+}
+
+
+function isPartnerOrderWithinRetention(order) {
+  const dateKey = getPartnerOrderDisplayDateKey(order);
+  const cutoffDate = getPartnerOrderRetentionCutoffDateKey();
+  return !dateKey || !cutoffDate || dateKey >= cutoffDate;
+}
+
+
+function mergePartnerOrderRecords(...recordSets) {
+  const byId = new Map();
+  recordSets.flat().filter(Boolean).forEach((order) => {
+    const key = order.id || `${order.partnerId || ""}:${order.createdAt || ""}:${order.fullName || ""}:${order.phone || ""}`;
+    const current = byId.get(key);
+    if (!current || String(order.updatedAt || order.archivedAt || order.createdAt || "") > String(current.updatedAt || current.archivedAt || current.createdAt || "")) {
+      byId.set(key, order);
+    }
+  });
+  return [...byId.values()]
+    .filter((order) => order.partnerId || order.partnerUsername)
+    .filter(isPartnerOrderWithinRetention)
+    .sort((a, b) => String(getPartnerOrderDisplayDateKey(b) || "").localeCompare(String(getPartnerOrderDisplayDateKey(a) || "")));
+}
+
+
+async function getPartnerOrderRecords(partner = null) {
   const [pins, history] = await Promise.all([
     getPins(""),
     getHistory(""),
   ]);
-  return [...pins, ...history];
+  const orders = mergePartnerOrderRecords(pins, history);
+  return partner ? orders.filter((order) => orderBelongsToPartner(order, partner)) : orders;
 }
 
 
@@ -159,14 +202,14 @@ async function renderPartnerDashboard(pins = state.activePins) {
     return;
   }
 
-  const orders = Array.isArray(pins) ? pins : await getPins("");
   await loadPartnerCashAdjustments();
   const partner = state.currentUserProfile || { username: state.currentUser };
+  const orders = await getPartnerOrderRecords(partner);
   const cash = calculatePartnerCashSummary(partner, orders);
   els.appShell?.classList.add("is-partner-dashboard");
   els.partnerDashboard.hidden = false;
 
-  const activeOrders = orders.filter((order) => order.status !== "delivered" && order.status !== "failed");
+  const activeOrders = orders.filter((order) => order.status !== "delivered" && order.status !== "failed" && !order.archivedAt);
   const deliveredOrders = orders.filter((order) => order.status === "delivered");
   const failedOrders = orders.filter((order) => order.status === "failed");
   const recentOrders = [...orders]
@@ -186,7 +229,7 @@ async function renderPartnerDashboard(pins = state.activePins) {
       ${renderPartnerStat("აქტიური შეკვეთები", activeOrders.length)}
       ${renderPartnerStat("ჩაბარებული", deliveredOrders.length)}
       ${renderPartnerStat("ვერ ჩაბარდა", failedOrders.length)}
-      ${renderPartnerStat("სულ ქეში", formatMoney(cash.correctedTotalCash))}
+      ${renderPartnerStat("სულ ქეში", formatMoney(cash.cashDue))}
     </div>
     <section class="partner-panel">
       <div class="partner-panel-head">
@@ -206,6 +249,23 @@ function renderPartnerStat(label, value) {
       <strong>${escapeHtml(value)}</strong>
     </article>
   `;
+}
+
+
+function formatPartnerOrderCash(order, options = {}) {
+  if (options.showPendingCash || order?.status === "delivered") return formatMoney(getPaymentAmount(order));
+  return "-";
+}
+
+
+function canAssignPartnerOrder(order) {
+  return Boolean(order && !order.archivedAt && order.status !== "delivered" && order.status !== "failed");
+}
+
+
+function renderPartnerOrderActionCell(order) {
+  if (!canAssignPartnerOrder(order)) return "<td></td>";
+  return `<td><button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "პინის დასმა"}</button></td>`;
 }
 
 
@@ -240,9 +300,9 @@ function renderPartnerOrderTable(orders, options = {}) {
               <td>${escapeHtml(parcelCourierDisplayName(order))}</td>
               <td><span class="history-status status-${escapeAttr(order.status || "pending")}">${escapeHtml(getPartnerOrderStatusLabel(order))}</span></td>
               ${includePartner ? `<td><span class="partner-tag location-${escapeAttr(order.locationAccuracy || "missing")}">${escapeHtml(getOrderLocationLabel(order))}</span></td>` : ""}
-              <td>${escapeHtml(formatMoney(getPaymentAmount(order)))}</td>
+              <td>${escapeHtml(formatPartnerOrderCash(order, options))}</td>
               <td>${escapeHtml(formatOptionalDateTime(order.createdAt))}</td>
-              ${includeActions ? `<td><button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "პინის დასმა"}</button></td>` : ""}
+              ${includeActions ? renderPartnerOrderActionCell(order) : ""}
             </tr>
           `).join("")}
         </tbody>
@@ -265,7 +325,8 @@ function getOrderLocationLabel(order) {
 
 
 async function openPartnerOrdersDialog() {
-  const orders = await getPins("");
+  const partner = state.currentUserProfile || { username: state.currentUser };
+  const orders = await getPartnerOrderRecords(partner);
   showDialog("ჩემი შეკვეთები", renderPartnerOrderTable(orders), [
     { label: "ახალი", variant: "primary", action: openPartnerNewOrderDialog },
     { label: "დახურვა", variant: "secondary", action: closeDialog },
@@ -342,7 +403,10 @@ async function openPartnerManagement() {
   const body = `
     <div class="partner-panel-head">
       <h2>პარტნიორები</h2>
-      <button class="button primary" type="button" data-action="createPartner">დამატება</button>
+      <div class="partner-filter-row">
+        <button class="button secondary" type="button" data-action="adminPartnerOrders">შეკვეთები</button>
+        <button class="button primary" type="button" data-action="createPartner">დამატება</button>
+      </div>
     </div>
     <div class="finance-card-list admin-user-list">
       ${partners.map(renderPartnerCard).join("") || "<div class=\"history-empty history-empty-card\">პარტნიორი ჯერ არ არის</div>"}
@@ -581,8 +645,7 @@ async function togglePartnerStatus(username) {
 
 async function openAdminPartnerOrders(partnerId = "") {
   const partners = await getPartners();
-  const query = partnerId ? `?partnerId=${encodeURIComponent(partnerId)}` : "";
-  const orders = (await api(`/api/parcels${query}`)).parcels.filter((order) => order.partnerId);
+  const orders = (await getPartnerOrderRecords()).filter((order) => !partnerId || order.partnerId === partnerId);
   const partnerOptions = partners.map((partner) => `<option value="${escapeAttr(partner.id)}" ${partner.id === partnerId ? "selected" : ""}>${escapeHtml(partnerName(partner))}</option>`).join("");
   const body = `
     <div class="partner-panel-head">
@@ -595,7 +658,7 @@ async function openAdminPartnerOrders(partnerId = "") {
         <button class="button secondary" type="button" data-action="adminPartnerOrdersFilter">ფილტრი</button>
       </div>
     </div>
-    ${renderPartnerOrderTable(orders, { includePartner: true, includeActions: true })}
+    ${renderPartnerOrderTable(orders, { includePartner: true, includeActions: true, showPendingCash: true })}
   `;
   showDialog("პარტნიორის შეკვეთები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }

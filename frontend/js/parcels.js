@@ -1444,6 +1444,14 @@ function getRetentionCutoffDateKey(referenceDate = new Date()) {
 }
 
 
+function getPartnerOrderRetentionCutoffDateKey(referenceDate = new Date()) {
+  const cutoff = new Date(referenceDate);
+  cutoff.setHours(12, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - Number(CONFIG.partnerOrderRetentionMonths || 1));
+  return toDateKey(cutoff);
+}
+
+
 async function runAutoRetentionCleanup() {
   if (!state.currentUser || !state.isAdmin || state.retentionCleanupInProgress) return { deletedParcels: 0 };
 
@@ -1462,15 +1470,21 @@ async function runAutoRetentionCleanup() {
     }
 
     const cutoffDate = getRetentionCutoffDateKey();
+    const partnerOrderCutoffDate = getPartnerOrderRetentionCutoffDateKey();
     const payload = await api("/api/maintenance/retention", {
       method: "POST",
       body: {
         cutoffDate,
         retentionMonths: Number(CONFIG.dataRetentionMonths || 8),
+        partnerOrderCutoffDate,
+        partnerOrderRetentionMonths: Number(CONFIG.partnerOrderRetentionMonths || 1),
       },
     });
     saveData(localDoneKey, true);
-    const deletedTotal = Number(payload.deletedParcels || 0) + Number(payload.deletedCashAdjustments || 0) + Number(payload.deletedPayAdjustments || 0);
+    const deletedTotal = Number(payload.deletedParcels || 0)
+      + Number(payload.deletedCashAdjustments || 0)
+      + Number(payload.deletedPartnerCashAdjustments || 0)
+      + Number(payload.deletedPayAdjustments || 0);
     if (deletedTotal > 0) {
       showToast(`ძველი მონაცემები გასუფთავდა: ${deletedTotal} ჩანაწერი`);
     }

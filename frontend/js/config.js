@@ -14,6 +14,7 @@ const CONFIG = {
   useOverpassSearch: false,
   enableCourierLiveTracking: false,
   dataRetentionMonths: 8,
+  partnerOrderRetentionMonths: 1,
   zoneAssignmentsStorageKey: "deliveryZoneAssignments:v1",
   cashAdjustmentsStorageKey: "deliveryCashAdjustments:v1",
   partnerCashAdjustmentsStorageKey: "deliveryPartnerCashAdjustments:v1",

@@ -97,55 +97,22 @@ function handleDialogBackdropClick(event) {
 function renderActions() {
   const adminActionGroups = [
     {
-      label: "რუკა",
+      label: "მთავარი",
       actions: [
-        ["showAllAdminPins", "რუკა", "⌖", "ყველა პინის ჩვენება"],
-        ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
-        ["adminMap", "ფილტრები", "◉", "რუკის ფილტრები"],
-      ],
-    },
-    {
-      label: "შეჯამება",
-      actions: [
-        state.adminDashboardHidden
-          ? ["showAdminDashboard", "გახსნა", "▥", "შეჯამების ბარის გახსნა"]
-          : ["hideAdminDashboard", "დახურვა", "▤", "შეჯამების ბარის დახურვა"],
-      ],
-    },
-    {
-      label: "ამანათები",
-      actions: [
-        ["addParcel", "დამატება", "+", "ახალი ამანათის დამატება"],
-        ["parcelHistory", "ისტორია", "◷", "ამანათების ისტორია"],
-        ["adminCloseDay", "დღის დახურვა", "✓", "დღის დახურვა"],
-      ],
-    },
-    {
-      label: "კურიერები",
-      actions: [
-        ["adminUsers", "სია", "◎", "კურიერების მართვა"],
-        ["adminRegister", "რეგისტრაცია", "+", "კურიერის ან ადმინის დამატება"],
-        ["zoneManagement", "ზონები", "▧", "ზონების მართვა"],
-        ["adminStats", "სტატისტიკა", "▦", "კურიერების სტატისტიკა"],
-      ],
-    },
-    {
-      label: "ფინანსები",
-      actions: [
+        ["adminMap", "რუკა", "⌖", "რუკა და ფილტრები"],
+        ["adminParcels", "ამანათები", "+", "დამატება და ისტორია"],
+        ["adminCouriers", "კურიერები", "◎", "სია, რეგისტრაცია, ზონები და სტატისტიკა"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
-        ["adminDailyBalance", "დღიური ბალანსი", "▦", "კურიერის, პარტნიორის ქეშისა და მოგების დღიური ანგარიში"],
-      ],
-    },
-    {
-      label: "პარტნიორები",
-      actions: [
-        ["adminPartners", "პარტნიორები", "◫", "პარტნიორი ანგარიშები"],
-        ["adminPartnerOrders", "შეკვეთები", "▣", "პარტნიორი შეკვეთები"],
+        ["adminPartnersHub", "პარტნიორები", "◫", "პარტნიორები და შეკვეთები"],
       ],
     },
     {
       label: "პარამეტრები",
       actions: [
+        state.adminDashboardHidden
+          ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
+          : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
+        ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
       ],
@@ -157,15 +124,10 @@ function renderActions() {
   ];
   const actions = state.isAdmin
     ? [
-        ["showAllAdminPins", "რუკა", "⌖", "ყველა პინის ჩვენება"],
+        ["adminMap", "რუკა", "⌖", "რუკა და ფილტრები"],
         ["addParcel", "ამანათები", "+", "ახალი ამანათის დამატება"],
-        state.adminDashboardHidden
-          ? ["showAdminDashboard", "გახსნა", "▥", "შეჯამების ბარის გახსნა"]
-          : ["hideAdminDashboard", "დახურვა", "▤", "შეჯამების ბარის დახურვა"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
-        ["parcelHistory", "ისტორია", "◷", "ამანათების ისტორია"],
-        ["zoneManagement", "ზონები", "▧", "ზონების მართვა"],
-        ["changePassword", "პარამეტრები", "⚙", "პაროლის შეცვლა"],
+        ["adminPartnersHub", "პარტნიორები", "◫", "პარტნიორები და შეკვეთები"],
       ]
     : state.isPartner
       ? partnerActions
@@ -222,6 +184,58 @@ function renderActions() {
         </button>`
       : actions.map((item, index) => renderActionButton(item, "bottom-nav-item", index === 0)).join("");
   }
+}
+
+
+function renderAdminHubAction(action, label, icon, description) {
+  return `
+    <button class="finance-card finance-flow-card finance-static-card" type="button" data-action="${escapeAttr(action)}">
+      <span class="finance-summary-icon" aria-hidden="true">${escapeHtml(icon || "")}</span>
+      <span>${escapeHtml(label)}</span>
+      <small>${escapeHtml(description || "")}</small>
+    </button>
+  `;
+}
+
+
+function openAdminParcelsHub() {
+  const body = renderFinanceModalLayout({
+    content: `
+      <section class="finance-section finance-flow-grid">
+        ${renderAdminHubAction("addParcel", "დამატება", "+", "ახალი ამანათის დამატება")}
+        ${renderAdminHubAction("parcelHistory", "ისტორია", "◷", "ამანათების ისტორია და ძებნა")}
+      </section>
+    `,
+  });
+  showDialog("ამანათები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+}
+
+
+function openAdminCouriersHub() {
+  const body = renderFinanceModalLayout({
+    content: `
+      <section class="finance-section finance-flow-grid">
+        ${renderAdminHubAction("adminUsers", "სია", "◎", "კურიერების მართვა")}
+        ${renderAdminHubAction("adminRegister", "რეგისტრაცია", "+", "კურიერის ან ადმინის დამატება")}
+        ${renderAdminHubAction("zoneManagement", "ზონები", "▧", "კურიერის ზონების მართვა")}
+        ${renderAdminHubAction("adminStats", "სტატისტიკა", "▦", "კურიერების სტატისტიკა")}
+      </section>
+    `,
+  });
+  showDialog("კურიერები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+}
+
+
+function openAdminPartnersHub() {
+  const body = renderFinanceModalLayout({
+    content: `
+      <section class="finance-section finance-flow-grid">
+        ${renderAdminHubAction("adminPartners", "პარტნიორები", "◫", "პარტნიორი ანგარიშები და ქეში")}
+        ${renderAdminHubAction("adminPartnerOrders", "შეკვეთები", "▣", "პარტნიორის შეკვეთების სია")}
+      </section>
+    `,
+  });
+  showDialog("პარტნიორები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
 
 
@@ -553,6 +567,9 @@ async function handleAction(action, value, sourceElement) {
     adminStats: openAdminStatsUsers,
     liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
+    adminParcels: openAdminParcelsHub,
+    adminCouriers: openAdminCouriersHub,
+    adminPartnersHub: openAdminPartnersHub,
     adminUsers: openUserManagement,
     zoneManagement: openZoneManagement,
     adminFinance: openFinanceDashboard,

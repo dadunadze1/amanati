@@ -832,6 +832,12 @@ async function openFinanceDashboard() {
           <strong>${escapeHtml(formatMoney(partnerCashDue))}</strong>
           <small>პარტნიორების კომპანიისთვის მისაცემი ქეში</small>
         </button>
+        <button class="finance-card finance-flow-card" type="button" data-action="adminDailyBalance">
+          <span class="finance-summary-icon" aria-hidden="true">▦</span>
+          <span>დღიური ბალანსი</span>
+          <strong>${escapeHtml(formatMoney(todaySummary.adminProfit))}</strong>
+          <small>კურიერი, პარტნიორი და მოგება კალენდრით</small>
+        </button>
         <button class="finance-card finance-flow-card finance-card--day" type="button" data-action="openFinanceDayClose">
           <span class="finance-summary-icon" aria-hidden="true">✓</span>
           <span>დღის დახურვა / ისტორია</span>
