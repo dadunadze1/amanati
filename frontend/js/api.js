@@ -1,6 +1,7 @@
 "use strict";
 
-const STATIC_DEPLOY_STORAGE_KEY = "deliveryStaticBootstrap:v1";
+const STATIC_DEPLOY_STORAGE_KEY = "deliveryStaticBootstrap:v2";
+const STATIC_LEGACY_DEPLOY_STORAGE_KEYS = ["deliveryStaticBootstrap:v1"];
 const STATIC_SESSION_STORAGE_KEY = "deliveryStaticSession:v1";
 const STATIC_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const STATIC_DEMO_COURIER_USERNAMES = new Set(["courier1", "courier2"]);
@@ -21,6 +22,7 @@ function isStaticDeploy() {
 
 async function loadStaticBootstrap() {
   if (loadStaticBootstrap.cache) return loadStaticBootstrap.cache;
+  clearLegacyStaticBootstrapStores();
 
   const fallback = {
     users: [],
@@ -216,6 +218,12 @@ function mergeStaticFinanceData(baseFinance, nextFinance) {
     payAdjustments: mergeStaticRecordsByKey(base.payAdjustments, next.payAdjustments, getStaticAdjustmentKey),
     dailyBalanceLedger: mergeStaticRecordsByKey(base.dailyBalanceLedger, next.dailyBalanceLedger, getStaticAdjustmentKey),
   };
+}
+
+function clearLegacyStaticBootstrapStores() {
+  STATIC_LEGACY_DEPLOY_STORAGE_KEYS.forEach((key) => {
+    if (key !== STATIC_DEPLOY_STORAGE_KEY) clearData(key);
+  });
 }
 
 function normalizeStaticParcelFinance(parcel) {
