@@ -75,7 +75,29 @@ async function refreshPinsOnce() {
 
 
 function getCourierLivePins(pins = state.activePins) {
-  return (Array.isArray(pins) ? pins : []).filter((pin) => pin?.status !== "delivered" && !pin?.archivedAt);
+  return (Array.isArray(pins) ? pins : []).filter((pin) => pin?.status !== "delivered" && !pin?.archivedAt && !pin?.deletedAt);
+}
+
+
+function isPartnerParcelRecord(parcel) {
+  return Boolean(parcel?.partnerId || parcel?.partnerUsername || parcel?.createdByRole === "partner");
+}
+
+
+function parcelBelongsToCurrentPartner(parcel) {
+  if (!parcel || !state.isPartner) return false;
+  const partner = state.currentUserProfile || {};
+  return Boolean(
+    (partner.id && parcel.partnerId === partner.id)
+    || normalizeUsername(parcel.partnerUsername) === normalizeUsername(partner.username || state.currentUser)
+  );
+}
+
+
+function canDeleteParcelRecord(parcel) {
+  if (!parcel || parcel.archivedAt || parcel.deletedAt || parcel.status === "delivered") return false;
+  if (state.isAdmin) return parcel.status === "failed" || isPartnerParcelRecord(parcel);
+  return state.isPartner && isPartnerParcelRecord(parcel) && parcelBelongsToCurrentPartner(parcel);
 }
 
 
@@ -1004,6 +1026,11 @@ function renderSelectedParcelCard() {
         <button class="nearest-status-button failed" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">ვერ ჩაბარდა</button>
       </div>`
     : "";
+  const deleteControls = canDeleteParcelRecord(pin)
+    ? `<div class="nearest-status-actions">
+        <button class="nearest-status-button failed" type="button" data-action="confirmParcelDelete" data-value="${escapeAttr(pin.id)}">წაშლა</button>
+      </div>`
+    : "";
 
   els.nearestParcelCard.hidden = false;
   els.appShell?.classList.toggle("has-selected-pin", state.isAdmin);
@@ -1121,6 +1148,7 @@ function renderSelectedParcelCard() {
       ` : ""}
     </div>
     ${statusControls}
+    ${deleteControls}
   `;
 }
 
@@ -1258,6 +1286,60 @@ async function drawRouteToPin(origin, pin) {
   state.routePinId = pin.id;
   state.map.fitBounds(state.routeLayer.getBounds(), { padding: [38, 38], maxZoom: 17 });
   renderSelectedParcelCard();
+}
+
+
+async function findParcelForDelete(parcelId) {
+  const fromState = state.activePins.find((item) => item.id === parcelId);
+  if (fromState) return fromState;
+  const pins = await getPins(state.isAdmin || state.isPartner ? "" : state.currentUser);
+  return pins.find((item) => item.id === parcelId) || null;
+}
+
+
+async function confirmParcelDelete(parcelId) {
+  const parcel = await findParcelForDelete(parcelId);
+  if (!parcel || !canDeleteParcelRecord(parcel)) {
+    showToast("ამ შეკვეთის წაშლა შეუძლებელია.");
+    return;
+  }
+  const payment = getPaymentAmount(parcel);
+  const body = `
+    <div class="parcel-delete-confirm">
+      <p>ნამდვილად გსურთ შეკვეთის წაშლა?</p>
+      <div class="nearest-detail">
+        <span>მიმღები</span>
+        <strong>${escapeHtml(parcel.fullName || "უსახელო")}</strong>
+      </div>
+      <div class="nearest-detail">
+        <span>მისამართი</span>
+        <strong>${escapeHtml(getParcelAddress(parcel) || STRINGS.addressMissing)}</strong>
+      </div>
+      <div class="nearest-detail">
+        <span>ქეში</span>
+        <strong>${payment > 0 ? escapeHtml(formatMoney(payment)) : "ქეში არ არის"}</strong>
+      </div>
+      ${parcel.status === "failed" ? `<div class="nearest-detail"><span>სტატუსი</span><strong>ვერ ჩაბარდა</strong></div>` : ""}
+    </div>
+  `;
+  showDialog("შეკვეთის წაშლა", body, [
+    { label: "წაშლა", variant: "danger", action: () => deleteParcelAndRefresh(parcelId) },
+    { label: "გაუქმება", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+async function deleteParcelAndRefresh(parcelId) {
+  try {
+    await deleteParcel(parcelId);
+    if (state.routePinId === parcelId) clearActiveRoute();
+    if (state.selectedPinId === parcelId) hideSelectedParcelCard();
+    closeDialog();
+    await refreshPins();
+    showToast("შეკვეთა წაიშალა.");
+  } catch (error) {
+    showToast(error.message || STRINGS.serverFailed);
+  }
 }
 
 

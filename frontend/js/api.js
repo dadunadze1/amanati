@@ -171,7 +171,7 @@ function resolveStaticParcelRecord(current, next) {
   const primary = nextTime >= currentTime ? next : current;
   const secondary = primary === next ? current : next;
   const merged = { ...secondary, ...primary };
-  ["archivedAt", "deliveredAt", "completedAt", "failedAt", "updatedAt", "assignedAt", "createdAt"].forEach((field) => {
+  ["deletedAt", "archivedAt", "deliveredAt", "completedAt", "failedAt", "updatedAt", "assignedAt", "createdAt"].forEach((field) => {
     merged[field] = primary[field] || secondary[field] || "";
   });
   if ((primary.archivedAt || secondary.archivedAt) && (primary.status === "delivered" || secondary.status === "delivered")) {
@@ -180,7 +180,7 @@ function resolveStaticParcelRecord(current, next) {
   return normalizeStaticParcelFinance(merged);
 }
 
-function getStaticRecordTimestamp(record, fields = ["updatedAt", "archivedAt", "deliveredAt", "completedAt", "failedAt", "assignedAt", "createdAt"]) {
+function getStaticRecordTimestamp(record, fields = ["updatedAt", "deletedAt", "archivedAt", "deliveredAt", "completedAt", "failedAt", "assignedAt", "createdAt"]) {
   return fields.reduce((latest, field) => {
     const time = Date.parse(record?.[field] || "");
     return Number.isFinite(time) ? Math.max(latest, time) : latest;
@@ -438,6 +438,24 @@ function publicStaticParcel(store, parcel) {
   };
 }
 
+function isStaticDeletedParcel(parcel) {
+  return Boolean(parcel?.deletedAt);
+}
+
+function canDeleteStaticParcel(parcel) {
+  if (!parcel || parcel.archivedAt || isStaticDeletedParcel(parcel) || parcel.status === "delivered") return false;
+  if (state.isAdmin) return parcel.status === "failed" || isStaticPartnerParcel(parcel);
+  if (!state.isPartner) return false;
+  const partner = state.currentUserProfile || {};
+  return Boolean(
+    isStaticPartnerParcel(parcel)
+    && (
+      (partner.id && parcel.partnerId === partner.id)
+      || normalizeUsername(parcel.partnerUsername) === normalizeUsername(partner.username || state.currentUser)
+    )
+  );
+}
+
 function parseStaticBody(options) {
   return options.body && typeof options.body === "object" ? options.body : {};
 }
@@ -593,7 +611,7 @@ async function backfillStaticPartnerOrderLocations(store) {
   if (!store || !Array.isArray(store.parcels)) return false;
   let changed = false;
   for (const parcel of store.parcels) {
-    if (!parcel || parcel.archivedAt || !isStaticPartnerParcel(parcel) || hasStaticParcelCoords(parcel)) continue;
+    if (!parcel || parcel.archivedAt || isStaticDeletedParcel(parcel) || !isStaticPartnerParcel(parcel) || hasStaticParcelCoords(parcel)) continue;
     const geocoded = await geocodeStaticPartnerOrder(parcel);
     if (!geocoded) continue;
 
@@ -791,7 +809,7 @@ async function staticApi(path, options = {}) {
     return {
       parcels: store.parcels
         .filter((parcel) => {
-          if (parcel.archivedAt) return false;
+          if (parcel.archivedAt || isStaticDeletedParcel(parcel)) return false;
           if (state.isPartner) return parcel.partnerId === state.currentUserProfile?.id;
           if (partnerId && parcel.partnerId !== partnerId) return false;
           return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
@@ -804,6 +822,7 @@ async function staticApi(path, options = {}) {
     const courier = url.searchParams.get("courier") || "";
     return {
       history: [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)]
+        .filter((parcel) => !isStaticDeletedParcel(parcel))
         .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
         .map((parcel) => publicStaticParcel(store, parcel)),
     };
@@ -814,6 +833,7 @@ async function staticApi(path, options = {}) {
     const records = [...store.parcels, ...store.history];
     return {
       parcels: records
+        .filter((parcel) => !isStaticDeletedParcel(parcel))
         .filter((parcel) => !query || [parcel.fullName, parcel.phone, parcel.address, parcel.courierUsername, parcel.status].some((value) => String(value || "").toLowerCase().includes(query)))
         .map((parcel) => publicStaticParcel(store, parcel)),
     };
@@ -1028,7 +1048,7 @@ async function staticApi(path, options = {}) {
     const missingLocation = store.parcels.find((parcel) => parcelIds.includes(parcel.id) && (!Number.isFinite(Number(parcel.lat)) || !Number.isFinite(Number(parcel.lng))));
     if (missingLocation) throw new Error("კურიერის მიბმამდე მიუთითეთ შეკვეთის პინის ლოკაცია.");
     store.parcels.forEach((parcel) => {
-      if (parcelIds.includes(parcel.id)) {
+      if (parcelIds.includes(parcel.id) && !isStaticDeletedParcel(parcel)) {
         parcel.courierUsername = body.courierUsername || "";
         parcel.assignedAt = new Date().toISOString();
         parcel.autoAssigned = false;
@@ -1041,7 +1061,7 @@ async function staticApi(path, options = {}) {
   const statusMatch = apiPath.match(/^\/api\/parcels\/([^/]+)\/status$/);
   if (statusMatch && method === "PATCH") {
     const parcel = store.parcels.find((item) => item.id === decodeURIComponent(statusMatch[1]));
-    if (!parcel) return { ok: false };
+    if (!parcel || isStaticDeletedParcel(parcel)) return { ok: false };
     if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
     parcel.status = body.status || parcel.status;
@@ -1069,6 +1089,20 @@ async function staticApi(path, options = {}) {
     return { parcel: publicStaticParcel(store, parcel) };
   }
 
+  const deleteMatch = apiPath.match(/^\/api\/parcels\/([^/]+)$/);
+  if (deleteMatch && method === "DELETE") {
+    const parcel = store.parcels.find((item) => item.id === decodeURIComponent(deleteMatch[1]));
+    if (!parcel || !canDeleteStaticParcel(parcel)) throw new Error("ამ შეკვეთის წაშლა შეუძლებელია.");
+    const now = new Date().toISOString();
+    parcel.deletedAt = now;
+    parcel.deletedBy = state.currentUser || "";
+    parcel.deletedByRole = state.isAdmin ? "admin" : state.isPartner ? "partner" : "";
+    parcel.deleteReason = String(body.reason || "").trim();
+    parcel.updatedAt = now;
+    saveStaticBootstrap();
+    return { deleted: 1, parcel: publicStaticParcel(store, parcel) };
+  }
+
   if (method === "POST" && apiPath === "/api/parcels/archive") {
     const parcelIds = Array.isArray(body.parcelIds) ? new Set(body.parcelIds) : null;
     const courier = body.courierUsername || "";
@@ -1077,6 +1111,7 @@ async function staticApi(path, options = {}) {
     store.parcels.forEach((parcel) => {
       if (
         !parcel.archivedAt
+        && !isStaticDeletedParcel(parcel)
         && parcel.status === "delivered"
         && (!parcelIds || parcelIds.has(parcel.id))
         && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
@@ -1104,7 +1139,7 @@ async function staticApi(path, options = {}) {
   const locationMatch = apiPath.match(/^\/api\/parcels\/([^/]+)\/location$/);
   if (locationMatch && method === "PATCH") {
     const parcel = store.parcels.find((item) => item.id === decodeURIComponent(locationMatch[1]));
-    if (!parcel) return { ok: false };
+    if (!parcel || isStaticDeletedParcel(parcel)) return { ok: false };
     const lat = Number(body.lat ?? body.latitude);
     const lng = Number(body.lng ?? body.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("სწორი გრძედი და განედი აუცილებელია.");
@@ -1202,6 +1237,13 @@ async function getHistory(username) {
 
 async function searchParcels(query) {
   return (await api(`/api/parcels/search?q=${encodeURIComponent(query || "")}`)).parcels;
+}
+
+async function deleteParcel(parcelId, reason = "") {
+  return api(`/api/parcels/${encodeURIComponent(parcelId)}`, {
+    method: "DELETE",
+    body: { reason },
+  });
 }
 
 async function getZones() {

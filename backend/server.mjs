@@ -484,6 +484,28 @@ function isPartnerParcel(parcel) {
   return Boolean(parcel?.partnerId || parcel?.partnerUsername || parcel?.createdByRole === "partner");
 }
 
+function isDeletedParcel(parcel) {
+  return Boolean(parcel?.deletedAt);
+}
+
+function parcelBelongsToPartner(parcel, partner) {
+  if (!parcel || !partner) return false;
+  const partnerId = partnerCashIdentity(partner);
+  const username = partner.username || "";
+  return Boolean(
+    (partnerId && parcel.partnerId === partnerId)
+    || (username && normalizeUsername(parcel.partnerUsername) === normalizeUsername(username))
+  );
+}
+
+function canDeleteParcel(session, db, parcel) {
+  if (!session || !parcel || parcel.archivedAt || isDeletedParcel(parcel) || parcel.status === "delivered") return false;
+  if (session.role === "admin") return parcel.status === "failed" || isPartnerParcel(parcel);
+  if (session.role !== "partner") return false;
+  const partner = findUser(db, session.username);
+  return Boolean(partner && partner.role === "partner" && partner.status === "active" && isPartnerParcel(parcel) && parcelBelongsToPartner(parcel, partner));
+}
+
 function hasParcelCoords(parcel) {
   return Number.isFinite(Number(parcel?.lat ?? parcel?.latitude)) && Number.isFinite(Number(parcel?.lng ?? parcel?.longitude));
 }
@@ -491,7 +513,7 @@ function hasParcelCoords(parcel) {
 async function backfillPartnerParcelLocations(db) {
   let changed = false;
   for (const parcel of db.parcels) {
-    if (!parcel || parcel.archivedAt || !isPartnerParcel(parcel) || hasParcelCoords(parcel)) continue;
+    if (!parcel || parcel.archivedAt || isDeletedParcel(parcel) || !isPartnerParcel(parcel) || hasParcelCoords(parcel)) continue;
     const geocoded = await geocodePartnerAddress(parcel);
     if (!geocoded) continue;
 
@@ -580,6 +602,7 @@ function getActiveParcelCount(db, username) {
   const normalized = normalizeUsername(username);
   return db.parcels.filter((parcel) => (
     !parcel.archivedAt
+    && !isDeletedParcel(parcel)
     && !isCompletedParcel(parcel)
     && normalizeUsername(parcel.courierUsername) === normalized
   )).length;
@@ -1252,7 +1275,7 @@ async function handleApi(request, response, url) {
     sendJson(response, 200, {
       parcels: db.parcels
         .filter((parcel) => {
-          if (parcel.archivedAt) return false;
+          if (parcel.archivedAt || isDeletedParcel(parcel)) return false;
           if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
           if (session.role === "admin" && partnerId && parcel.partnerId !== partnerId) return false;
           return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
@@ -1373,7 +1396,7 @@ async function handleApi(request, response, url) {
 
     let assigned = 0;
     db.parcels.forEach((parcel) => {
-      if (parcelIds.includes(parcel.id) && !parcel.archivedAt) {
+      if (parcelIds.includes(parcel.id) && !parcel.archivedAt && !isDeletedParcel(parcel)) {
         if (!Number.isFinite(Number(parcel.lat ?? parcel.latitude)) || !Number.isFinite(Number(parcel.lng ?? parcel.longitude))) return;
         parcel.courierUsername = courier.username;
         parcel.assignedAt = new Date().toISOString();
@@ -1396,7 +1419,7 @@ async function handleApi(request, response, url) {
     const lng = Number(body.lng ?? body.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw httpError(400, "სწორი გრძედი და განედი აუცილებელია.");
     const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelLocationMatch[1]));
-    if (!parcel || parcel.archivedAt) throw httpError(404, "შეკვეთა ვერ მოიძებნა.");
+    if (!parcel || parcel.archivedAt || isDeletedParcel(parcel)) throw httpError(404, "შეკვეთა ვერ მოიძებნა.");
     const now = new Date().toISOString();
     parcel.lat = lat;
     parcel.lng = lng;
@@ -1419,7 +1442,7 @@ async function handleApi(request, response, url) {
     const status = String(body.status || "");
     if (!["delivered", "failed", "pending"].includes(status)) throw httpError(400, "სტატუსი არასწორია.");
     const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelStatusMatch[1]));
-    if (!parcel || parcel.archivedAt) throw httpError(404, "ამანათი ვერ მოიძებნა.");
+    if (!parcel || parcel.archivedAt || isDeletedParcel(parcel)) throw httpError(404, "ამანათი ვერ მოიძებნა.");
     if (!canAccessCourier(session, parcel.courierUsername)) throw httpError(403, "წვდომა აკრძალულია.");
     if (session.role !== "admin" && status === "pending") throw httpError(403, "ამანათის მოლოდინში დაბრუნება მხოლოდ ადმინს შეუძლია.");
     if (session.role !== "admin" && parcel.status === "delivered" && status === "failed") throw httpError(403, "ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
@@ -1451,6 +1474,24 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  const parcelDeleteMatch = path.match(/^\/api\/parcels\/([^/]+)$/);
+  if (parcelDeleteMatch && method === "DELETE") {
+    const session = requireSession(request);
+    const body = await readJsonBody(request).catch(() => ({}));
+    const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelDeleteMatch[1]));
+    if (!parcel || parcel.archivedAt || isDeletedParcel(parcel)) throw httpError(404, "შეკვეთა ვერ მოიძებნა.");
+    if (!canDeleteParcel(session, db, parcel)) throw httpError(403, "ამ შეკვეთის წაშლა შეუძლებელია.");
+    const now = new Date().toISOString();
+    parcel.deletedAt = now;
+    parcel.deletedBy = session.username;
+    parcel.deletedByRole = session.role;
+    parcel.deleteReason = String(body.reason || "").trim();
+    parcel.updatedAt = now;
+    await writeDb(db);
+    sendJson(response, 200, { deleted: 1, parcel: publicParcel(db, parcel) });
+    return;
+  }
+
   if (method === "POST" && path === "/api/parcels/archive") {
     const session = requireSession(request);
     const body = await readJsonBody(request);
@@ -1460,7 +1501,7 @@ async function handleApi(request, response, url) {
     const now = new Date().toISOString();
     let archived = 0;
     db.parcels.forEach((parcel) => {
-      if (!parcel.archivedAt && isCompletedParcel(parcel) && (!parcelIds || parcelIds.has(parcel.id)) && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))) {
+      if (!parcel.archivedAt && !isDeletedParcel(parcel) && isCompletedParcel(parcel) && (!parcelIds || parcelIds.has(parcel.id)) && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))) {
         applyDeliveredFinance(parcel);
         parcel.archivedAt = now;
         if (body.autoClosedDate) {
@@ -1528,6 +1569,7 @@ async function handleApi(request, response, url) {
       history: db.parcels
         .filter((parcel) => {
           if (!parcel.archivedAt) return false;
+          if (isDeletedParcel(parcel)) return false;
           if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
           return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
         })
@@ -1540,6 +1582,7 @@ async function handleApi(request, response, url) {
     requireAdmin(request);
     const query = String(url.searchParams.get("q") || "").trim().toLowerCase();
     const parcels = db.parcels.filter((parcel) => {
+      if (isDeletedParcel(parcel)) return false;
       if (!query) return true;
       return parcelSearchHaystack(db, parcel).includes(query);
     });

@@ -263,9 +263,15 @@ function canAssignPartnerOrder(order) {
 }
 
 
-function renderPartnerOrderActionCell(order) {
-  if (!canAssignPartnerOrder(order)) return "<td></td>";
-  return `<td><button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "პინის დასმა"}</button></td>`;
+function renderPartnerOrderActionCell(order, options = {}) {
+  const actions = [];
+  if (options.allowAssign && canAssignPartnerOrder(order)) {
+    actions.push(`<button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "პინის დასმა"}</button>`);
+  }
+  if (canDeleteParcelRecord(order)) {
+    actions.push(`<button class="mini-button danger" type="button" data-action="confirmParcelDelete" data-value="${escapeAttr(order.id)}">წაშლა</button>`);
+  }
+  return actions.length ? `<td><div class="row-actions">${actions.join("")}</div></td>` : "<td></td>";
 }
 
 
@@ -302,7 +308,7 @@ function renderPartnerOrderTable(orders, options = {}) {
               ${includePartner ? `<td><span class="partner-tag location-${escapeAttr(order.locationAccuracy || "missing")}">${escapeHtml(getOrderLocationLabel(order))}</span></td>` : ""}
               <td>${escapeHtml(formatPartnerOrderCash(order, options))}</td>
               <td>${escapeHtml(formatOptionalDateTime(order.createdAt))}</td>
-              ${includeActions ? renderPartnerOrderActionCell(order) : ""}
+              ${includeActions ? renderPartnerOrderActionCell(order, options) : ""}
             </tr>
           `).join("")}
         </tbody>
@@ -327,7 +333,7 @@ function getOrderLocationLabel(order) {
 async function openPartnerOrdersDialog() {
   const partner = state.currentUserProfile || { username: state.currentUser };
   const orders = await getPartnerOrderRecords(partner);
-  showDialog("ჩემი შეკვეთები", renderPartnerOrderTable(orders), [
+  showDialog("ჩემი შეკვეთები", renderPartnerOrderTable(orders, { includeActions: true }), [
     { label: "ახალი", variant: "primary", action: openPartnerNewOrderDialog },
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
@@ -658,7 +664,7 @@ async function openAdminPartnerOrders(partnerId = "") {
         <button class="button secondary" type="button" data-action="adminPartnerOrdersFilter">ფილტრი</button>
       </div>
     </div>
-    ${renderPartnerOrderTable(orders, { includePartner: true, includeActions: true, showPendingCash: true })}
+    ${renderPartnerOrderTable(orders, { includePartner: true, includeActions: true, allowAssign: true, showPendingCash: true })}
   `;
   showDialog("პარტნიორის შეკვეთები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
