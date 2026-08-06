@@ -500,7 +500,7 @@ function parcelBelongsToPartner(parcel, partner) {
 
 function canDeleteParcel(session, db, parcel) {
   if (!session || !parcel || parcel.archivedAt || isDeletedParcel(parcel) || parcel.status === "delivered") return false;
-  if (session.role === "admin") return parcel.status === "failed" || isPartnerParcel(parcel);
+  if (session.role === "admin") return true;
   if (session.role !== "partner") return false;
   const partner = findUser(db, session.username);
   return Boolean(partner && partner.role === "partner" && partner.status === "active" && isPartnerParcel(parcel) && parcelBelongsToPartner(parcel, partner));

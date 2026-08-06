@@ -444,7 +444,7 @@ function isStaticDeletedParcel(parcel) {
 
 function canDeleteStaticParcel(parcel) {
   if (!parcel || parcel.archivedAt || isStaticDeletedParcel(parcel) || parcel.status === "delivered") return false;
-  if (state.isAdmin) return parcel.status === "failed" || isStaticPartnerParcel(parcel);
+  if (state.isAdmin) return true;
   if (!state.isPartner) return false;
   const partner = state.currentUserProfile || {};
   return Boolean(

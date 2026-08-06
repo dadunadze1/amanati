@@ -96,7 +96,7 @@ function parcelBelongsToCurrentPartner(parcel) {
 
 function canDeleteParcelRecord(parcel) {
   if (!parcel || parcel.archivedAt || parcel.deletedAt || parcel.status === "delivered") return false;
-  if (state.isAdmin) return parcel.status === "failed" || isPartnerParcelRecord(parcel);
+  if (state.isAdmin) return true;
   return state.isPartner && isPartnerParcelRecord(parcel) && parcelBelongsToCurrentPartner(parcel);
 }
 
