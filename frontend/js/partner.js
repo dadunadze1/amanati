@@ -236,7 +236,7 @@ async function renderPartnerDashboard(pins = state.activePins) {
         <h2>ბოლო შეკვეთები</h2>
         <button class="button secondary" type="button" data-action="partnerOrders">ყველა</button>
       </div>
-      ${renderPartnerOrderTable(recentOrders)}
+      ${renderPartnerOrderTable(recentOrders, { includeActions: true })}
     </section>
   `;
 }
