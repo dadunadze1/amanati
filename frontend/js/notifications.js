@@ -35,23 +35,42 @@ async function initializeAdminPushNotifications() {
   return registerAdminPushToken();
 }
 
-async function requestAdminPushNotifications() {
+async function activatePushForAuthorizedUser() {
   if (!state.isAdmin && !state.isPartner) return false;
   if (!canUseAdminPush()) {
-    return setAdminPushError(getAdminPushCapabilityMessage());
+    state.adminPushStatus = "unsupported";
+    return false;
+  }
+  if (Notification.permission === "granted") return registerAdminPushToken();
+  if (Notification.permission === "denied") {
+    state.adminPushStatus = "denied";
+    return false;
+  }
+  return requestAdminPushNotifications({ silent: true });
+}
+
+async function requestAdminPushNotifications(options = {}) {
+  if (!state.isAdmin && !state.isPartner) return false;
+  if (!canUseAdminPush()) {
+    return options.silent ? false : setAdminPushError(getAdminPushCapabilityMessage());
   }
 
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
     state.adminPushStatus = permission === "denied" ? "denied" : "permission-needed";
-    return setAdminPushError(permission === "denied"
+    const message = permission === "denied"
       ? "ბრაუზერში notification permission დაბლოკილია."
-      : "notification permission არ დადასტურდა.");
+      : "notification permission არ დადასტურდა.";
+    if (options.silent) {
+      state.adminPushLastError = message;
+      return false;
+    }
+    return setAdminPushError(message);
   }
 
   const registered = await registerAdminPushToken();
-  if (registered) showToast("ფუშ შეტყობინებები ჩაირთო.");
-  else if (!state.adminPushLastError) setAdminPushError("ფუშის რეგისტრაცია შეწყდა უცნობ ეტაპზე.");
+  if (registered && !options.silent) showToast("ფუშ შეტყობინებები ჩაირთო.");
+  else if (!registered && !state.adminPushLastError && !options.silent) setAdminPushError("ფუშის რეგისტრაცია შეწყდა უცნობ ეტაპზე.");
   return registered;
 }
 
@@ -228,6 +247,82 @@ async function saveAdminWebPushSubscriptionFallback(db, key, subscription) {
       },
     },
   }, { merge: true });
+}
+
+async function deactivatePushForCurrentDevice() {
+  if (!("serviceWorker" in navigator)) return false;
+  try {
+    const { db } = await initializeAdminPushFirebaseContext();
+    if (!db) return false;
+
+    let deactivated = false;
+    const registration = await navigator.serviceWorker.getRegistration("./");
+    const subscription = await registration?.pushManager?.getSubscription();
+    if (subscription?.endpoint) {
+      await deactivateAdminWebPushSubscription(db, subscription.endpoint);
+      await subscription.unsubscribe().catch(() => {});
+      deactivated = true;
+    }
+
+    if (state.adminPushToken) {
+      await deactivateAdminPushToken(db, state.adminPushToken);
+      state.adminPushToken = "";
+      deactivated = true;
+    }
+
+    state.adminPushStatus = "unknown";
+    state.adminPushLastError = "";
+    return deactivated;
+  } catch (error) {
+    console.warn("[push] device deactivation failed", error);
+    return false;
+  }
+}
+
+async function deactivateAdminPushToken(db, token) {
+  const key = getAdminPushKey(token);
+  const payload = {
+    active: false,
+    deactivatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  try {
+    await db.collection(ADMIN_PUSH_TOKENS_COLLECTION).doc(key).set(payload, { merge: true });
+  } catch {
+    await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
+      adminPushTokens: {
+        [key]: {
+          token,
+          active: false,
+          deactivatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    }, { merge: true });
+  }
+}
+
+async function deactivateAdminWebPushSubscription(db, endpoint) {
+  const key = getAdminPushKey(endpoint);
+  const payload = {
+    active: false,
+    deactivatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  try {
+    await db.collection(ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION).doc(key).set(payload, { merge: true });
+  } catch {
+    await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
+      adminWebPushSubscriptions: {
+        [key]: {
+          endpoint,
+          active: false,
+          deactivatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    }, { merge: true });
+  }
 }
 
 async function publishAdminParcelStatusNotification(parcel, status, options = {}) {

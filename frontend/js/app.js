@@ -113,7 +113,6 @@ function renderActions() {
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
-        ["enablePushNotifications", "ფუშები", "!", "შეტყობინებების ჩართვა"],
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
       ],
@@ -121,7 +120,6 @@ function renderActions() {
   ];
   const partnerActions = [
     ["partnerNewOrder", "ახალი", "+"],
-    ["enablePushNotifications", "ფუშები", "!"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
@@ -663,7 +661,6 @@ async function handleAction(action, value, sourceElement) {
     confirmParcelLocation: () => confirmParcelLocation(value),
     confirmParcelDelete: () => confirmParcelDelete(value),
     setStatus: () => updatePinStatus(value, sourceElement.dataset.status),
-    enablePushNotifications: () => requestAdminPushNotifications(),
     logout,
   };
 
@@ -738,6 +735,11 @@ function showToast(message) {
 
 
 async function logout() {
+  if ((state.isAdmin || state.isPartner) && typeof deactivatePushForCurrentDevice === "function") {
+    await deactivatePushForCurrentDevice().catch((error) => {
+      console.warn("Push deactivation failed", error);
+    });
+  }
   await api("/api/logout", { method: "POST" }).catch(() => {});
   closeAdminDrawer();
   collapseCourierStatsSheet();
@@ -751,6 +753,9 @@ async function logout() {
   state.authToken = null;
   state.isAdmin = false;
   state.isPartner = false;
+  state.adminPushStatus = "unknown";
+  state.adminPushToken = "";
+  state.adminPushLastError = "";
   state.hasCurrentPosition = false;
   state.activePins = [];
   state.adminDashboardHidden = false;

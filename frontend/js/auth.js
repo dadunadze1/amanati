@@ -111,8 +111,8 @@ function completeLogin(payload) {
       console.warn("Pin refresh failed", error);
       fitMapToPinsOrDefault([]);
     });
-    if ((state.isAdmin || state.isPartner) && typeof initializeAdminPushNotifications === "function") {
-      initializeAdminPushNotifications().catch((error) => {
+    if ((state.isAdmin || state.isPartner) && typeof activatePushForAuthorizedUser === "function") {
+      activatePushForAuthorizedUser().catch((error) => {
         console.warn("Push initialization failed", error);
       });
     }
@@ -151,6 +151,11 @@ function switchModal(target) {
 
 
 async function logout() {
+  if ((state.isAdmin || state.isPartner) && typeof deactivatePushForCurrentDevice === "function") {
+    await deactivatePushForCurrentDevice().catch((error) => {
+      console.warn("Push deactivation failed", error);
+    });
+  }
   await stopCourierLocationServices({ markOffline: true });
   await api("/api/logout", { method: "POST" }).catch(() => {});
   if (state.watchId) navigator.geolocation.clearWatch(state.watchId);
@@ -162,6 +167,10 @@ async function logout() {
   state.currentUserProfile = null;
   state.authToken = null;
   state.isAdmin = false;
+  state.isPartner = false;
+  state.adminPushStatus = "unknown";
+  state.adminPushToken = "";
+  state.adminPushLastError = "";
   state.courierPresenceStatus = "offline";
   state.hasCurrentPosition = false;
   state.activePins = [];
