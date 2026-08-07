@@ -602,13 +602,17 @@ function extractStickerPhone(text) {
 function extractStickerAmount(lines) {
   const currencyPattern = /(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:ლარი|ლ\b|gel\b|₾)/i;
   for (const line of lines) {
+    if (looksLikePhoneLine(line)) continue;
     const match = line.match(currencyPattern);
     if (match) return normalizeStickerMoney(match[1]);
   }
 
-  const likelyLines = lines
-    .filter((line) => /თანხ|ქეშ|გადასახდ|ფასი/i.test(line))
-    .concat(lines.slice(-4));
+  const keywordLines = lines.filter((line) => !looksLikePhoneLine(line) && /თანხ|ქეშ|გადასახდ|ფასი/i.test(line));
+  const bottomLines = lines
+    .filter((line) => !looksLikePhoneLine(line) && !looksLikeBareBuildingLine(line))
+    .slice(-3)
+    .reverse();
+  const likelyLines = keywordLines.length ? keywordLines : bottomLines;
   for (const line of likelyLines) {
     const numbers = [...line.matchAll(/\b(\d{1,3}(?:[.,]\d{1,2})?)\b/g)]
       .map((match) => normalizeStickerMoney(match[1]))
@@ -637,7 +641,8 @@ function extractStickerAddress(lines, phone, paymentAmount, fullName) {
     .map((line) => stripStickerLineNoise(line, phone, paymentAmount))
     .filter((line) => line && line !== fullName && !looksLikePhoneLine(line) && !looksLikeAmountLine(line))
     .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => countGeorgianLetters(line) >= 2 || /\d/.test(line));
+    .filter((line) => !looksLikeBareBuildingLine(line))
+    .filter((line) => scoreAddressLine(line) >= 5);
   const addressLine = candidates.sort((a, b) => scoreAddressLine(b) - scoreAddressLine(a))[0] || "";
   return normalizeStickerAddress(addressLine);
 }
@@ -660,6 +665,10 @@ function looksLikePhoneLine(line) {
 
 function looksLikeAmountLine(line) {
   return /(?:ლარი|ლ\b|gel\b|₾|თანხ|ქეშ|ფასი|გადასახდ)/i.test(String(line || ""));
+}
+
+function looksLikeBareBuildingLine(line) {
+  return /^(?:n|no\.?|№|#)?\s*\d{1,4}[a-zა-ჰ]?\s*$/i.test(String(line || "").trim());
 }
 
 function looksLikeAddressLine(line) {
