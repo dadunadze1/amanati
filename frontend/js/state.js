@@ -33,6 +33,8 @@ const state = {
   lastLocationWatchErrorToastAt: 0,
   firebaseSyncStatus: "unknown",
   lastFirebaseSyncToastAt: 0,
+  adminPushStatus: "unknown",
+  adminPushToken: "",
   selectedCourierLocationUsername: "",
   routeLayer: null,
   routePinId: null,

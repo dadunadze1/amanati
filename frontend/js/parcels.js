@@ -920,6 +920,16 @@ async function updatePinStatus(pinId, status, options = {}) {
       currentLng: state.currentPosition?.lng,
     },
   });
+  if (typeof publishAdminParcelStatusNotification === "function") {
+    await publishAdminParcelStatusNotification(pin, status, {
+      failureReason: options.failureReason || "",
+      completedAt,
+      deliveredAt,
+      failedAt,
+    }).catch((error) => {
+      console.warn("Admin push notification event failed", error);
+    });
+  }
   if (state.routePinId === pinId) clearActiveRoute();
   await refreshPins();
 }

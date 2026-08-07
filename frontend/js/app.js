@@ -113,6 +113,7 @@ function renderActions() {
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
+        ["enablePushNotifications", "ფუშები", "!", "შეტყობინებების ჩართვა"],
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
       ],
@@ -659,6 +660,7 @@ async function handleAction(action, value, sourceElement) {
     confirmParcelLocation: () => confirmParcelLocation(value),
     confirmParcelDelete: () => confirmParcelDelete(value),
     setStatus: () => updatePinStatus(value, sourceElement.dataset.status),
+    enablePushNotifications: () => requestAdminPushNotifications(),
     logout,
   };
 

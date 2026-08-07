@@ -111,6 +111,11 @@ function completeLogin(payload) {
       console.warn("Pin refresh failed", error);
       fitMapToPinsOrDefault([]);
     });
+    if (state.isAdmin && typeof initializeAdminPushNotifications === "function") {
+      initializeAdminPushNotifications().catch((error) => {
+        console.warn("Admin push initialization failed", error);
+      });
+    }
     scheduleMapInvalidateSize(0);
     scheduleMapInvalidateSize(120);
     scheduleMidnightRefresh();
