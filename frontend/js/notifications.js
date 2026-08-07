@@ -8,7 +8,7 @@ const ADMIN_NOTIFICATIONS_COLLECTION = "adminNotifications";
 
 function canUseAdminPush() {
   return Boolean(
-    state.isAdmin
+    (state.isAdmin || state.isPartner)
     && "Notification" in window
     && "serviceWorker" in navigator
     && "PushManager" in window
@@ -23,7 +23,7 @@ function setAdminPushError(message) {
 }
 
 async function initializeAdminPushNotifications() {
-  if (!state.isAdmin) return false;
+  if (!state.isAdmin && !state.isPartner) return false;
   if (!canUseAdminPush()) {
     state.adminPushStatus = "unsupported";
     return false;
@@ -36,7 +36,7 @@ async function initializeAdminPushNotifications() {
 }
 
 async function requestAdminPushNotifications() {
-  if (!state.isAdmin) return false;
+  if (!state.isAdmin && !state.isPartner) return false;
   if (!canUseAdminPush()) {
     return setAdminPushError(getAdminPushCapabilityMessage());
   }
@@ -145,6 +145,8 @@ async function saveAdminPushToken(db, token) {
     token,
     username: state.currentUser || "",
     role: state.currentUserProfile?.role || "",
+    partnerId: getCurrentPushPartnerId(),
+    partnerUsername: getCurrentPushPartnerUsername(),
     active: true,
     userAgent: navigator.userAgent || "",
     updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
@@ -170,6 +172,8 @@ async function saveAdminPushTokenFallback(db, key, token) {
         token,
         username: state.currentUser || "",
         role: state.currentUserProfile?.role || "",
+        partnerId: getCurrentPushPartnerId(),
+        partnerUsername: getCurrentPushPartnerUsername(),
         active: true,
         userAgent: navigator.userAgent || "",
         updatedAt: new Date().toISOString(),
@@ -188,6 +192,8 @@ async function saveAdminWebPushSubscription(db, subscription) {
     endpoint,
     username: state.currentUser || "",
     role: state.currentUserProfile?.role || "",
+    partnerId: getCurrentPushPartnerId(),
+    partnerUsername: getCurrentPushPartnerUsername(),
     active: true,
     userAgent: navigator.userAgent || "",
     updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
@@ -214,6 +220,8 @@ async function saveAdminWebPushSubscriptionFallback(db, key, subscription) {
         endpoint: subscription.endpoint || "",
         username: state.currentUser || "",
         role: state.currentUserProfile?.role || "",
+        partnerId: getCurrentPushPartnerId(),
+        partnerUsername: getCurrentPushPartnerUsername(),
         active: true,
         userAgent: navigator.userAgent || "",
         updatedAt: new Date().toISOString(),
@@ -263,6 +271,9 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
     address,
     fullName,
     failureReason,
+    partnerId: getParcelPushPartnerId(parcel),
+    partnerUsername: String(parcel.partnerUsername || ""),
+    partnerName: String(parcel.partnerName || ""),
     courierUsername: String(parcel.courierUsername || state.currentUser || ""),
     createdBy: state.currentUser || "",
     createdByRole: state.currentUserProfile?.role || "",
@@ -291,6 +302,20 @@ function getParcelPushAddress(parcel) {
     || [parcel?.city, parcel?.district, parcel?.streetAddress, parcel?.building].filter(Boolean).join(", ")
     || ""
   ).trim();
+}
+
+function getParcelPushPartnerId(parcel) {
+  return String(parcel?.partnerId || parcel?.partnerUsername || "").trim();
+}
+
+function getCurrentPushPartnerId() {
+  if (!state.isPartner) return "";
+  return String(state.currentUserProfile?.id || state.currentUserProfile?.username || state.currentUser || "").trim();
+}
+
+function getCurrentPushPartnerUsername() {
+  if (!state.isPartner) return "";
+  return String(state.currentUserProfile?.username || state.currentUser || "").trim();
 }
 
 function getAdminPushKey(value) {
@@ -334,7 +359,7 @@ function getAdminPushCapabilityMessage() {
   if (!("Notification" in window)) missing.push("Notification API");
   if (!("serviceWorker" in navigator)) missing.push("Service Worker");
   if (!("PushManager" in window)) missing.push("PushManager");
-  if (!state.isAdmin) missing.push("admin session");
+  if (!state.isAdmin && !state.isPartner) missing.push("admin/partner session");
   return missing.length
     ? `ამ ბრაუზერში ფუში ვერ ჩაირთო. აკლია: ${missing.join(", ")}.`
     : "ამ ბრაუზერში ფუშ შეტყობინებები არ არის ხელმისაწვდომი.";

@@ -59,15 +59,15 @@ exports.sendStaticStoreAdminNotifications = onDocumentWritten({
 });
 
 async function sendToAdminDevices(notification) {
-  const tokens = await loadAdminPushTokens();
-  const subscriptions = await loadAdminWebPushSubscriptions();
+  const tokens = await loadAdminPushTokens(notification);
+  const subscriptions = await loadAdminWebPushSubscriptions(notification);
   if (!tokens.length && !subscriptions.length) {
-    logger.warn("No admin push devices registered", { notificationId: notification.id });
+    logger.warn("No push devices registered", { notificationId: notification.id, partnerId: notification.partnerId });
     return;
   }
 
   let fcmResult = { successCount: 0, failureCount: 0 };
-  if (tokens.length && !subscriptions.length) {
+  if (tokens.length) {
     const message = {
       tokens,
       notification: {
@@ -97,8 +97,9 @@ async function sendToAdminDevices(notification) {
   }
 
   const webPushResult = await sendStandardWebPush(subscriptions, notification);
-  logger.info("Admin push sent", {
+  logger.info("Push sent", {
     notificationId: notification.id,
+    partnerId: notification.partnerId,
     fcmSuccessCount: fcmResult.successCount,
     fcmFailureCount: fcmResult.failureCount,
     webPushSuccessCount: webPushResult.successCount,
@@ -128,7 +129,7 @@ async function markAdminNotificationSent(notification) {
   }, { merge: true });
 }
 
-async function loadAdminPushTokens() {
+async function loadAdminPushTokens(notification) {
   const tokens = new Set();
 
   const collectionSnapshot = await db.collection(ADMIN_TOKEN_COLLECTION).where("active", "==", true).get().catch((error) => {
@@ -136,7 +137,9 @@ async function loadAdminPushTokens() {
     return null;
   });
   collectionSnapshot?.forEach((doc) => {
-    const token = String(doc.data()?.token || "").trim();
+    const data = doc.data() || {};
+    if (!shouldSendDeviceNotification(data, notification)) return;
+    const token = String(data.token || "").trim();
     if (token) tokens.add(token);
   });
 
@@ -146,6 +149,7 @@ async function loadAdminPushTokens() {
   });
   const fallbackTokens = staticStore?.data()?.adminPushTokens || {};
   Object.values(fallbackTokens).forEach((item) => {
+    if (!shouldSendDeviceNotification(item || {}, notification)) return;
     const token = String(item?.token || "").trim();
     if (token && item?.active !== false) tokens.add(token);
   });
@@ -153,7 +157,7 @@ async function loadAdminPushTokens() {
   return Array.from(tokens);
 }
 
-async function loadAdminWebPushSubscriptions() {
+async function loadAdminWebPushSubscriptions(notification) {
   const subscriptions = new Map();
 
   const collectionSnapshot = await db.collection(ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION).where("active", "==", true).get().catch((error) => {
@@ -161,7 +165,9 @@ async function loadAdminWebPushSubscriptions() {
     return null;
   });
   collectionSnapshot?.forEach((doc) => {
-    const subscription = doc.data()?.subscription;
+    const data = doc.data() || {};
+    if (!shouldSendDeviceNotification(data, notification)) return;
+    const subscription = data.subscription;
     const endpoint = String(subscription?.endpoint || "").trim();
     if (endpoint) subscriptions.set(endpoint, subscription);
   });
@@ -172,12 +178,37 @@ async function loadAdminWebPushSubscriptions() {
   });
   const fallbackSubscriptions = staticStore?.data()?.adminWebPushSubscriptions || {};
   Object.values(fallbackSubscriptions).forEach((item) => {
+    if (!shouldSendDeviceNotification(item || {}, notification)) return;
     const subscription = item?.subscription;
     const endpoint = String(subscription?.endpoint || "").trim();
     if (endpoint && item?.active !== false) subscriptions.set(endpoint, subscription);
   });
 
   return Array.from(subscriptions.values());
+}
+
+function shouldSendDeviceNotification(device, notification) {
+  if (!device || device.active === false) return false;
+
+  const role = normalizeRecipientKey(device.role);
+  const devicePartnerId = normalizeRecipientKey(device.partnerId);
+  const devicePartnerUsername = normalizeRecipientKey(device.partnerUsername || device.username);
+  const notificationPartnerId = normalizeRecipientKey(notification.partnerId);
+  const notificationPartnerUsername = normalizeRecipientKey(notification.partnerUsername);
+  const isPartnerDevice = role === "partner" || Boolean(devicePartnerId);
+
+  if (isPartnerDevice) {
+    return Boolean(
+      notificationPartnerId
+      && (
+        devicePartnerId === notificationPartnerId
+        || devicePartnerUsername === notificationPartnerId
+        || (notificationPartnerUsername && devicePartnerUsername === notificationPartnerUsername)
+      )
+    );
+  }
+
+  return role === "admin" || !role;
 }
 
 async function sendStandardWebPush(subscriptions, notification) {
@@ -229,6 +260,9 @@ function buildPushData(notification) {
     address: notification.address,
     fullName: notification.fullName,
     failureReason: notification.failureReason,
+    partnerId: notification.partnerId,
+    partnerUsername: notification.partnerUsername,
+    partnerName: notification.partnerName,
     url: APP_LINK,
   };
 }
@@ -270,6 +304,9 @@ function normalizeNotification(raw, id) {
   const address = String(raw.address || "").trim();
   const fullName = String(raw.fullName || "").trim();
   const failureReason = String(raw.failureReason || "").trim();
+  const partnerId = String(raw.partnerId || "").trim();
+  const partnerUsername = String(raw.partnerUsername || "").trim();
+  const partnerName = String(raw.partnerName || "").trim();
   const title = String(raw.title || (status === "failed" ? "შეკვეთა ვერ ჩაბარდა" : "შეკვეთა ჩაბარდა")).trim();
   const details = String(raw.body || [address, fullName].filter(Boolean).join(", ") || "შეკვეთის სტატუსი შეიცვალა").trim();
   const body = status === "failed" && failureReason && !details.includes(failureReason)
@@ -286,7 +323,14 @@ function normalizeNotification(raw, id) {
     address,
     fullName,
     failureReason,
+    partnerId,
+    partnerUsername,
+    partnerName,
   };
+}
+
+function normalizeRecipientKey(value) {
+  return String(value || "").trim().toLocaleLowerCase();
 }
 
 function getTokenKey(token) {

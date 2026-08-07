@@ -111,9 +111,9 @@ function completeLogin(payload) {
       console.warn("Pin refresh failed", error);
       fitMapToPinsOrDefault([]);
     });
-    if (state.isAdmin && typeof initializeAdminPushNotifications === "function") {
+    if ((state.isAdmin || state.isPartner) && typeof initializeAdminPushNotifications === "function") {
       initializeAdminPushNotifications().catch((error) => {
-        console.warn("Admin push initialization failed", error);
+        console.warn("Push initialization failed", error);
       });
     }
     scheduleMapInvalidateSize(0);

@@ -121,6 +121,7 @@ function renderActions() {
   ];
   const partnerActions = [
     ["partnerNewOrder", "ახალი", "+"],
+    ["enablePushNotifications", "ფუშები", "!"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
