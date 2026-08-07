@@ -397,6 +397,11 @@ async function savePartnerOrder() {
       method: "POST",
       body: { city, district: finalDistrict, streetAddress: street, address, fullAddress: address, fullName, phone, paymentAmount, tariffId },
     });
+    if (typeof publishParcelCreatedNotification === "function") {
+      await publishParcelCreatedNotification(payload?.parcel).catch((error) => {
+        console.warn("Partner parcel push notification failed", error);
+      });
+    }
     closeDialog();
     await refreshPins();
     const assigned = payload?.parcel?.courierUsername;
@@ -710,7 +715,14 @@ async function savePartnerOrderAssign(parcelId) {
     return;
   }
   try {
+    const orders = state.activePins.length ? state.activePins : (await api("/api/parcels")).parcels;
+    const order = orders.find((item) => item.id === parcelId);
     await api("/api/parcels/assign", { method: "PATCH", body: { parcelIds: [parcelId], courierUsername } });
+    if (typeof publishParcelAssignedNotification === "function") {
+      await publishParcelAssignedNotification({ ...order, courierUsername }, courierUsername).catch((error) => {
+        console.warn("Courier assignment push notification failed", error);
+      });
+    }
     showToast("კურიერი მიება შეკვეთას.");
     await openAdminPartnerOrders();
     await refreshPins();

@@ -111,7 +111,7 @@ function completeLogin(payload) {
       console.warn("Pin refresh failed", error);
       fitMapToPinsOrDefault([]);
     });
-    if ((state.isAdmin || state.isPartner) && typeof activatePushForAuthorizedUser === "function") {
+    if (state.currentUser && typeof activatePushForAuthorizedUser === "function") {
       activatePushForAuthorizedUser().catch((error) => {
         console.warn("Push initialization failed", error);
       });
@@ -151,7 +151,7 @@ function switchModal(target) {
 
 
 async function logout() {
-  if ((state.isAdmin || state.isPartner) && typeof deactivatePushForCurrentDevice === "function") {
+  if (state.currentUser && typeof deactivatePushForCurrentDevice === "function") {
     await deactivatePushForCurrentDevice().catch((error) => {
       console.warn("Push deactivation failed", error);
     });

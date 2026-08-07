@@ -191,13 +191,25 @@ function shouldSendDeviceNotification(device, notification) {
   if (!device || device.active === false) return false;
 
   const role = normalizeRecipientKey(device.role);
+  const recipientRoles = Array.isArray(notification.recipientRoles)
+    ? notification.recipientRoles.map(normalizeRecipientKey).filter(Boolean)
+    : [];
   const devicePartnerId = normalizeRecipientKey(device.partnerId);
   const devicePartnerUsername = normalizeRecipientKey(device.partnerUsername || device.username);
   const notificationPartnerId = normalizeRecipientKey(notification.partnerId);
   const notificationPartnerUsername = normalizeRecipientKey(notification.partnerUsername);
+  const deviceCourierUsername = normalizeRecipientKey(device.username);
+  const notificationCourierUsername = normalizeRecipientKey(notification.courierUsername);
   const isPartnerDevice = role === "partner" || Boolean(devicePartnerId);
+  const isCourierDevice = role === "courier";
+
+  if (isCourierDevice) {
+    if (recipientRoles.length && !recipientRoles.includes("courier")) return false;
+    return Boolean(notificationCourierUsername && deviceCourierUsername === notificationCourierUsername);
+  }
 
   if (isPartnerDevice) {
+    if (recipientRoles.length && !recipientRoles.includes("partner")) return false;
     return Boolean(
       notificationPartnerId
       && (
@@ -208,7 +220,11 @@ function shouldSendDeviceNotification(device, notification) {
     );
   }
 
-  return role === "admin" || !role;
+  if (role === "admin" || !role) {
+    return !recipientRoles.length || recipientRoles.includes("admin");
+  }
+
+  return false;
 }
 
 async function sendStandardWebPush(subscriptions, notification) {
@@ -263,6 +279,8 @@ function buildPushData(notification) {
     partnerId: notification.partnerId,
     partnerUsername: notification.partnerUsername,
     partnerName: notification.partnerName,
+    courierUsername: notification.courierUsername,
+    recipientRoles: Array.isArray(notification.recipientRoles) ? notification.recipientRoles.join(",") : "",
     url: APP_LINK,
   };
 }
@@ -299,7 +317,7 @@ async function deactivateInvalidWebPushSubscriptions(endpoints) {
 function normalizeNotification(raw, id) {
   if (!raw || typeof raw !== "object") return null;
   const status = String(raw.status || "");
-  if (!["delivered", "failed"].includes(status)) return null;
+  if (!["delivered", "failed", "created", "assigned"].includes(status)) return null;
 
   const address = String(raw.address || "").trim();
   const fullName = String(raw.fullName || "").trim();
@@ -307,7 +325,11 @@ function normalizeNotification(raw, id) {
   const partnerId = String(raw.partnerId || "").trim();
   const partnerUsername = String(raw.partnerUsername || "").trim();
   const partnerName = String(raw.partnerName || "").trim();
-  const title = String(raw.title || (status === "failed" ? "შეკვეთა ვერ ჩაბარდა" : "შეკვეთა ჩაბარდა")).trim();
+  const courierUsername = String(raw.courierUsername || "").trim();
+  const recipientRoles = Array.isArray(raw.recipientRoles)
+    ? raw.recipientRoles.map((role) => String(role || "").trim()).filter(Boolean)
+    : [];
+  const title = String(raw.title || getDefaultNotificationTitle(status)).trim();
   const details = String(raw.body || [address, fullName].filter(Boolean).join(", ") || "შეკვეთის სტატუსი შეიცვალა").trim();
   const body = status === "failed" && failureReason && !details.includes(failureReason)
     ? `${details}\nმიზეზი: ${failureReason}`
@@ -326,7 +348,16 @@ function normalizeNotification(raw, id) {
     partnerId,
     partnerUsername,
     partnerName,
+    courierUsername,
+    recipientRoles,
   };
+}
+
+function getDefaultNotificationTitle(status) {
+  if (status === "failed") return "შეკვეთა ვერ ჩაბარდა";
+  if (status === "created") return "ახალი ამანათი";
+  if (status === "assigned") return "ახალი ამანათი გაქვთ";
+  return "შეკვეთა ჩაბარდა";
 }
 
 function normalizeRecipientKey(value) {

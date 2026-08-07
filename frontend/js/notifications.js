@@ -8,11 +8,15 @@ const ADMIN_NOTIFICATIONS_COLLECTION = "adminNotifications";
 
 function canUseAdminPush() {
   return Boolean(
-    (state.isAdmin || state.isPartner)
+    canUseAuthorizedPushSession()
     && "Notification" in window
     && "serviceWorker" in navigator
     && "PushManager" in window
   );
+}
+
+function canUseAuthorizedPushSession() {
+  return Boolean(state.currentUser && ["admin", "partner", "courier"].includes(state.currentUserProfile?.role || ""));
 }
 
 function setAdminPushError(message) {
@@ -23,7 +27,7 @@ function setAdminPushError(message) {
 }
 
 async function initializeAdminPushNotifications() {
-  if (!state.isAdmin && !state.isPartner) return false;
+  if (!canUseAuthorizedPushSession()) return false;
   if (!canUseAdminPush()) {
     state.adminPushStatus = "unsupported";
     return false;
@@ -36,7 +40,7 @@ async function initializeAdminPushNotifications() {
 }
 
 async function activatePushForAuthorizedUser() {
-  if (!state.isAdmin && !state.isPartner) return false;
+  if (!canUseAuthorizedPushSession()) return false;
   if (!canUseAdminPush()) {
     state.adminPushStatus = "unsupported";
     return false;
@@ -50,7 +54,7 @@ async function activatePushForAuthorizedUser() {
 }
 
 async function requestAdminPushNotifications(options = {}) {
-  if (!state.isAdmin && !state.isPartner) return false;
+  if (!canUseAuthorizedPushSession()) return false;
   if (!canUseAdminPush()) {
     return options.silent ? false : setAdminPushError(getAdminPushCapabilityMessage());
   }
@@ -347,6 +351,36 @@ async function publishAdminParcelStatusNotification(parcel, status, options = {}
   }
 }
 
+async function publishParcelCreatedNotification(parcel) {
+  if (!state.isPartner || !parcel) return false;
+  const notification = buildParcelCreatedNotification(parcel);
+  return publishPushNotification(notification);
+}
+
+async function publishParcelAssignedNotification(parcel, courierUsername) {
+  if (!state.isAdmin || !parcel || !courierUsername) return false;
+  const notification = buildParcelAssignedNotification(parcel, courierUsername);
+  return publishPushNotification(notification);
+}
+
+async function publishPushNotification(notification) {
+  if (!notification) return false;
+  const db = await initializeFirebaseStorage();
+  if (!db) return false;
+
+  try {
+    await db.collection(ADMIN_NOTIFICATIONS_COLLECTION).add({
+      ...notification,
+      createdAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  } catch (error) {
+    console.warn("[push] notification collection write failed; using static store fallback", error);
+    await publishAdminParcelStatusNotificationFallback(db, notification);
+    return true;
+  }
+}
+
 function buildAdminParcelStatusNotification(parcel, status, options = {}) {
   const address = getParcelPushAddress(parcel);
   const fullName = String(parcel.fullName || parcel.customerName || parcel.name || "").trim();
@@ -360,6 +394,7 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
   return {
     type: isFailed ? "parcel_failed" : "parcel_delivered",
     status,
+    recipientRoles: getParcelPushPartnerId(parcel) ? ["admin", "partner"] : ["admin"],
     title,
     body,
     parcelId: String(parcel.id || ""),
@@ -374,6 +409,61 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
     createdByRole: state.currentUserProfile?.role || "",
     pageUrl: "./",
     eventKey: `${parcel.id || "parcel"}-${status}-${statusTime || "now"}`,
+  };
+}
+
+function buildParcelCreatedNotification(parcel) {
+  const address = getParcelPushAddress(parcel);
+  const fullName = String(parcel.fullName || parcel.customerName || parcel.name || "").trim();
+  const partnerName = String(parcel.partnerName || state.currentUserProfile?.companyName || state.currentUserProfile?.contactPerson || state.currentUser || "").trim();
+  const details = [address, fullName].filter(Boolean).join(", ") || "ახალი ამანათი დაემატა";
+  const courierUsername = String(parcel.courierUsername || "").trim();
+  const recipientRoles = courierUsername ? ["admin", "courier"] : ["admin"];
+
+  return {
+    type: "parcel_created",
+    status: "created",
+    recipientRoles,
+    title: "პარტნიორმა ახალი ამანათი დაამატა",
+    body: `${partnerName || "პარტნიორი"} - ${details}`,
+    parcelId: String(parcel.id || ""),
+    address,
+    fullName,
+    failureReason: "",
+    partnerId: getParcelPushPartnerId(parcel) || getCurrentPushPartnerId(),
+    partnerUsername: String(parcel.partnerUsername || state.currentUserProfile?.username || state.currentUser || ""),
+    partnerName,
+    courierUsername,
+    createdBy: state.currentUser || "",
+    createdByRole: state.currentUserProfile?.role || "",
+    pageUrl: "./",
+    eventKey: `${parcel.id || "parcel"}-created-${courierUsername || "admin"}-${parcel.createdAt || "now"}`,
+  };
+}
+
+function buildParcelAssignedNotification(parcel, courierUsername) {
+  const address = getParcelPushAddress(parcel);
+  const fullName = String(parcel.fullName || parcel.customerName || parcel.name || "").trim();
+  const details = [address, fullName].filter(Boolean).join(", ") || "ახალი ამანათი გაქვთ";
+
+  return {
+    type: "parcel_assigned",
+    status: "assigned",
+    recipientRoles: ["courier"],
+    title: "ახალი ამანათი გაქვთ",
+    body: details,
+    parcelId: String(parcel.id || ""),
+    address,
+    fullName,
+    failureReason: "",
+    partnerId: getParcelPushPartnerId(parcel),
+    partnerUsername: String(parcel.partnerUsername || ""),
+    partnerName: String(parcel.partnerName || ""),
+    courierUsername: String(courierUsername || parcel.courierUsername || ""),
+    createdBy: state.currentUser || "",
+    createdByRole: state.currentUserProfile?.role || "",
+    pageUrl: "./",
+    eventKey: `${parcel.id || "parcel"}-assigned-${courierUsername || parcel.courierUsername || "courier"}`,
   };
 }
 
@@ -454,7 +544,7 @@ function getAdminPushCapabilityMessage() {
   if (!("Notification" in window)) missing.push("Notification API");
   if (!("serviceWorker" in navigator)) missing.push("Service Worker");
   if (!("PushManager" in window)) missing.push("PushManager");
-  if (!state.isAdmin && !state.isPartner) missing.push("admin/partner session");
+  if (!canUseAuthorizedPushSession()) missing.push("authorized session");
   return missing.length
     ? `ამ ბრაუზერში ფუში ვერ ჩაირთო. აკლია: ${missing.join(", ")}.`
     : "ამ ბრაუზერში ფუშ შეტყობინებები არ არის ხელმისაწვდომი.";

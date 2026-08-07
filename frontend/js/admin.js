@@ -954,7 +954,15 @@ async function assignSelectedPins() {
     return;
   }
   try {
+    const selectedPins = state.activePins.filter((pin) => parcelIds.includes(pin.id));
     await api("/api/parcels/assign", { method: "PATCH", body: { parcelIds, courierUsername } });
+    if (typeof publishParcelAssignedNotification === "function") {
+      await Promise.all(selectedPins.map((pin) => (
+        publishParcelAssignedNotification({ ...pin, courierUsername }, courierUsername).catch((error) => {
+          console.warn("Courier assignment push notification failed", error);
+        })
+      )));
+    }
     showToast("პინები მიება კურიერს.");
     await openAdminMap();
   } catch (error) {
