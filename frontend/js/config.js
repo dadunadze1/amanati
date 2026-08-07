@@ -7,6 +7,10 @@ const CONFIG = {
   deliveryTotalPrice: 6,
   courierDeliveryPay: 3.5,
   adminDeliveryProfit: 2.5,
+  defaultTariffs: {
+    city: { id: "city", label: "თბილისი", partnerPrice: 6, courierPay: 3.5 },
+    suburbs: { id: "suburbs", label: "შემოგარენი", partnerPrice: 8, courierPay: 5.5 },
+  },
   useZonesApi: false,
   useUserZoneApi: true,
   useReverseGeocoding: true,

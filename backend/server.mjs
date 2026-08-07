@@ -39,6 +39,10 @@ const FINANCE = {
   courierDeliveryPay: 3.5,
   adminDeliveryProfit: 2.5,
 };
+const DEFAULT_TARIFFS = {
+  city: { id: "city", label: "თბილისი", partnerPrice: 6, courierPay: 3.5 },
+  suburbs: { id: "suburbs", label: "შემოგარენი", partnerPrice: 8, courierPay: 5.5 },
+};
 const DATA_RETENTION_MONTHS = 8;
 const PARTNER_ORDER_RETENTION_MONTHS = 1;
 
@@ -182,13 +186,24 @@ function publicParcel(db, parcel) {
   const courier = parcel.courierUsername ? findUser(db, parcel.courierUsername) : null;
   const paymentAmount = getParcelPaymentAmount(parcel);
   const isDelivered = parcel.status === "delivered";
+  const finance = isDelivered
+    ? getParcelFinanceSnapshot(db, parcel)
+    : {
+        tariffId: getParcelTariffId(parcel),
+        tariffLabel: getParcelTariff(db, parcel).label,
+        deliveryTotalPrice: hasStoredMoney(parcel.deliveryTotalPrice) ? storedMoney(parcel.deliveryTotalPrice) : 0,
+        courierPay: hasStoredMoney(parcel.courierPay) ? storedMoney(parcel.courierPay) : 0,
+        adminProfit: hasStoredMoney(parcel.adminProfit) ? storedMoney(parcel.adminProfit) : 0,
+      };
   return {
     ...parcel,
     paymentAmount,
     cashAmount: paymentAmount,
-    deliveryTotalPrice: isDelivered ? storedMoney(parcel.deliveryTotalPrice) || FINANCE.deliveryTotalPrice : storedMoney(parcel.deliveryTotalPrice),
-    courierPay: isDelivered ? storedMoney(parcel.courierPay) || FINANCE.courierDeliveryPay : storedMoney(parcel.courierPay),
-    adminProfit: isDelivered ? storedMoney(parcel.adminProfit) || FINANCE.adminDeliveryProfit : storedMoney(parcel.adminProfit),
+    tariffId: finance.tariffId,
+    tariffLabel: finance.tariffLabel,
+    deliveryTotalPrice: finance.deliveryTotalPrice,
+    courierPay: finance.courierPay,
+    adminProfit: finance.adminProfit,
     zoneName: parcel.zoneName || getZoneName(parcel.zoneId),
     autoAssigned: Boolean(parcel.autoAssigned),
     deliveredAt: parcel.deliveredAt || (parcel.status === "delivered" ? parcel.completedAt || "" : ""),
@@ -252,6 +267,78 @@ function getDailyBalanceLedger(db) {
 function setDailyBalanceLedger(db, entries) {
   db.settings = db.settings && typeof db.settings === "object" ? db.settings : {};
   db.settings.dailyBalanceLedger = Array.isArray(entries) ? entries : [];
+}
+
+function cleanTariffMoney(value, fallback = 0) {
+  if (value === undefined || value === null || value === "") return storedMoney(fallback);
+  const normalized = String(value).trim().replace(",", ".").replace(/[^\d.]/g, "");
+  if (!normalized) return storedMoney(fallback);
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount) || amount < 0) throw httpError(400, "ტარიფი უნდა იყოს ნული ან მეტი.");
+  return storedMoney(amount);
+}
+
+function normalizeTariffItem(input = {}, fallback = DEFAULT_TARIFFS.city) {
+  input = input && typeof input === "object" ? input : {};
+  const partnerPrice = cleanTariffMoney(input.partnerPrice ?? input.deliveryTotalPrice ?? input.totalPrice, fallback.partnerPrice);
+  const courierPay = cleanTariffMoney(input.courierPay ?? input.courierDeliveryPay, fallback.courierPay);
+  return {
+    id: fallback.id,
+    label: fallback.label,
+    partnerPrice,
+    courierPay,
+    companyProfit: storedMoney(Math.max(0, partnerPrice - courierPay)),
+  };
+}
+
+function normalizeTariffSettings(settings = {}) {
+  const tariffs = settings.tariffs && typeof settings.tariffs === "object" ? settings.tariffs : settings;
+  return {
+    city: normalizeTariffItem(tariffs.city, DEFAULT_TARIFFS.city),
+    suburbs: normalizeTariffItem(tariffs.suburbs, DEFAULT_TARIFFS.suburbs),
+  };
+}
+
+function getTariffSettings(db) {
+  const settings = db?.settings && typeof db.settings === "object" ? db.settings : {};
+  return normalizeTariffSettings(settings.tariffs);
+}
+
+function setTariffSettings(db, tariffs, username = "") {
+  db.settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+  db.settings.tariffs = normalizeTariffSettings(tariffs);
+  db.settings.tariffsUpdatedAt = new Date().toISOString();
+  db.settings.tariffsUpdatedBy = username;
+  return db.settings.tariffs;
+}
+
+function hasStoredMoney(value) {
+  return value !== undefined && value !== null && value !== "";
+}
+
+function getParcelTariffId(parcel = {}) {
+  const explicit = String(parcel.tariffId || parcel.tariffType || parcel.deliveryTariffId || "").trim();
+  if (["city", "suburbs"].includes(explicit)) return explicit;
+  return parcel.zoneId ? "city" : "suburbs";
+}
+
+function getParcelTariff(db, parcel = {}) {
+  const tariffs = getTariffSettings(db);
+  return tariffs[getParcelTariffId(parcel)] || tariffs.city;
+}
+
+function getParcelFinanceSnapshot(db, parcel = {}) {
+  const tariff = getParcelTariff(db, parcel);
+  const deliveryTotalPrice = hasStoredMoney(parcel.deliveryTotalPrice) ? storedMoney(parcel.deliveryTotalPrice) : tariff.partnerPrice;
+  const courierPay = hasStoredMoney(parcel.courierPay) ? storedMoney(parcel.courierPay) : tariff.courierPay;
+  const adminProfit = hasStoredMoney(parcel.adminProfit) ? storedMoney(parcel.adminProfit) : storedMoney(Math.max(0, deliveryTotalPrice - courierPay));
+  return {
+    tariffId: getParcelTariffId(parcel),
+    tariffLabel: tariff.label,
+    deliveryTotalPrice,
+    courierPay,
+    adminProfit,
+  };
 }
 
 function partnerCashIdentity(user = {}) {
@@ -810,14 +897,17 @@ function getParcelPaymentAmount(parcel) {
   return storedMoney(parcel?.paymentAmount ?? parcel?.cashAmount ?? parcel?.payment ?? parcel?.amount ?? parcel?.price ?? parcel?.codAmount);
 }
 
-function applyDeliveredFinance(parcel) {
+function applyDeliveredFinance(db, parcel) {
   if (!parcel || parcel.status !== "delivered") return;
   const paymentAmount = getParcelPaymentAmount(parcel);
+  const finance = getParcelFinanceSnapshot(db, parcel);
   parcel.paymentAmount = paymentAmount;
   parcel.cashAmount = paymentAmount;
-  parcel.deliveryTotalPrice = storedMoney(parcel.deliveryTotalPrice) || FINANCE.deliveryTotalPrice;
-  parcel.courierPay = storedMoney(parcel.courierPay) || FINANCE.courierDeliveryPay;
-  parcel.adminProfit = storedMoney(parcel.adminProfit) || FINANCE.adminDeliveryProfit;
+  parcel.tariffId = finance.tariffId;
+  parcel.tariffLabel = finance.tariffLabel;
+  parcel.deliveryTotalPrice = finance.deliveryTotalPrice;
+  parcel.courierPay = finance.courierPay;
+  parcel.adminProfit = finance.adminProfit;
 }
 
 function isCoordinateLabel(value) {
@@ -957,6 +1047,21 @@ async function handleApi(request, response, url) {
         .filter((user) => user.role === "courier" && user.status === "active" && !getUserZoneIds(user).length)
         .map(publicUser),
     });
+    return;
+  }
+
+  if (method === "GET" && path === "/api/tariffs") {
+    requireAdmin(request);
+    sendJson(response, 200, { tariffs: getTariffSettings(db) });
+    return;
+  }
+
+  if (method === "PUT" && path === "/api/tariffs") {
+    const session = requireAdmin(request);
+    const body = await readJsonBody(request);
+    const tariffs = setTariffSettings(db, body.tariffs || body, session.username);
+    await writeDb(db);
+    sendJson(response, 200, { tariffs });
     return;
   }
 
@@ -1336,6 +1441,8 @@ async function handleApi(request, response, url) {
     }
 
     const now = new Date().toISOString();
+    const tariffId = ["city", "suburbs"].includes(String(body.tariffId || body.tariffType || "")) ? String(body.tariffId || body.tariffType) : detectedZone ? "city" : "suburbs";
+    const tariff = getTariffSettings(db)[tariffId] || getTariffSettings(db).city;
     const locationAccuracy = hasCoords
       ? session.role === "partner" ? "approximate" : String(body.locationAccuracy || "confirmed")
       : "missing";
@@ -1372,6 +1479,8 @@ async function handleApi(request, response, url) {
       deliveryTotalPrice: 0,
       courierPay: 0,
       adminProfit: 0,
+      tariffId,
+      tariffLabel: tariff.label,
       zoneId: detectedZone?.id || "",
       zoneName: detectedZone?.name || "",
       autoAssigned,
@@ -1462,7 +1571,7 @@ async function handleApi(request, response, url) {
       parcel.deliveredAt = now;
       parcel.failedAt = "";
       parcel.failureReason = "";
-      applyDeliveredFinance(parcel);
+      applyDeliveredFinance(db, parcel);
     }
     if (status === "failed") {
       parcel.failedAt = now;
@@ -1502,7 +1611,7 @@ async function handleApi(request, response, url) {
     let archived = 0;
     db.parcels.forEach((parcel) => {
       if (!parcel.archivedAt && !isDeletedParcel(parcel) && isCompletedParcel(parcel) && (!parcelIds || parcelIds.has(parcel.id)) && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))) {
-        applyDeliveredFinance(parcel);
+        applyDeliveredFinance(db, parcel);
         parcel.archivedAt = now;
         if (body.autoClosedDate) {
           parcel.autoClosedAt = now;

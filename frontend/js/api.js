@@ -226,20 +226,76 @@ function clearLegacyStaticBootstrapStores() {
   });
 }
 
-function normalizeStaticParcelFinance(parcel) {
+function normalizeStaticParcelFinance(parcel, store = loadStaticBootstrap.cache) {
   if (!parcel || typeof parcel !== "object") return parcel;
   const paymentAmount = getStaticParcelPaymentAmount(parcel);
   const isDelivered = parcel.status === "delivered";
-  const deliveryTotalPrice = getStaticMoney(parcel.deliveryTotalPrice);
-  const courierPay = getStaticMoney(parcel.courierPay);
-  const adminProfit = getStaticMoney(parcel.adminProfit);
+  const finance = getStaticParcelFinanceSnapshot(parcel, store);
   return {
     ...parcel,
     paymentAmount,
     cashAmount: paymentAmount,
-    deliveryTotalPrice: isDelivered ? deliveryTotalPrice || CONFIG.deliveryTotalPrice : deliveryTotalPrice,
-    courierPay: isDelivered ? courierPay || CONFIG.courierDeliveryPay : courierPay,
-    adminProfit: isDelivered ? adminProfit || CONFIG.adminDeliveryProfit : adminProfit,
+    tariffId: finance.tariffId,
+    tariffLabel: finance.tariffLabel,
+    deliveryTotalPrice: isDelivered ? finance.deliveryTotalPrice : getStaticOptionalMoney(parcel.deliveryTotalPrice),
+    courierPay: isDelivered ? finance.courierPay : getStaticOptionalMoney(parcel.courierPay),
+    adminProfit: isDelivered ? finance.adminProfit : getStaticOptionalMoney(parcel.adminProfit),
+  };
+}
+
+function getStaticDefaultTariffs() {
+  const defaults = CONFIG.defaultTariffs || {};
+  return {
+    city: normalizeStaticTariffItem(defaults.city, { id: "city", label: "თბილისი", partnerPrice: 6, courierPay: 3.5 }),
+    suburbs: normalizeStaticTariffItem(defaults.suburbs, { id: "suburbs", label: "შემოგარენი", partnerPrice: 8, courierPay: 5.5 }),
+  };
+}
+
+function normalizeStaticTariffItem(input = {}, fallback) {
+  input = input && typeof input === "object" ? input : {};
+  const partnerPrice = getStaticMoney(input.partnerPrice ?? input.deliveryTotalPrice ?? fallback.partnerPrice);
+  const courierPay = getStaticMoney(input.courierPay ?? input.courierDeliveryPay ?? fallback.courierPay);
+  return {
+    id: fallback.id,
+    label: fallback.label,
+    partnerPrice,
+    courierPay,
+    companyProfit: getStaticMoney(Math.max(0, partnerPrice - courierPay)),
+  };
+}
+
+function normalizeStaticTariffSettings(settings = {}) {
+  const values = settings.tariffs && typeof settings.tariffs === "object" ? settings.tariffs : settings;
+  const defaults = getStaticDefaultTariffs();
+  return {
+    city: normalizeStaticTariffItem(values.city, defaults.city),
+    suburbs: normalizeStaticTariffItem(values.suburbs, defaults.suburbs),
+  };
+}
+
+function getStaticTariffSettings(store = loadStaticBootstrap.cache) {
+  return normalizeStaticTariffSettings(store?.settings?.tariffs);
+}
+
+function getStaticParcelTariffId(parcel = {}) {
+  const explicit = String(parcel.tariffId || parcel.tariffType || parcel.deliveryTariffId || "").trim();
+  if (["city", "suburbs"].includes(explicit)) return explicit;
+  return parcel.zoneId ? "city" : "suburbs";
+}
+
+function getStaticParcelFinanceSnapshot(parcel = {}, store = loadStaticBootstrap.cache) {
+  const tariffs = getStaticTariffSettings(store);
+  const tariffId = getStaticParcelTariffId(parcel);
+  const tariff = tariffs[tariffId] || tariffs.city;
+  const deliveryTotalPrice = hasStaticMoneyValue(parcel.deliveryTotalPrice) ? getStaticMoney(parcel.deliveryTotalPrice) : tariff.partnerPrice;
+  const courierPay = hasStaticMoneyValue(parcel.courierPay) ? getStaticMoney(parcel.courierPay) : tariff.courierPay;
+  const adminProfit = hasStaticMoneyValue(parcel.adminProfit) ? getStaticMoney(parcel.adminProfit) : getStaticMoney(Math.max(0, deliveryTotalPrice - courierPay));
+  return {
+    tariffId,
+    tariffLabel: tariff.label,
+    deliveryTotalPrice,
+    courierPay,
+    adminProfit,
   };
 }
 
@@ -247,6 +303,14 @@ function getStaticParcelPaymentAmount(parcel) {
   const value = parcel?.paymentAmount ?? parcel?.cashAmount ?? parcel?.payment ?? parcel?.amount ?? parcel?.price ?? parcel?.codAmount ?? 0;
   const amount = getStaticMoney(value);
   return amount > 0 ? amount : 0;
+}
+
+function hasStaticMoneyValue(value) {
+  return value !== undefined && value !== null && value !== "";
+}
+
+function getStaticOptionalMoney(value) {
+  return hasStaticMoneyValue(value) ? getStaticMoney(value) : 0;
 }
 
 function getStaticMoney(value) {
@@ -430,7 +494,7 @@ function getStaticZoneNames(zoneIds) {
 
 function publicStaticParcel(store, parcel) {
   const courier = store.users.find((user) => normalizeUsername(user.username) === normalizeUsername(parcel.courierUsername));
-  const normalizedParcel = normalizeStaticParcelFinance(parcel);
+  const normalizedParcel = normalizeStaticParcelFinance(parcel, store);
   return {
     ...normalizedParcel,
     status: normalizedParcel.status || "pending",
@@ -803,6 +867,21 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/zones") return { zones: store.zones };
 
+  if (method === "GET" && apiPath === "/api/tariffs") {
+    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია ტარიფების ნახვა.");
+    return { tariffs: getStaticTariffSettings(store) };
+  }
+
+  if (method === "PUT" && apiPath === "/api/tariffs") {
+    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია ტარიფების შეცვლა.");
+    store.settings = store.settings && typeof store.settings === "object" ? store.settings : {};
+    store.settings.tariffs = normalizeStaticTariffSettings(body.tariffs || body);
+    store.settings.tariffsUpdatedAt = new Date().toISOString();
+    store.settings.tariffsUpdatedBy = state.currentUser || "";
+    saveStaticBootstrap();
+    return { tariffs: store.settings.tariffs };
+  }
+
   if (method === "GET" && apiPath === "/api/parcels") {
     const courier = url.searchParams.get("courier") || "";
     const partnerId = url.searchParams.get("partnerId") || "";
@@ -1005,6 +1084,8 @@ async function staticApi(path, options = {}) {
       ? await applyAutoAssignByZone({ lat: latValue, lng: lngValue, courierUsername: body.courierUsername || "" })
       : {};
     const assignedCourierUsername = body.courierUsername || assignment.courierUsername || "";
+    const tariffId = ["city", "suburbs"].includes(String(body.tariffId || body.tariffType || "")) ? String(body.tariffId || body.tariffType) : (body.zoneId || assignment.zoneId ? "city" : "suburbs");
+    const tariff = getStaticTariffSettings(store)[tariffId] || getStaticTariffSettings(store).city;
     const parcel = {
       id: `parcel-${Date.now()}`,
       courierUsername: assignedCourierUsername,
@@ -1033,6 +1114,8 @@ async function staticApi(path, options = {}) {
       codAmount: Number(body.paymentAmount ?? body.payment ?? body.cashAmount ?? 0),
       zoneId: body.zoneId || assignment.zoneId || "",
       zoneName: body.zoneName || assignment.zoneName || "",
+      tariffId,
+      tariffLabel: tariff.label,
       autoAssigned: Boolean(assignment.autoAssigned || body.autoAssigned),
       status: "pending",
       createdAt: now,
@@ -1071,7 +1154,7 @@ async function staticApi(path, options = {}) {
       parcel.deliveredAt = body.deliveredAt || parcel.completedAt;
       parcel.failedAt = "";
       parcel.failureReason = "";
-      Object.assign(parcel, normalizeStaticParcelFinance(parcel));
+      Object.assign(parcel, normalizeStaticParcelFinance(parcel, store));
     }
     if (parcel.status === "failed") {
       parcel.completedAt = body.completedAt || now;
@@ -1124,7 +1207,7 @@ async function staticApi(path, options = {}) {
         parcel.updatedAt = now;
         parcel.completedAt = parcel.completedAt || parcel.deliveredAt || now;
         parcel.deliveredAt = parcel.deliveredAt || parcel.completedAt;
-        Object.assign(parcel, normalizeStaticParcelFinance(parcel));
+        Object.assign(parcel, normalizeStaticParcelFinance(parcel, store));
         archived += 1;
       }
     });

@@ -242,18 +242,61 @@ function getPaymentAmount(parcel) {
 }
 
 
+function hasMoneyValue(value) {
+  return value !== undefined && value !== null && value !== "";
+}
+
+
+function getDefaultTariffSettings() {
+  const defaults = CONFIG.defaultTariffs || {};
+  return {
+    city: {
+      id: "city",
+      label: "თბილისი",
+      partnerPrice: safeMoney(defaults.city?.partnerPrice ?? CONFIG.deliveryTotalPrice),
+      courierPay: safeMoney(defaults.city?.courierPay ?? CONFIG.courierDeliveryPay),
+    },
+    suburbs: {
+      id: "suburbs",
+      label: "შემოგარენი",
+      partnerPrice: safeMoney(defaults.suburbs?.partnerPrice ?? 8),
+      courierPay: safeMoney(defaults.suburbs?.courierPay ?? 5.5),
+    },
+  };
+}
+
+
+function getParcelTariffId(parcel = {}) {
+  const explicit = String(parcel.tariffId || parcel.tariffType || parcel.deliveryTariffId || "").trim();
+  if (["city", "suburbs"].includes(explicit)) return explicit;
+  return parcel.zoneId ? "city" : "suburbs";
+}
+
+
+function getFallbackTariff(parcel = {}) {
+  const tariffs = getDefaultTariffSettings();
+  return tariffs[getParcelTariffId(parcel)] || tariffs.city;
+}
+
+
 function getCourierPay(parcel) {
-  return parcel?.status === "delivered" ? CONFIG.courierDeliveryPay : 0;
+  if (parcel?.status !== "delivered") return 0;
+  if (hasMoneyValue(parcel.courierPay)) return safeMoney(parcel.courierPay);
+  return getFallbackTariff(parcel).courierPay;
 }
 
 
 function getAdminProfit(parcel) {
-  return parcel?.status === "delivered" ? CONFIG.adminDeliveryProfit : 0;
+  if (parcel?.status !== "delivered") return 0;
+  if (hasMoneyValue(parcel.adminProfit)) return safeMoney(parcel.adminProfit);
+  return safeMoney(Math.max(0, getDeliveryTotal(parcel) - getCourierPay(parcel)));
 }
 
 
 function getDeliveryTotal(parcel) {
-  return parcel?.status === "delivered" ? CONFIG.deliveryTotalPrice : 0;
+  if (parcel?.status !== "delivered") return 0;
+  if (hasMoneyValue(parcel.deliveryTotalPrice)) return safeMoney(parcel.deliveryTotalPrice);
+  return getFallbackTariff(parcel).partnerPrice;
 }
 
 

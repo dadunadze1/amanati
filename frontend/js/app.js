@@ -219,6 +219,7 @@ function openAdminCouriersHub() {
         ${renderAdminHubAction("adminUsers", "სია", "◎", "კურიერების მართვა")}
         ${renderAdminHubAction("adminRegister", "რეგისტრაცია", "+", "კურიერის ან ადმინის დამატება")}
         ${renderAdminHubAction("zoneManagement", "ზონები", "▧", "კურიერის ზონების მართვა")}
+        ${renderAdminHubAction("tariffSettings", "ტარიფები", "₾", "პარტნიორის ფასი და კურიერის ანაზღაურება")}
         ${renderAdminHubAction("adminStats", "სტატისტიკა", "▦", "კურიერების სტატისტიკა")}
       </section>
     `,
@@ -574,6 +575,7 @@ async function handleAction(action, value, sourceElement) {
     adminPartnersHub: openAdminPartnersHub,
     adminUsers: openUserManagement,
     zoneManagement: openZoneManagement,
+    tariffSettings: openTariffSettingsDialog,
     adminFinance: openFinanceDashboard,
     adminDailyBalance: openAdminDailyBalance,
     adminPartners: openPartnerManagement,
