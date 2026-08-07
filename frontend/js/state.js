@@ -35,6 +35,7 @@ const state = {
   lastFirebaseSyncToastAt: 0,
   adminPushStatus: "unknown",
   adminPushToken: "",
+  adminPushLastError: "",
   selectedCourierLocationUsername: "",
   routeLayer: null,
   routePinId: null,

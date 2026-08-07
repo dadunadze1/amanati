@@ -43,27 +43,32 @@ async function requestAdminPushNotifications() {
   }
 
   const registered = await registerAdminPushToken();
-  showToast(registered ? "ფუშ შეტყობინებები ჩაირთო." : "ფუშ შეტყობინება ვერ ჩაირთო. ნახეთ ბრაუზერის მხარდაჭერა და Firebase კავშირი.");
+  if (registered) showToast("ფუშ შეტყობინებები ჩაირთო.");
+  else if (!state.adminPushLastError) showToast("ფუშ შეტყობინება ვერ ჩაირთო. ნახეთ ბრაუზერის მხარდაჭერა და Firebase კავშირი.");
   return registered;
 }
 
 async function registerAdminPushToken() {
   try {
-    const { app, db } = await initializeAdminPushFirebaseContext();
-    if (!db) return false;
-
     const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
     await registration.update().catch(() => {});
-    const webPushRegistered = await registerAdminStandardWebPush(db, registration);
+    const subscription = await createAdminStandardWebPushSubscription(registration);
+
+    const { app, db } = await initializeAdminPushFirebaseContext();
+    if (!db) throw new Error("firebase-context-unavailable");
+
+    const webPushRegistered = subscription ? await saveAdminWebPushSubscription(db, subscription.toJSON()) : false;
     const fcmRegistered = webPushRegistered ? false : await registerAdminFirebaseMessaging(db, app, registration);
 
     if (!webPushRegistered && !fcmRegistered) return false;
     state.adminPushStatus = "enabled";
+    state.adminPushLastError = "";
     return true;
   } catch (error) {
     console.warn("[push] admin token registration failed", error);
     state.adminPushStatus = "error";
-    showToast(getAdminPushErrorMessage(error));
+    state.adminPushLastError = getAdminPushErrorMessage(error);
+    showToast(state.adminPushLastError);
     return false;
   }
 }
@@ -90,10 +95,14 @@ async function initializeAdminPushFirebaseContext() {
   return { app, db };
 }
 
-async function registerAdminStandardWebPush(db, registration) {
-  if (!registration?.pushManager) return false;
+async function createAdminStandardWebPushSubscription(registration) {
+  if (!registration?.pushManager) throw new Error("push-manager-unavailable");
 
   let subscription = await registration.pushManager.getSubscription();
+  if (subscription && !subscriptionMatchesWebPushKey(subscription)) {
+    await subscription.unsubscribe().catch(() => {});
+    subscription = null;
+  }
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
@@ -101,8 +110,7 @@ async function registerAdminStandardWebPush(db, registration) {
     });
   }
 
-  await saveAdminWebPushSubscription(db, subscription.toJSON());
-  return true;
+  return subscription;
 }
 
 async function registerAdminFirebaseMessaging(db, app, registration) {
@@ -288,6 +296,14 @@ function urlBase64ToUint8Array(value) {
   const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(base64);
   return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
+}
+
+function subscriptionMatchesWebPushKey(subscription) {
+  const key = subscription?.options?.applicationServerKey;
+  if (!key) return true;
+  const expected = urlBase64ToUint8Array(ADMIN_WEB_PUSH_PUBLIC_KEY);
+  const current = new Uint8Array(key);
+  return current.length === expected.length && current.every((value, index) => value === expected[index]);
 }
 
 function getAdminPushErrorMessage(error) {
