@@ -185,10 +185,19 @@ function normalizeAddressDirectoryText(value) {
     .trim();
 }
 
+function normalizeAddressDirectoryStreetKey(value) {
+  const ignored = new Set(["ქუჩა", "ქ", "გამზირი", "გამზ", "ჩიხი", "შესახვევი", "გასასვლელი", "გზატკეცილი", "ხეივანი"]);
+  return normalizeAddressDirectoryText(value)
+    .split(" ")
+    .filter((token) => token && !ignored.has(token))
+    .join(" ");
+}
+
 function addressDirectoryMatches(value, query) {
   const normalizedQuery = normalizeAddressDirectoryText(query);
   if (!normalizedQuery) return true;
-  return normalizeAddressDirectoryText(value).includes(normalizedQuery);
+  return normalizeAddressDirectoryText(value).includes(normalizedQuery)
+    || normalizeAddressDirectoryStreetKey(value).includes(normalizeAddressDirectoryStreetKey(query));
 }
 
 function getAddressDirectoryStreetMatches({ city, district, query, limit = 12 } = {}) {
@@ -203,6 +212,54 @@ function getAddressDirectoryStreetMatches({ city, district, query, limit = 12 } 
     });
   });
   return rows.slice(0, limit);
+}
+
+function getAddressDirectoryAllStreets(city) {
+  const cityRecord = getAddressDirectoryCity(city);
+  return (cityRecord?.districts || []).flatMap((districtRecord) => (
+    districtRecord.streets.map((street) => ({
+      city: cityRecord.city,
+      district: districtRecord.name,
+      street,
+    }))
+  ));
+}
+
+function findAddressDirectoryStreetInText(address, city) {
+  const normalizedAddress = normalizeAddressDirectoryText(address);
+  const normalizedStreetAddress = normalizeAddressDirectoryStreetKey(address);
+  if (!normalizedAddress) return null;
+  const matches = getAddressDirectoryAllStreets(city)
+    .filter((item) => {
+      const streetText = normalizeAddressDirectoryText(item.street);
+      const streetKey = normalizeAddressDirectoryStreetKey(item.street);
+      return normalizedAddress.includes(streetText) || (streetKey.length >= 4 && normalizedStreetAddress.includes(streetKey));
+    })
+    .sort((a, b) => normalizeAddressDirectoryStreetKey(b.street).length - normalizeAddressDirectoryStreetKey(a.street).length);
+  return matches[0] || null;
+}
+
+function normalizeAddressDirectoryAddress(address, options = {}) {
+  const rawAddress = cleanAddressInput(address);
+  if (!rawAddress) return { address: "", corrected: false, match: null };
+  const city = options.city || getAddressDirectoryCities().find((item) => normalizeAddressDirectoryText(rawAddress).includes(normalizeAddressDirectoryText(item))) || "თბილისი";
+  const match = findAddressDirectoryStreetInText(rawAddress, city);
+  if (!match) return { address: rawAddress, corrected: false, match: null };
+
+  const normalizedParts = rawAddress.split(",").map((part) => cleanAddressInput(part)).filter(Boolean);
+  const hasCity = normalizedParts.some((part) => normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(match.city));
+  const cityPart = hasCity ? normalizedParts.find((part) => normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(match.city)) : match.city;
+  const streetIndex = normalizedParts.findIndex((part) => (
+    normalizeAddressDirectoryText(part).includes(normalizeAddressDirectoryText(match.street))
+    || normalizeAddressDirectoryStreetKey(part).includes(normalizeAddressDirectoryStreetKey(match.street))
+  ));
+  const streetPart = streetIndex >= 0 ? normalizedParts[streetIndex] : match.street;
+  const nextAddress = [cityPart, match.district, streetPart].filter(Boolean).join(", ");
+  return {
+    address: nextAddress,
+    corrected: normalizeAddressDirectoryText(nextAddress) !== normalizeAddressDirectoryText(rawAddress),
+    match,
+  };
 }
 
 function renderAddressDirectoryFields(prefix, options = {}) {
@@ -335,8 +392,9 @@ function bindAddressDirectoryControls(prefix, options = {}) {
         district: "",
         query: streetInput.value,
         limit: 30,
-      }).find((match) => normalizeAddressDirectoryText(match.street) === normalizeAddressDirectoryText(streetInput.value));
+  }).find((match) => normalizeAddressDirectoryStreetKey(match.street) === normalizeAddressDirectoryStreetKey(streetInput.value));
       if (exact && !districtSelect.value) selectStreet(exact);
+      else if (exact && exact.district !== districtSelect.value) selectStreet(exact);
       else closeDropdown();
     }, 140);
   });
@@ -346,7 +404,13 @@ function bindAddressDirectoryControls(prefix, options = {}) {
 function getAddressDirectoryValue(prefix) {
   const root = document.querySelector(`[data-address-directory="${prefix}"]`);
   const city = root?.querySelector("[data-address-city]")?.value.trim() || "";
-  const district = root?.querySelector("[data-address-district]")?.value.trim() || addressDirectorySelections[prefix]?.district || "";
+  const exact = getAddressDirectoryStreetMatches({
+    city,
+    district: "",
+    query: root?.querySelector("[data-address-street]")?.value.trim() || "",
+    limit: 50,
+  }).find((match) => normalizeAddressDirectoryStreetKey(match.street) === normalizeAddressDirectoryStreetKey(root?.querySelector("[data-address-street]")?.value.trim() || ""));
+  const district = exact?.district || root?.querySelector("[data-address-district]")?.value.trim() || addressDirectorySelections[prefix]?.district || "";
   const street = root?.querySelector("[data-address-street]")?.value.trim() || "";
   const building = root?.querySelector("[data-address-building]")?.value.trim() || "";
   const streetAddress = [street, building].filter(Boolean).join(" ").trim();
@@ -358,6 +422,6 @@ function getAddressDirectoryValue(prefix) {
     building,
     streetAddress,
     fullAddress,
-    selectedStreet: addressDirectorySelections[prefix] || null,
+    selectedStreet: exact || addressDirectorySelections[prefix] || null,
   };
 }

@@ -372,6 +372,10 @@ async function saveParcel() {
       updatePendingAddressPreview();
     }
   }
+  if (typeof normalizeAddressDirectoryAddress === "function") {
+    const normalizedAddress = normalizeAddressDirectoryAddress(address);
+    if (normalizedAddress.address) address = normalizedAddress.address;
+  }
   const amountInput = document.getElementById("parcelPaymentAmount");
   const paymentAmount = parsePaymentAmount(amountInput?.value);
   const selectedCourierUsername = state.isAdmin ? (document.getElementById("parcelCourier")?.value || "") : state.selectedCourier;
@@ -766,10 +770,16 @@ async function selectAutocompleteSuggestion(suggestion, input, closeDropdown, us
 
 async function handleAddressSearch(event, username) {
   event.preventDefault();
-  const query = document.getElementById("addressSearchInput")?.value.trim();
+  let query = document.getElementById("addressSearchInput")?.value.trim();
   const message = document.getElementById("addressSearchMessage");
   const resultsElement = document.getElementById("addressSearchResults");
   if (!query) return;
+  const normalizedAddress = typeof normalizeAddressDirectoryAddress === "function"
+    ? normalizeAddressDirectoryAddress(query)
+    : { address: query, corrected: false };
+  query = normalizedAddress.address || query;
+  const input = document.getElementById("addressSearchInput");
+  if (input && normalizedAddress.corrected) input.value = query;
   const minLength = typeof GEOCODE_MIN_QUERY_LENGTH === "number" ? GEOCODE_MIN_QUERY_LENGTH : 3;
   if (cleanAddressInput(query).length < minLength) {
     if (message) message.textContent = "შეიყვანეთ მინიმუმ 3 სიმბოლო.";
@@ -777,7 +787,9 @@ async function handleAddressSearch(event, username) {
   }
 
   try {
-    if (message) message.textContent = STRINGS.addressLoading;
+    if (message) message.textContent = normalizedAddress.corrected
+      ? `რაიონი გასწორდა: ${normalizedAddress.match?.district || ""}`
+      : STRINGS.addressLoading;
     if (resultsElement) resultsElement.innerHTML = "";
     const results = await searchAddress(query);
     if (!results.length) {
@@ -787,7 +799,7 @@ async function handleAddressSearch(event, username) {
       updateAddressSearchPreview("");
       return;
     }
-    if (message) message.textContent = results[0].warning || "";
+    if (message) message.textContent = normalizedAddress.corrected ? `რაიონი გასწორდა: ${normalizedAddress.match?.district || ""}` : results[0].warning || "";
     renderAddressSearchResults(results, username, query);
     await selectAddressSearchResult(results[0], username, 0, query);
   } catch (error) {
@@ -823,8 +835,11 @@ function renderAddressSearchResults(results, username, requestedAddress = "") {
 
 function getAddressLabelForSearchSelection(result, requestedAddress = "") {
   const requested = cleanAddressInput(requestedAddress);
-  if (requested && result?.isApproximateAddress) return requested;
-  return cleanAddressInput(result?.address || formatOsmAddress(result) || result?.displayName || result?.display_name);
+  const baseAddress = requested && result?.isApproximateAddress
+    ? requested
+    : cleanAddressInput(result?.address || formatOsmAddress(result) || result?.displayName || result?.display_name);
+  if (typeof normalizeAddressDirectoryAddress !== "function") return baseAddress;
+  return normalizeAddressDirectoryAddress(baseAddress).address || baseAddress;
 }
 
 
@@ -832,13 +847,18 @@ async function selectAddressSearchResult(result, username, selectedIndex = -1, r
   if (!result) return;
   const coords = getResultCoords(result);
   if (!Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) return;
-  const address = getAddressLabelForSearchSelection(result, requestedAddress) || formatCoordsAddress(coords);
+  const normalizedRequested = typeof normalizeAddressDirectoryAddress === "function"
+    ? normalizeAddressDirectoryAddress(requestedAddress)
+    : { address: requestedAddress, corrected: false };
+  const address = getAddressLabelForSearchSelection(result, normalizedRequested.address || requestedAddress) || formatCoordsAddress(coords);
   console.log("[geocode] selected formatted address", address);
   state.selectedCourier = username;
   state.pendingCoords = coords;
   state.pendingAddress = address;
   state.pendingAddressLocked = Boolean(cleanAddressInput(requestedAddress));
-  state.pendingAddressWarning = result.warning || "";
+  state.pendingAddressWarning = normalizedRequested.corrected
+    ? `რაიონი გასწორდა: ${normalizedRequested.match?.district || ""}`
+    : result.warning || "";
   showPendingMarker(coords);
   if (state.map?.flyTo) {
     state.map.flyTo(toLeafletLatLng(coords), 17, { duration: 0.45 });

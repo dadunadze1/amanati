@@ -381,12 +381,17 @@ async function savePartnerOrder() {
     return;
   }
 
-  const address = addressParts.fullAddress || [city, district, street].filter(Boolean).join(", ");
+  const rawAddress = addressParts.fullAddress || [city, district, street].filter(Boolean).join(", ");
+  const normalizedAddress = typeof normalizeAddressDirectoryAddress === "function"
+    ? normalizeAddressDirectoryAddress(rawAddress, { city })
+    : { address: rawAddress, corrected: false };
+  const address = normalizedAddress.address || rawAddress;
+  const finalDistrict = normalizedAddress.match?.district || district;
 
   try {
     const payload = await api("/api/parcels", {
       method: "POST",
-      body: { city, district, streetAddress: street, address, fullAddress: address, fullName, phone, paymentAmount },
+      body: { city, district: finalDistrict, streetAddress: street, address, fullAddress: address, fullName, phone, paymentAmount },
     });
     closeDialog();
     await refreshPins();
