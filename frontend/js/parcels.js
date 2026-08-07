@@ -401,8 +401,10 @@ async function saveParcel() {
     courierName: autoAssignment.courierName || "",
     autoAssigned: Boolean(autoAssignment.autoAssigned && !selectedCourierUsername),
   };
-  const tariffId = state.pendingTariffId
-    || (typeof getAddressDirectoryTariffIdFromAddress === "function" ? getAddressDirectoryTariffIdFromAddress(address) : "");
+  const detectedTariffId = typeof getAddressDirectoryTariffIdFromAddress === "function"
+    ? getAddressDirectoryTariffIdFromAddress(address)
+    : "";
+  const tariffId = detectedTariffId || state.pendingTariffId || "";
 
   let payload;
   try {

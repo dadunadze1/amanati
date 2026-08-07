@@ -387,7 +387,10 @@ async function savePartnerOrder() {
     : { address: rawAddress, corrected: false };
   const address = normalizedAddress.address || rawAddress;
   const finalDistrict = normalizedAddress.match?.district || district;
-  const tariffId = addressParts.tariffId || "";
+  const detectedTariffId = typeof getAddressDirectoryTariffIdFromAddress === "function"
+    ? getAddressDirectoryTariffIdFromAddress(address || rawAddress)
+    : "";
+  const tariffId = detectedTariffId || addressParts.tariffId || "";
 
   try {
     const payload = await api("/api/parcels", {
