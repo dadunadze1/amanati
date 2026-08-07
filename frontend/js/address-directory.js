@@ -3109,6 +3109,7 @@ const ADDRESS_DIRECTORY = [
 ];
 
 const addressDirectorySelections = {};
+let addressDirectorySuburbNeighborhoodKeys = null;
 
 const ADDRESS_NEIGHBORHOOD_KEYWORDS = [
   { name: "დიდი დიღომი", patterns: ["დიდი დიღომი"] },
@@ -3173,6 +3174,27 @@ function getAddressDirectoryNeighborhood(districtName, street = "") {
   return match?.name || districtName || "";
 }
 
+function getAddressDirectorySuburbNeighborhoodKeys() {
+  if (addressDirectorySuburbNeighborhoodKeys) return addressDirectorySuburbNeighborhoodKeys;
+  const suburbCity = ADDRESS_DIRECTORY.find((item) => item.tariffId === "suburbs");
+  const keys = new Set();
+  (suburbCity?.districts || []).forEach((districtRecord) => {
+    const districtKey = normalizeAddressDirectoryText(districtRecord.name);
+    if (districtKey) keys.add(districtKey);
+    districtRecord.streets.forEach((street) => {
+      const neighborhoodKey = normalizeAddressDirectoryText(getAddressDirectoryNeighborhood(districtRecord.name, street));
+      if (neighborhoodKey) keys.add(neighborhoodKey);
+    });
+  });
+  addressDirectorySuburbNeighborhoodKeys = keys;
+  return keys;
+}
+
+function isAddressDirectoryHiddenForCity(cityRecord, neighborhood) {
+  if (!cityRecord || cityRecord.tariffId === "suburbs") return false;
+  return getAddressDirectorySuburbNeighborhoodKeys().has(normalizeAddressDirectoryText(neighborhood));
+}
+
 function getAddressDirectoryNeighborhoods(city) {
   const cityRecord = getAddressDirectoryCity(city);
   const seen = new Set();
@@ -3182,6 +3204,7 @@ function getAddressDirectoryNeighborhoods(city) {
       const neighborhood = getAddressDirectoryNeighborhood(districtRecord.name, street);
       const key = normalizeAddressDirectoryText(neighborhood);
       if (!key || seen.has(key)) return;
+      if (isAddressDirectoryHiddenForCity(cityRecord, neighborhood)) return;
       seen.add(key);
       neighborhoods.push({ name: neighborhood, district: districtRecord.name });
     });
@@ -3226,6 +3249,7 @@ function getAddressDirectoryStreetMatches({ city, district, query, limit = 12 } 
   (cityRecord?.districts || []).forEach((districtRecord) => {
     districtRecord.streets.forEach((street) => {
       const neighborhood = getAddressDirectoryNeighborhood(districtRecord.name, street);
+      if (isAddressDirectoryHiddenForCity(cityRecord, neighborhood)) return;
       if (
         normalizedFilter
         && normalizeAddressDirectoryText(districtRecord.name) !== normalizedFilter
