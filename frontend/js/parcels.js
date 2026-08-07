@@ -898,6 +898,10 @@ async function updatePinStatus(pinId, status, options = {}) {
     showToast("ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
     return;
   }
+  if (!state.isAdmin && status === "delivered" && !options.skipDeliveryConfirmation) {
+    openDeliveryConfirmationDialog(pinId);
+    return;
+  }
   if (status === "failed" && !String(options.failureReason || "").trim()) {
     openFailureReasonDialog(pinId);
     return;
@@ -932,6 +936,69 @@ async function updatePinStatus(pinId, status, options = {}) {
   }
   if (state.routePinId === pinId) clearActiveRoute();
   await refreshPins();
+}
+
+
+function openDeliveryConfirmationDialog(pinId) {
+  const pin = state.activePins.find((item) => item.id === pinId);
+  if (!pin) {
+    showToast("შეკვეთა ვერ მოიძებნა.");
+    return;
+  }
+
+  const payment = getPaymentAmount(pin);
+  const hasCash = payment > 0;
+  const address = getParcelAddress(pin);
+  const confirmLabel = hasCash ? `${formatMoney(payment)} ავიღე` : "ჩაბარების დადასტურება";
+  const body = `
+    <div class="delivery-confirm-panel ${hasCash ? "has-cash" : "no-cash"}">
+      <div class="delivery-confirm-status">
+        <span>${hasCash ? "ქეში გადასახდელია" : "ქეში არ არის"}</span>
+        <strong>${hasCash ? escapeHtml(formatMoney(payment)) : "თანხა არ არის ასაღები"}</strong>
+      </div>
+      <p class="delivery-confirm-copy">
+        ${hasCash
+          ? "დაადასტურეთ, რომ თანხა აიღეთ და შეკვეთა ნამდვილად ჩაბარდა."
+          : "დაადასტურეთ, რომ შეკვეთა ნამდვილად ჩაბარდა."}
+      </p>
+      <div class="delivery-confirm-details">
+        <div class="delivery-confirm-detail">
+          <span>მისამართი</span>
+          <strong>${escapeHtml(address || STRINGS.addressMissing)}</strong>
+        </div>
+        <div class="delivery-confirm-detail">
+          <span>მომხმარებელი</span>
+          <strong>${escapeHtml(pin.fullName || "უსახელო")}</strong>
+        </div>
+      </div>
+      <p id="deliveryConfirmMessage" class="form-message" role="alert"></p>
+    </div>
+  `;
+
+  showDialog("ჩაბარების დადასტურება", body, [
+    { label: "უკან დაბრუნება", variant: "secondary", action: closeDialog },
+    { label: confirmLabel, variant: "primary", action: () => submitDeliveryConfirmation(pinId) },
+  ]);
+}
+
+
+async function submitDeliveryConfirmation(pinId) {
+  const message = document.getElementById("deliveryConfirmMessage");
+  const buttons = Array.from(els.dialogActions?.querySelectorAll("button") || []);
+  buttons.forEach((button) => {
+    button.disabled = true;
+  });
+  if (message) message.textContent = "მუშავდება...";
+
+  try {
+    await updatePinStatus(pinId, "delivered", { skipDeliveryConfirmation: true });
+    closeDialog();
+  } catch (error) {
+    if (message) message.textContent = error.message || STRINGS.serverFailed;
+    buttons.forEach((button) => {
+      button.disabled = false;
+    });
+  }
 }
 
 
