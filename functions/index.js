@@ -1,25 +1,38 @@
 "use strict";
 
 const admin = require("firebase-admin");
+const webpush = require("web-push");
 const { logger } = require("firebase-functions");
+const { defineSecret } = require("firebase-functions/params");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 
 admin.initializeApp();
 
 const db = admin.firestore();
 const messaging = admin.messaging();
+const WEB_PUSH_PRIVATE_KEY = defineSecret("WEB_PUSH_PRIVATE_KEY");
 const STATIC_STORE_REF = "deliveryApp/staticStore";
 const ADMIN_TOKEN_COLLECTION = "adminPushTokens";
+const ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION = "adminWebPushSubscriptions";
 const ADMIN_NOTIFICATION_COLLECTION = "adminNotifications";
 const APP_LINK = "https://dadunadze1.github.io/amanati/frontend/";
+const WEB_PUSH_PUBLIC_KEY = "BAEuO5gXFaWrtcaxhWxvzgNc1hlvCYZoNtYdxJno43RqzgANahvbOvrQzaMV7rMTUsDXyGaqa_OW5FrxbYCK4MY";
 
-exports.sendAdminNotification = onDocumentCreated(`${ADMIN_NOTIFICATION_COLLECTION}/{notificationId}`, async (event) => {
+exports.sendAdminNotification = onDocumentCreated({
+  document: `${ADMIN_NOTIFICATION_COLLECTION}/{notificationId}`,
+  region: "europe-west8",
+  secrets: [WEB_PUSH_PRIVATE_KEY],
+}, async (event) => {
   const notification = normalizeNotification(event.data?.data(), event.params.notificationId);
   if (!notification) return;
   await sendToAdminDevices(notification);
 });
 
-exports.sendStaticStoreAdminNotifications = onDocumentWritten(STATIC_STORE_REF, async (event) => {
+exports.sendStaticStoreAdminNotifications = onDocumentWritten({
+  document: STATIC_STORE_REF,
+  region: "europe-west8",
+  secrets: [WEB_PUSH_PRIVATE_KEY],
+}, async (event) => {
   const before = event.data?.before?.data() || {};
   const after = event.data?.after?.data() || {};
   const notifications = after.adminNotifications || {};
@@ -43,49 +56,50 @@ exports.sendStaticStoreAdminNotifications = onDocumentWritten(STATIC_STORE_REF, 
 
 async function sendToAdminDevices(notification) {
   const tokens = await loadAdminPushTokens();
-  if (!tokens.length) {
-    logger.warn("No admin push tokens registered", { notificationId: notification.id });
+  const subscriptions = await loadAdminWebPushSubscriptions();
+  if (!tokens.length && !subscriptions.length) {
+    logger.warn("No admin push devices registered", { notificationId: notification.id });
     return;
   }
 
-  const message = {
-    tokens,
-    notification: {
-      title: notification.title,
-      body: notification.body,
-    },
-    data: {
-      title: notification.title,
-      body: notification.body,
-      type: notification.type,
-      status: notification.status,
-      parcelId: notification.parcelId,
-      address: notification.address,
-      fullName: notification.fullName,
-      failureReason: notification.failureReason,
-      url: APP_LINK,
-    },
-    webpush: {
-      fcmOptions: {
-        link: APP_LINK,
-      },
+  let fcmResult = { successCount: 0, failureCount: 0 };
+  if (tokens.length && !subscriptions.length) {
+    const message = {
+      tokens,
       notification: {
-        icon: `${APP_LINK}icons/icon-192-v2.png`,
-        badge: `${APP_LINK}icons/favicon-v2.png`,
-        tag: notification.parcelId || notification.id,
-        requireInteraction: false,
+        title: notification.title,
+        body: notification.body,
       },
-    },
-  };
+      data: buildPushData(notification),
+      webpush: {
+        fcmOptions: {
+          link: APP_LINK,
+        },
+        notification: {
+          icon: `${APP_LINK}icons/icon-192-v2.png`,
+          badge: `${APP_LINK}icons/favicon-v2.png`,
+          tag: notification.parcelId || notification.id,
+          requireInteraction: false,
+        },
+      },
+    };
 
-  const response = await messaging.sendEachForMulticast(message);
+    const response = await messaging.sendEachForMulticast(message);
+    fcmResult = {
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+    };
+    await deactivateInvalidTokens(tokens, response.responses);
+  }
+
+  const webPushResult = await sendStandardWebPush(subscriptions, notification);
   logger.info("Admin push sent", {
     notificationId: notification.id,
-    successCount: response.successCount,
-    failureCount: response.failureCount,
+    fcmSuccessCount: fcmResult.successCount,
+    fcmFailureCount: fcmResult.failureCount,
+    webPushSuccessCount: webPushResult.successCount,
+    webPushFailureCount: webPushResult.failureCount,
   });
-
-  await deactivateInvalidTokens(tokens, response.responses);
 }
 
 async function loadAdminPushTokens() {
@@ -113,6 +127,86 @@ async function loadAdminPushTokens() {
   return Array.from(tokens);
 }
 
+async function loadAdminWebPushSubscriptions() {
+  const subscriptions = new Map();
+
+  const collectionSnapshot = await db.collection(ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION).where("active", "==", true).get().catch((error) => {
+    logger.warn("Admin web push subscription collection read failed", error);
+    return null;
+  });
+  collectionSnapshot?.forEach((doc) => {
+    const subscription = doc.data()?.subscription;
+    const endpoint = String(subscription?.endpoint || "").trim();
+    if (endpoint) subscriptions.set(endpoint, subscription);
+  });
+
+  const staticStore = await db.doc(STATIC_STORE_REF).get().catch((error) => {
+    logger.warn("Static store web push fallback read failed", error);
+    return null;
+  });
+  const fallbackSubscriptions = staticStore?.data()?.adminWebPushSubscriptions || {};
+  Object.values(fallbackSubscriptions).forEach((item) => {
+    const subscription = item?.subscription;
+    const endpoint = String(subscription?.endpoint || "").trim();
+    if (endpoint && item?.active !== false) subscriptions.set(endpoint, subscription);
+  });
+
+  return Array.from(subscriptions.values());
+}
+
+async function sendStandardWebPush(subscriptions, notification) {
+  if (!subscriptions.length) return { successCount: 0, failureCount: 0 };
+
+  webpush.setVapidDetails(
+    "mailto:dadunadze@gmail.com",
+    WEB_PUSH_PUBLIC_KEY,
+    WEB_PUSH_PRIVATE_KEY.value(),
+  );
+
+  const payload = JSON.stringify({
+    ...buildPushData(notification),
+    icon: `${APP_LINK}icons/icon-192-v2.png`,
+    badge: `${APP_LINK}icons/favicon-v2.png`,
+    tag: notification.parcelId || notification.id,
+  });
+
+  const results = await Promise.allSettled(subscriptions.map((subscription) => (
+    webpush.sendNotification(subscription, payload)
+  )));
+  const invalidEndpoints = [];
+  results.forEach((result, index) => {
+    const statusCode = result.reason?.statusCode;
+    if (result.status === "rejected" && (statusCode === 404 || statusCode === 410)) {
+      invalidEndpoints.push(subscriptions[index]?.endpoint);
+    } else if (result.status === "rejected") {
+      logger.warn("Standard web push send failed", {
+        statusCode,
+        message: result.reason?.message || String(result.reason || ""),
+      });
+    }
+  });
+  await deactivateInvalidWebPushSubscriptions(invalidEndpoints.filter(Boolean));
+
+  return {
+    successCount: results.filter((result) => result.status === "fulfilled").length,
+    failureCount: results.filter((result) => result.status === "rejected").length,
+  };
+}
+
+function buildPushData(notification) {
+  return {
+    title: notification.title,
+    body: notification.body,
+    type: notification.type,
+    status: notification.status,
+    parcelId: notification.parcelId,
+    address: notification.address,
+    fullName: notification.fullName,
+    failureReason: notification.failureReason,
+    url: APP_LINK,
+  };
+}
+
 async function deactivateInvalidTokens(tokens, responses) {
   const invalidTokens = tokens.filter((token, index) => {
     const code = responses[index]?.error?.code || "";
@@ -123,6 +217,18 @@ async function deactivateInvalidTokens(tokens, responses) {
   const batch = db.batch();
   for (const token of invalidTokens) {
     batch.set(db.collection(ADMIN_TOKEN_COLLECTION).doc(getTokenKey(token)), {
+      active: false,
+      invalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+  await batch.commit();
+}
+
+async function deactivateInvalidWebPushSubscriptions(endpoints) {
+  if (!endpoints.length) return;
+  const batch = db.batch();
+  for (const endpoint of endpoints) {
+    batch.set(db.collection(ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION).doc(getTokenKey(endpoint)), {
       active: false,
       invalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });

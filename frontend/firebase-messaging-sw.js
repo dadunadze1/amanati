@@ -29,8 +29,33 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, options);
 });
 
+self.addEventListener("push", (event) => {
+  const payload = readPushPayload(event);
+  const title = payload.title || "Swift Delivery";
+  const options = {
+    body: payload.body || "",
+    icon: payload.icon || "./icons/icon-192-v2.png",
+    badge: payload.badge || "./icons/favicon-v2.png",
+    tag: payload.parcelId || payload.tag || "swift-delivery-admin-push",
+    data: {
+      url: payload.url || "./",
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url || "./";
   event.waitUntil(clients.openWindow(url));
 });
+
+function readPushPayload(event) {
+  if (!event.data) return {};
+  try {
+    return event.data.json();
+  } catch {
+    return { title: "Swift Delivery", body: event.data.text() };
+  }
+}
