@@ -7,7 +7,9 @@ const webpush = require("web-push");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { GoogleAuth } = require("google-auth-library");
 
 initializeApp();
 
@@ -23,6 +25,60 @@ const WEB_PUSH_PUBLIC_KEY = "BAEuO5gXFaWrtcaxhWxvzgNc1hlvCYZoNtYdxJno43RqzgANahv
 const PUSH_MAX_ATTEMPTS = 5;
 const PUSH_RETRY_DELAY_MS = 5 * 60 * 1000;
 const PUSH_LOCK_STALE_MS = 2 * 60 * 1000;
+const VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate";
+const MAX_STICKER_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
+const googleAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+const ALLOWED_ORIGINS = new Set([
+  "https://dadunadze1.github.io",
+  "https://dadunadze1.github.io/amanati",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]);
+
+exports.extractParcelFromSticker = onRequest({
+  region: "europe-west8",
+  cors: false,
+  timeoutSeconds: 60,
+  memory: "512MiB",
+}, async (req, res) => {
+  setCorsHeaders(req, res);
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "method-not-allowed" });
+    return;
+  }
+
+  try {
+    const image = cleanBase64Image(req.body?.image || req.body?.imageBase64 || "");
+    const mimeType = String(req.body?.mimeType || "").trim();
+    if (!image) throw httpError(400, "სურათი ვერ მოიძებნა.");
+    if (image.length > MAX_STICKER_IMAGE_BASE64_LENGTH) throw httpError(413, "სურათი ძალიან დიდია.");
+    if (mimeType && !/^image\/(png|jpe?g|webp)$/i.test(mimeType)) throw httpError(400, "სურათის ფორმატი მხარდაჭერილი არ არის.");
+
+    const ocr = await detectStickerText(image);
+    const parsed = parseStickerText(ocr.text);
+    res.json({
+      ...parsed,
+      rawText: ocr.text,
+      confidence: ocr.confidence,
+      source: "google-vision",
+    });
+  } catch (error) {
+    logger.warn("Sticker OCR failed", {
+      status: error.status || 500,
+      code: error.code || "",
+      message: getErrorMessage(error),
+      publicMessage: error.publicMessage || "",
+    });
+    res.status(error.status || 500).json({
+      error: error.publicMessage || "ფოტოს წაკითხვა ვერ მოხერხდა.",
+      code: error.code || "sticker-ocr-failed",
+    });
+  }
+});
 
 exports.sendAdminNotification = onDocumentCreated({
   document: `${ADMIN_NOTIFICATION_COLLECTION}/{notificationId}`,
@@ -460,4 +516,229 @@ function getSafeFieldKey(value) {
   return String(value || "")
     .replace(/[.[\]*`/]/g, "_")
     .slice(0, 180) || `notification_${Date.now()}`;
+}
+
+async function detectStickerText(imageBase64) {
+  const accessToken = await getGoogleAccessToken();
+  const response = await fetch(VISION_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      requests: [{
+        image: { content: imageBase64 },
+        features: [{ type: "DOCUMENT_TEXT_DETECTION", maxResults: 1 }],
+        imageContext: { languageHints: ["ka", "en"] },
+      }],
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const apiMessage = payload?.error?.message || `Google Vision error ${response.status}`;
+    if (response.status === 403) {
+      throw httpError(503, "Google Vision API ჯერ არ არის ჩართული Firebase/Google Cloud პროექტში.", "vision-api-disabled", apiMessage);
+    }
+    throw httpError(response.status, "ფოტოს წაკითხვა ვერ მოხერხდა.", "vision-api-failed", apiMessage);
+  }
+
+  const result = payload?.responses?.[0] || {};
+  if (result.error) {
+    throw httpError(502, "Google Vision-მა სურათი ვერ წაიკითხა.", "vision-response-error", result.error.message || result.error.code);
+  }
+  const annotation = result.fullTextAnnotation || {};
+  const text = String(annotation.text || result.textAnnotations?.[0]?.description || "").trim();
+  if (!text) throw httpError(422, "სტიკერზე ტექსტი ვერ ამოვიკითხე.", "no-text-found");
+  return { text, confidence: calculateVisionConfidence(annotation) };
+}
+
+async function getGoogleAccessToken() {
+  const client = await googleAuth.getClient();
+  const tokenResponse = await client.getAccessToken();
+  const token = String(tokenResponse?.token || tokenResponse || "").trim();
+  if (!token) throw httpError(503, "Google Cloud ავტორიზაციის token ცარიელია.", "google-auth-token-empty");
+  return token;
+}
+
+function parseStickerText(text) {
+  const lines = normalizeStickerLines(text);
+  const phone = extractStickerPhone(lines.join("\n"));
+  const paymentAmount = extractStickerAmount(lines);
+  const fullName = extractStickerName(lines, phone, paymentAmount);
+  const address = extractStickerAddress(lines, phone, paymentAmount, fullName);
+  const warnings = [];
+  if (!address) warnings.push("მისამართი ვერ ამოვიცანი.");
+  if (!phone) warnings.push("ტელეფონის ნომერი ვერ ამოვიცანი.");
+  if (!fullName) warnings.push("მიმღების სახელი ვერ ამოვიცანი.");
+  if (!Number.isFinite(paymentAmount)) warnings.push("ქეშის თანხა ვერ ამოვიცანი.");
+
+  return {
+    address,
+    fullName,
+    phone,
+    paymentAmount: Number.isFinite(paymentAmount) ? paymentAmount : 0,
+    lines,
+    warnings,
+  };
+}
+
+function normalizeStickerLines(text) {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[|•·]/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
+function extractStickerPhone(text) {
+  const normalized = String(text || "").replace(/[–—−]/g, "-");
+  const match = normalized.match(/(?:\+?\s*995\s*)?(5\d{2})\D{0,4}(\d{2})\D{0,4}(\d{2})\D{0,4}(\d{2})/);
+  if (!match) return "";
+  return `+995${match[1]}${match[2]}${match[3]}${match[4]}`;
+}
+
+function extractStickerAmount(lines) {
+  const currencyPattern = /(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:ლარი|ლ\b|gel\b|₾)/i;
+  for (const line of lines) {
+    const match = line.match(currencyPattern);
+    if (match) return normalizeStickerMoney(match[1]);
+  }
+
+  const likelyLines = lines
+    .filter((line) => /თანხ|ქეშ|გადასახდ|ფასი/i.test(line))
+    .concat(lines.slice(-4));
+  for (const line of likelyLines) {
+    const numbers = [...line.matchAll(/\b(\d{1,3}(?:[.,]\d{1,2})?)\b/g)]
+      .map((match) => normalizeStickerMoney(match[1]))
+      .filter((value) => Number.isFinite(value) && value > 0 && value < 1000);
+    if (numbers.length) return numbers[numbers.length - 1];
+  }
+  return NaN;
+}
+
+function normalizeStickerMoney(value) {
+  const amount = Number(String(value || "").replace(",", "."));
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : NaN;
+}
+
+function extractStickerName(lines, phone, paymentAmount) {
+  const candidates = lines
+    .map((line) => stripStickerLineNoise(line, phone, paymentAmount))
+    .filter((line) => line && !looksLikeAddressLine(line) && !looksLikePhoneLine(line) && !looksLikeAmountLine(line))
+    .map((line) => line.replace(/[0-9#+№.,:;()/-]/g, " ").replace(/\s+/g, " ").trim())
+    .filter((line) => countGeorgianLetters(line) >= 4 && line.length <= 48);
+  return candidates.sort((a, b) => scoreNameLine(b) - scoreNameLine(a))[0] || "";
+}
+
+function extractStickerAddress(lines, phone, paymentAmount, fullName) {
+  const candidates = lines
+    .map((line) => stripStickerLineNoise(line, phone, paymentAmount))
+    .filter((line) => line && line !== fullName && !looksLikePhoneLine(line) && !looksLikeAmountLine(line))
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => countGeorgianLetters(line) >= 2 || /\d/.test(line));
+  const addressLine = candidates.sort((a, b) => scoreAddressLine(b) - scoreAddressLine(a))[0] || "";
+  return normalizeStickerAddress(addressLine);
+}
+
+function stripStickerLineNoise(line, phone, paymentAmount) {
+  let value = String(line || "").trim();
+  if (phone) {
+    const local = phone.replace("+995", "");
+    value = value.replace(new RegExp(local.split("").join("\\D*"), "g"), " ");
+  }
+  if (Number.isFinite(paymentAmount)) {
+    value = value.replace(new RegExp(`\\b${String(paymentAmount).replace(".", "[.,]")}\\b\\s*(?:ლარი|ლ|gel|₾)?`, "gi"), " ");
+  }
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function looksLikePhoneLine(line) {
+  return /(?:\+?\s*995\s*)?5\d{2}\D{0,4}\d{2}\D{0,4}\d{2}\D{0,4}\d{2}/.test(String(line || ""));
+}
+
+function looksLikeAmountLine(line) {
+  return /(?:ლარი|ლ\b|gel\b|₾|თანხ|ქეშ|ფასი|გადასახდ)/i.test(String(line || ""));
+}
+
+function looksLikeAddressLine(line) {
+  return scoreAddressLine(line) >= 4;
+}
+
+function scoreAddressLine(line) {
+  const value = String(line || "");
+  let score = 0;
+  if (/\d/.test(value)) score += 3;
+  if (/(ქუჩა|ქ\.?|გამზირი|გამზ\.?|ჩიხი|შესახვევი|გზატკეცილი|პროსპექტი|№|#|n\s?\d)/i.test(value)) score += 5;
+  if (/(თბილისი|რუსთავი|ვაკე|საბურთალო|ისანი|სამგორი|გლდანი|დიღომი|ვარკეთილი|ვერა|მთაწმინდა)/i.test(value)) score += 2;
+  if (countGeorgianLetters(value) >= 4) score += 1;
+  if (value.length > 80) score -= 2;
+  return score;
+}
+
+function scoreNameLine(line) {
+  const words = String(line || "").split(/\s+/).filter(Boolean);
+  let score = countGeorgianLetters(line);
+  if (words.length >= 2 && words.length <= 4) score += 8;
+  if (words.length === 1) score += 2;
+  return score;
+}
+
+function normalizeStickerAddress(value) {
+  const address = String(value || "")
+    .replace(/^[,.\-:; ]+|[,.\-:; ]+$/g, "")
+    .replace(/\s+(№|#)\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!address) return "";
+  return /თბილისი|რუსთავი/i.test(address) ? address : `თბილისი, ${address}`;
+}
+
+function countGeorgianLetters(value) {
+  return (String(value || "").match(/[ა-ჰ]/g) || []).length;
+}
+
+function calculateVisionConfidence(annotation) {
+  const confidences = [];
+  const pages = Array.isArray(annotation?.pages) ? annotation.pages : [];
+  pages.forEach((page) => {
+    (page.blocks || []).forEach((block) => {
+      if (Number.isFinite(block.confidence)) confidences.push(block.confidence);
+      (block.paragraphs || []).forEach((paragraph) => {
+        if (Number.isFinite(paragraph.confidence)) confidences.push(paragraph.confidence);
+        (paragraph.words || []).forEach((word) => {
+          if (Number.isFinite(word.confidence)) confidences.push(word.confidence);
+        });
+      });
+    });
+  });
+  if (!confidences.length) return 0;
+  return Math.round((confidences.reduce((sum, value) => sum + value, 0) / confidences.length) * 100) / 100;
+}
+
+function cleanBase64Image(value) {
+  return String(value || "")
+    .replace(/^data:image\/[a-z0-9.+-]+;base64,/i, "")
+    .replace(/\s+/g, "");
+}
+
+function setCorsHeaders(req, res) {
+  const origin = String(req.headers.origin || "");
+  const allowedOrigin = ALLOWED_ORIGINS.has(origin) || origin.endsWith(".web.app") || origin.endsWith(".firebaseapp.com")
+    ? origin
+    : "https://dadunadze1.github.io";
+  res.set("Access-Control-Allow-Origin", allowedOrigin);
+  res.set("Vary", "Origin");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, X-Delivery-Role");
+  res.set("Access-Control-Max-Age", "3600");
+}
+
+function httpError(status, publicMessage, code = "request-failed", internalMessage = "") {
+  const error = new Error(internalMessage || publicMessage);
+  error.status = status;
+  error.publicMessage = publicMessage;
+  error.code = code;
+  return error;
 }

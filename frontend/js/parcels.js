@@ -109,6 +109,7 @@ function getVisiblePinsForCurrentRole(pins = state.activePins) {
 
 
 function openAdminAddParcel() {
+  state.photoParcelDraft = null;
   openAddressSearchDialog("");
 }
 
@@ -117,6 +118,7 @@ function openAddressSearchDialog(username) {
   resetMapSelectionUi();
   const body = `
     <form id="addressSearchForm" class="address-search-form">
+      ${typeof renderParcelPhotoImportPanel === "function" ? renderParcelPhotoImportPanel("addressSearch") : ""}
       ${typeof renderAddressDirectoryFields === "function" ? renderAddressDirectoryFields("addressSearch") : ""}
       <label for="addressSearchInput">სრული მისამართი</label>
       <div class="address-autocomplete-shell">
@@ -147,6 +149,9 @@ function openAddressSearchDialog(username) {
   document.getElementById("addressSearchForm")?.addEventListener("submit", (event) => {
     handleAddressSearch(event, username);
   });
+  if (typeof bindParcelPhotoImportControls === "function") {
+    bindParcelPhotoImportControls("addressSearch", (result, helpers) => applyParcelPhotoImportResult(result, username, helpers));
+  }
   if (typeof bindAddressDirectoryControls === "function") {
     bindAddressDirectoryControls("addressSearch", {
       targetInputId: "addressSearchInput",
@@ -311,6 +316,7 @@ async function openParcelDetailsDialog() {
   const previewAddress = getPendingAddressPreviewLabel();
   const couriers = state.isAdmin ? await getCouriers() : [];
   const partners = state.isAdmin ? await getPartners().catch(() => []) : [];
+  const photoDraft = state.photoParcelDraft || {};
   const courierOptions = couriers.map((user) => `<option value="${escapeAttr(user.username)}" ${state.selectedCourier === user.username ? "selected" : ""}>${escapeHtml(userDisplayName(user))}</option>`).join("");
   const partnerOptions = partners
     .filter((partner) => partner.status === "active")
@@ -330,11 +336,17 @@ async function openParcelDetailsDialog() {
       <div id="parcelAddressSuggestions" class="address-autocomplete-dropdown" role="listbox" hidden></div>
     </div>
     <label for="parcelName">მიმღების სახელი</label>
-    <input id="parcelName" type="text" autocomplete="name">
+    <input id="parcelName" type="text" autocomplete="name" value="${escapeAttr(photoDraft.fullName || "")}">
     <label for="parcelPhone">მობილური</label>
-    <input id="parcelPhone" type="tel" autocomplete="tel">
+    <input id="parcelPhone" type="tel" autocomplete="tel" value="${escapeAttr(photoDraft.phone || "")}">
     <label for="parcelPaymentAmount">ქეში</label>
-    <input id="parcelPaymentAmount" type="text" inputmode="decimal" autocomplete="off" value="0">
+    <input id="parcelPaymentAmount" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(photoDraft.paymentAmount ?? 0)}">
+    ${photoDraft.rawText ? `
+      <div class="parcel-photo-draft">
+        <strong>ფოტოდან ამოკითხული ტექსტი</strong>
+        <span>${escapeHtml(photoDraft.rawText).replace(/\n/g, "<br>")}</span>
+      </div>
+    ` : ""}
     ${state.isAdmin ? `
       <label for="parcelPartner">პარტნიორი</label>
       <select id="parcelPartner">
@@ -434,6 +446,7 @@ async function saveParcel() {
 
   const shouldRefresh = state.isAdmin || courierUsername === state.currentUser;
   cancelMapSelection();
+  state.photoParcelDraft = null;
   closeDialog();
   if (shouldRefresh) await refreshPins();
   if (payload.assignmentMessage) {
@@ -781,6 +794,11 @@ async function selectAutocompleteSuggestion(suggestion, input, closeDropdown, us
 
 async function handleAddressSearch(event, username) {
   event.preventDefault();
+  await runAddressSearch(username);
+}
+
+
+async function runAddressSearch(username) {
   let query = document.getElementById("addressSearchInput")?.value.trim();
   const message = document.getElementById("addressSearchMessage");
   const resultsElement = document.getElementById("addressSearchResults");
@@ -822,6 +840,34 @@ async function handleAddressSearch(event, username) {
       return;
     }
     if (message) message.textContent = error?.code === "GEOCODE_BUSY" ? GEOCODE_BUSY_MESSAGE : "მისამართის ძებნა ვერ მოხერხდა.";
+  }
+}
+
+
+async function applyParcelPhotoImportResult(result, username, helpers = {}) {
+  const draft = {
+    address: cleanAddressInput(result?.address || ""),
+    fullName: String(result?.fullName || "").trim(),
+    phone: String(result?.phone || "").trim(),
+    paymentAmount: Number.isFinite(Number(result?.paymentAmount)) ? safeMoney(result.paymentAmount) : 0,
+    rawText: String(result?.rawText || "").trim(),
+    warnings: Array.isArray(result?.warnings) ? result.warnings.filter(Boolean) : [],
+    confidence: Number(result?.confidence || 0),
+  };
+  state.photoParcelDraft = draft;
+  const input = document.getElementById("addressSearchInput");
+  const message = document.getElementById("addressSearchMessage");
+  if (input && draft.address) input.value = draft.address;
+  const statusText = [
+    draft.address ? "მისამართი ამოიკითხა და იძებნება..." : "",
+    ...draft.warnings,
+  ].filter(Boolean).join(" ");
+  if (message) message.textContent = statusText;
+  if (helpers.status) helpers.status.textContent = statusText || "ფოტოდან მონაცემები ამოიკითხა.";
+  if (draft.address) {
+    await runAddressSearch(username);
+  } else if (message) {
+    message.textContent = "ფოტოდან მისამართი ვერ ამოვიკითხე. ჩაწერე მისამართი ხელით.";
   }
 }
 
@@ -1755,6 +1801,7 @@ function resetMapSelectionUi() {
   state.pendingTariffId = "";
   state.pendingZone = null;
   state.pendingAutoAssignment = null;
+  state.photoParcelDraft = null;
   state.locationEditParcelId = "";
   els.menuButton.hidden = false;
   els.modeToast.hidden = true;

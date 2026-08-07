@@ -69,6 +69,7 @@ const state = {
   pendingAddressWarning: "",
   pendingZone: null,
   pendingAutoAssignment: null,
+  photoParcelDraft: null,
   locationEditParcelId: "",
   calendarDate: new Date(),
   activeDialogTitle: "",

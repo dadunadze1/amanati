@@ -557,6 +557,56 @@ body.auth-loading .app-shell {
   font-size: 0.9rem;
 }
 
+.parcel-photo-import,
+.parcel-photo-draft {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.parcel-photo-import-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.parcel-photo-import-copy strong,
+.parcel-photo-draft strong {
+  color: var(--primary-strong);
+  font-size: 0.95rem;
+}
+
+.parcel-photo-import-copy span,
+.parcel-photo-draft span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.parcel-photo-import .button {
+  margin-top: 0;
+}
+
+.parcel-photo-preview {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.parcel-photo-status {
+  min-height: 18px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
 .dialog-body {
   display: grid;
   gap: 10px;
