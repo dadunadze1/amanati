@@ -28,10 +28,20 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
+      - name: Prepare static artifact
+        run: |
+          mkdir -p .pages
+          cp index.html .pages/
+          cp .nojekyll .pages/
+          rsync -a --delete \
+            --exclude 'script.js' \
+            --exclude 'script.backup.js' \
+            frontend/ .pages/frontend/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: .pages
 
       - name: Deploy to GitHub Pages
         id: deployment

@@ -856,6 +856,7 @@ function getAddressLabelForSearchSelection(result, requestedAddress = "") {
 
 async function selectAddressSearchResult(result, username, selectedIndex = -1, requestedAddress = "") {
   if (!result) return;
+  if (typeof ensureAddressDirectoryLoaded === "function") await ensureAddressDirectoryLoaded();
   const coords = getResultCoords(result);
   if (!Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) return;
   const normalizedRequested = typeof normalizeAddressDirectoryAddress === "function"
@@ -896,6 +897,7 @@ async function selectAddressSearchResult(result, username, selectedIndex = -1, r
 
 
 async function confirmAddressSearchSelection(username) {
+  if (typeof ensureAddressDirectoryLoaded === "function") await ensureAddressDirectoryLoaded();
   const message = document.getElementById("addressSearchMessage");
   if (!state.pendingCoords) {
     if (message) message.textContent = "ჯერ მოძებნეთ და აირჩიეთ მისამართი.";

@@ -1,21 +1,6 @@
 {
-  "settings": {
-    "defaultUser": "admin"
-  },
-  "users": [
-    {
-      "id": "static-admin",
-      "username": "admin",
-      "role": "admin",
-      "status": "active",
-      "password": "123456",
-      "firstName": "Admin",
-      "lastName": "",
-      "phone": "",
-      "createdAt": "2026-05-10T00:00:00.000Z",
-      "updatedAt": "2026-05-11T00:00:00.000Z"
-    }
-  ],
+  "settings": {},
+  "users": [],
   "couriers": [],
   "pending": [],
   "parcels": [],

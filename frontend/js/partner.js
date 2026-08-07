@@ -375,6 +375,7 @@ function openPartnerNewOrderDialog() {
 
 async function savePartnerOrder() {
   const message = document.getElementById("partnerOrderMessage");
+  if (typeof ensureAddressDirectoryLoaded === "function") await ensureAddressDirectoryLoaded();
   const addressParts = typeof getAddressDirectoryValue === "function" ? getAddressDirectoryValue("partnerOrder") : {};
   const city = addressParts.city || document.getElementById("partnerOrderCity")?.value.trim();
   const district = addressParts.district || document.getElementById("partnerOrderDistrict")?.value.trim() || "";
