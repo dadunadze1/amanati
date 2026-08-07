@@ -955,7 +955,8 @@ async function assignSelectedPins() {
   }
   try {
     const selectedPins = state.activePins.filter((pin) => parcelIds.includes(pin.id));
-    await api("/api/parcels/assign", { method: "PATCH", body: { parcelIds, courierUsername } });
+    const expectedUpdatedAtById = Object.fromEntries(selectedPins.map((pin) => [pin.id, pin.updatedAt || ""]));
+    await api("/api/parcels/assign", { method: "PATCH", body: { parcelIds, courierUsername, expectedUpdatedAtById } });
     if (typeof publishParcelAssignedNotification === "function") {
       await Promise.all(selectedPins.map((pin) => (
         publishParcelAssignedNotification({ ...pin, courierUsername }, courierUsername).catch((error) => {

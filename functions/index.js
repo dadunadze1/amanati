@@ -7,6 +7,7 @@ const webpush = require("web-push");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 initializeApp();
 
@@ -19,6 +20,9 @@ const ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION = "adminWebPushSubscriptions";
 const ADMIN_NOTIFICATION_COLLECTION = "adminNotifications";
 const APP_LINK = "https://dadunadze1.github.io/amanati/frontend/";
 const WEB_PUSH_PUBLIC_KEY = "BAEuO5gXFaWrtcaxhWxvzgNc1hlvCYZoNtYdxJno43RqzgANahvbOvrQzaMV7rMTUsDXyGaqa_OW5FrxbYCK4MY";
+const PUSH_MAX_ATTEMPTS = 5;
+const PUSH_RETRY_DELAY_MS = 5 * 60 * 1000;
+const PUSH_LOCK_STALE_MS = 2 * 60 * 1000;
 
 exports.sendAdminNotification = onDocumentCreated({
   document: `${ADMIN_NOTIFICATION_COLLECTION}/{notificationId}`,
@@ -39,11 +43,25 @@ exports.sendStaticStoreAdminNotifications = onDocumentWritten({
 }, async (event) => {
   const before = event.data?.before?.data() || {};
   const after = event.data?.after?.data() || {};
+  await processStaticStoreNotifications(after, before);
+});
+
+exports.retryStaticStorePushNotifications = onSchedule({
+  schedule: "every 5 minutes",
+  region: "europe-west8",
+  secrets: [WEB_PUSH_PRIVATE_KEY],
+}, async () => {
+  const snapshot = await db.doc(STATIC_STORE_REF).get();
+  if (!snapshot.exists) return;
+  await processStaticStoreNotifications(snapshot.data() || {}, {});
+});
+
+async function processStaticStoreNotifications(after, before = {}) {
   const notifications = after.adminNotifications || {};
   const sent = after.sentAdminNotificationIds || {};
   const beforeSent = before.sentAdminNotificationIds || {};
   const pending = Object.entries(notifications)
-    .filter(([id]) => !sent[id] && !beforeSent[id])
+    .filter(([id, value]) => shouldProcessStaticNotification(id, value, sent, beforeSent))
     .map(([id, value]) => normalizeNotification(value, id))
     .filter(Boolean);
 
@@ -52,20 +70,39 @@ exports.sendStaticStoreAdminNotifications = onDocumentWritten({
   const sentUpdates = {};
   for (const notification of pending) {
     if (!(await claimAdminNotificationSend(notification))) continue;
-    await sendToAdminDevices(notification);
-    await markAdminNotificationSent(notification);
-    sentUpdates[`sentAdminNotificationIds.${notification.id}`] = FieldValue.serverTimestamp();
+    const attempt = Number(notification.attempts || 0) + 1;
+    sentUpdates[`adminNotifications.${notification.id}.deliveryStatus`] = "processing";
+    sentUpdates[`adminNotifications.${notification.id}.attempts`] = attempt;
+    sentUpdates[`adminNotifications.${notification.id}.lastAttemptAt`] = new Date().toISOString();
+    sentUpdates[`adminNotifications.${notification.id}.updatedAt`] = new Date().toISOString();
+    try {
+      const result = await sendToAdminDevices(notification);
+      await markAdminNotificationSent(notification, result);
+      sentUpdates[`sentAdminNotificationIds.${notification.id}`] = FieldValue.serverTimestamp();
+      sentUpdates[`adminNotifications.${notification.id}.deliveryStatus`] = "sent";
+      sentUpdates[`adminNotifications.${notification.id}.sentAt`] = new Date().toISOString();
+      sentUpdates[`adminNotifications.${notification.id}.lastError`] = FieldValue.delete();
+      sentUpdates[`adminNotifications.${notification.id}.nextAttemptAt`] = FieldValue.delete();
+      sentUpdates[`adminNotifications.${notification.id}.updatedAt`] = new Date().toISOString();
+    } catch (error) {
+      await markAdminNotificationFailed(notification, error);
+      const finalFailure = attempt >= PUSH_MAX_ATTEMPTS;
+      sentUpdates[`adminNotifications.${notification.id}.deliveryStatus`] = finalFailure ? "failed" : "pending";
+      sentUpdates[`adminNotifications.${notification.id}.lastError`] = getErrorMessage(error);
+      sentUpdates[`adminNotifications.${notification.id}.nextAttemptAt`] = finalFailure ? FieldValue.delete() : new Date(Date.now() + PUSH_RETRY_DELAY_MS).toISOString();
+      sentUpdates[`adminNotifications.${notification.id}.updatedAt`] = new Date().toISOString();
+    }
   }
 
-  await db.doc(STATIC_STORE_REF).set(sentUpdates, { merge: true });
-});
+  if (Object.keys(sentUpdates).length) await db.doc(STATIC_STORE_REF).set(sentUpdates, { merge: true });
+}
 
 async function sendToAdminDevices(notification) {
   const tokens = await loadAdminPushTokens(notification);
   const subscriptions = await loadAdminWebPushSubscriptions(notification);
   if (!tokens.length && !subscriptions.length) {
     logger.warn("No push devices registered", { notificationId: notification.id, partnerId: notification.partnerId });
-    return;
+    return { fcmSuccessCount: 0, fcmFailureCount: 0, webPushSuccessCount: 0, webPushFailureCount: 0, noDevices: true };
   }
 
   let fcmResult = { successCount: 0, failureCount: 0 };
@@ -107,27 +144,48 @@ async function sendToAdminDevices(notification) {
     webPushSuccessCount: webPushResult.successCount,
     webPushFailureCount: webPushResult.failureCount,
   });
+  return {
+    fcmSuccessCount: fcmResult.successCount,
+    fcmFailureCount: fcmResult.failureCount,
+    webPushSuccessCount: webPushResult.successCount,
+    webPushFailureCount: webPushResult.failureCount,
+  };
 }
 
 async function claimAdminNotificationSend(notification) {
   const ref = db.collection("adminNotificationSendLocks").doc(notification.id);
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
-    if (snapshot.exists && snapshot.data()?.sentAt) return false;
-    if (snapshot.exists && snapshot.data()?.processingAt) return false;
+    const data = snapshot.data() || {};
+    if (snapshot.exists && data.sentAt) return false;
+    const processingAtMs = getTimestampMs(data.processingAt);
+    if (processingAtMs && Date.now() - processingAtMs < PUSH_LOCK_STALE_MS) return false;
     transaction.set(ref, {
       notificationId: notification.id,
       parcelId: notification.parcelId,
       status: notification.status,
+      attempts: Number(notification.attempts || 0) + 1,
       processingAt: FieldValue.serverTimestamp(),
+      failedAt: FieldValue.delete(),
+      lastError: FieldValue.delete(),
     }, { merge: true });
     return true;
   });
 }
 
-async function markAdminNotificationSent(notification) {
+async function markAdminNotificationSent(notification, result = {}) {
   await db.collection("adminNotificationSendLocks").doc(notification.id).set({
     sentAt: FieldValue.serverTimestamp(),
+    processingAt: FieldValue.delete(),
+    result,
+  }, { merge: true });
+}
+
+async function markAdminNotificationFailed(notification, error) {
+  await db.collection("adminNotificationSendLocks").doc(notification.id).set({
+    failedAt: FieldValue.serverTimestamp(),
+    processingAt: FieldValue.delete(),
+    lastError: getErrorMessage(error),
   }, { merge: true });
 }
 
@@ -287,6 +345,33 @@ function buildPushData(notification) {
   };
 }
 
+function shouldProcessStaticNotification(id, value, sent = {}, beforeSent = {}) {
+  if (!id || sent[id] || beforeSent[id]) return false;
+  if (!value || typeof value !== "object") return false;
+  const deliveryStatus = String(value.deliveryStatus || "pending");
+  if (deliveryStatus === "sent" || deliveryStatus === "failed") return false;
+  if (deliveryStatus === "processing") {
+    const processingMs = Date.parse(value.updatedAt || value.lastAttemptAt || "");
+    if (!Number.isFinite(processingMs) || Date.now() - processingMs < PUSH_LOCK_STALE_MS) return false;
+  }
+  const attempts = Number(value.attempts || 0);
+  if (Number.isFinite(attempts) && attempts >= PUSH_MAX_ATTEMPTS) return false;
+  const nextAttemptMs = Date.parse(value.nextAttemptAt || "");
+  return !Number.isFinite(nextAttemptMs) || nextAttemptMs <= Date.now();
+}
+
+function getTimestampMs(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getErrorMessage(error) {
+  return String(error?.message || error?.code || error || "unknown-error").slice(0, 500);
+}
+
 async function deactivateInvalidTokens(tokens, responses) {
   const invalidTokens = tokens.filter((token, index) => {
     const code = responses[index]?.error?.code || "";
@@ -341,6 +426,7 @@ function normalizeNotification(raw, id) {
     id: getSafeFieldKey(raw.eventKey || id || raw.parcelId || Date.now()),
     type: String(raw.type || (status === "failed" ? "parcel_failed" : "parcel_delivered")),
     status,
+    attempts: Number(raw.attempts || 0),
     title,
     body,
     parcelId: String(raw.parcelId || ""),

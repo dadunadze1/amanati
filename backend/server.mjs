@@ -593,6 +593,14 @@ function canDeleteParcel(session, db, parcel) {
   return Boolean(partner && partner.role === "partner" && partner.status === "active" && isPartnerParcel(parcel) && parcelBelongsToPartner(parcel, partner));
 }
 
+function assertParcelVersion(parcel, expectedUpdatedAt) {
+  const expected = String(expectedUpdatedAt || "").trim();
+  if (!expected || !parcel?.updatedAt) return;
+  if (String(parcel.updatedAt || "") !== expected) {
+    throw httpError(409, "შეკვეთა უკვე შეიცვალა სხვა მომხმარებლის მიერ. განაახლეთ გვერდი და თავიდან სცადეთ.");
+  }
+}
+
 function hasParcelCoords(parcel) {
   return Number.isFinite(Number(parcel?.lat ?? parcel?.latitude)) && Number.isFinite(Number(parcel?.lng ?? parcel?.longitude));
 }
@@ -1487,6 +1495,7 @@ async function handleApi(request, response, url) {
       status: "pending",
       assignedAt: courier ? now : "",
       createdAt: now,
+      updatedAt: now,
     };
     db.parcels.push(parcel);
     await writeDb(db);
@@ -1499,6 +1508,7 @@ async function handleApi(request, response, url) {
     const body = await readJsonBody(request);
     const courierUsername = cleanUsername(body.courierUsername);
     const parcelIds = Array.isArray(body.parcelIds) ? body.parcelIds.map((id) => String(id)) : [];
+    const expectedUpdatedAtById = body.expectedUpdatedAtById && typeof body.expectedUpdatedAtById === "object" ? body.expectedUpdatedAtById : {};
     const courier = findUser(db, courierUsername);
     if (!courier || courier.role !== "courier" || courier.status !== "active") throw httpError(404, "კურიერი ვერ მოიძებნა.");
     if (!parcelIds.length) throw httpError(400, "აირჩიეთ მინიმუმ ერთი ამანათი.");
@@ -1507,6 +1517,7 @@ async function handleApi(request, response, url) {
     db.parcels.forEach((parcel) => {
       if (parcelIds.includes(parcel.id) && !parcel.archivedAt && !isDeletedParcel(parcel)) {
         if (!Number.isFinite(Number(parcel.lat ?? parcel.latitude)) || !Number.isFinite(Number(parcel.lng ?? parcel.longitude))) return;
+        assertParcelVersion(parcel, expectedUpdatedAtById[parcel.id]);
         parcel.courierUsername = courier.username;
         parcel.assignedAt = new Date().toISOString();
         parcel.updatedAt = parcel.assignedAt;
@@ -1529,6 +1540,7 @@ async function handleApi(request, response, url) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw httpError(400, "სწორი გრძედი და განედი აუცილებელია.");
     const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelLocationMatch[1]));
     if (!parcel || parcel.archivedAt || isDeletedParcel(parcel)) throw httpError(404, "შეკვეთა ვერ მოიძებნა.");
+    assertParcelVersion(parcel, body.expectedUpdatedAt);
     const now = new Date().toISOString();
     parcel.lat = lat;
     parcel.lng = lng;
@@ -1552,6 +1564,7 @@ async function handleApi(request, response, url) {
     if (!["delivered", "failed", "pending"].includes(status)) throw httpError(400, "სტატუსი არასწორია.");
     const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelStatusMatch[1]));
     if (!parcel || parcel.archivedAt || isDeletedParcel(parcel)) throw httpError(404, "ამანათი ვერ მოიძებნა.");
+    assertParcelVersion(parcel, body.expectedUpdatedAt);
     if (!canAccessCourier(session, parcel.courierUsername)) throw httpError(403, "წვდომა აკრძალულია.");
     if (session.role !== "admin" && status === "pending") throw httpError(403, "ამანათის მოლოდინში დაბრუნება მხოლოდ ადმინს შეუძლია.");
     if (session.role !== "admin" && parcel.status === "delivered" && status === "failed") throw httpError(403, "ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
@@ -1590,6 +1603,7 @@ async function handleApi(request, response, url) {
     const parcel = db.parcels.find((item) => item.id === decodeURIComponent(parcelDeleteMatch[1]));
     if (!parcel || parcel.archivedAt || isDeletedParcel(parcel)) throw httpError(404, "შეკვეთა ვერ მოიძებნა.");
     if (!canDeleteParcel(session, db, parcel)) throw httpError(403, "ამ შეკვეთის წაშლა შეუძლებელია.");
+    assertParcelVersion(parcel, body.expectedUpdatedAt);
     const now = new Date().toISOString();
     parcel.deletedAt = now;
     parcel.deletedBy = session.username;

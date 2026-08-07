@@ -962,6 +962,7 @@ async function updatePinStatus(pinId, status, options = {}) {
       confirmed: pin?.confirmed ?? pin?.isConfirmed ?? pin?.status !== "pending",
       currentLat: state.currentPosition?.lat,
       currentLng: state.currentPosition?.lng,
+      expectedUpdatedAt: pin?.updatedAt || "",
     },
   });
   if (typeof publishAdminParcelStatusNotification === "function") {
@@ -1291,6 +1292,7 @@ function toggleSelectedParcelCard() {
 
 async function saveParcelLocationEdit() {
   if (!state.isAdmin || state.mode !== "editingParcelLocation" || !state.locationEditParcelId || !state.pendingCoords) return;
+  const parcel = state.activePins.find((item) => item.id === state.locationEditParcelId);
   try {
     await api(`/api/parcels/${encodeURIComponent(state.locationEditParcelId)}/location`, {
       method: "PATCH",
@@ -1299,6 +1301,7 @@ async function saveParcelLocationEdit() {
         lng: state.pendingCoords.lng,
         locationAccuracy: "confirmed",
         locationSource: "admin_manual_adjustment",
+        expectedUpdatedAt: parcel?.updatedAt || "",
       },
     });
     const editedId = state.locationEditParcelId;
@@ -1331,7 +1334,7 @@ async function confirmParcelLocation(parcelId) {
   try {
     await api(`/api/parcels/${encodeURIComponent(parcelId)}/location`, {
       method: "PATCH",
-      body: { lat, lng, locationAccuracy: "confirmed", locationSource: "admin_manual_adjustment" },
+      body: { lat, lng, locationAccuracy: "confirmed", locationSource: "admin_manual_adjustment", expectedUpdatedAt: parcel.updatedAt || "" },
     });
     await refreshPins();
     showSelectedParcelCard(parcelId, { focus: true });
@@ -1448,7 +1451,8 @@ async function confirmParcelDelete(parcelId) {
 
 async function deleteParcelAndRefresh(parcelId) {
   try {
-    await deleteParcel(parcelId);
+    const parcel = await findParcelForDelete(parcelId);
+    await deleteParcel(parcelId, "", parcel?.updatedAt || "");
     if (state.routePinId === parcelId) clearActiveRoute();
     if (state.selectedPinId === parcelId) hideSelectedParcelCard();
     closeDialog();

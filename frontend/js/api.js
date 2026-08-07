@@ -7,6 +7,8 @@ const STATIC_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const STATIC_DEMO_COURIER_USERNAMES = new Set(["courier1", "courier2"]);
 const STATIC_DEMO_COURIER_IDS = new Set(["static-courier-1", "static-courier-2"]);
 const STATIC_DEMO_COURIER_PHONES = new Set(["+995555000001", "+995555000002"]);
+const STATIC_PUSH_EVENT_RETENTION_DAYS = 14;
+const STATIC_AUTO_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let staticRealtimeRefreshTimer = null;
 
 function isStaticDeploy() {
@@ -58,6 +60,8 @@ async function loadStaticBootstrap() {
   }
 
   loadStaticBootstrap.cache = normalizeStaticStore(mergeStaticStores(...stores));
+  archiveStaticCompletedParcels(loadStaticBootstrap.cache);
+  runStaticAutomaticCleanup(loadStaticBootstrap.cache);
   await backfillStaticPartnerOrderLocations(loadStaticBootstrap.cache);
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
   saveStaticBootstrap();
@@ -391,12 +395,20 @@ function hydrateStaticFinanceStorage(financeData = {}) {
 function queueStaticPushNotification(store, notification) {
   if (!store || !notification) return;
   const key = getStaticPushNotificationKey(notification.eventKey || `${notification.parcelId || "parcel"}-${notification.status || Date.now()}`);
+  const existing = store.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications[key] : null;
+  if (existing?.deliveryStatus === "sent" || existing?.deliveryStatus === "processing") return;
+  const now = new Date().toISOString();
   store.adminNotifications = {
     ...(store.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications : {}),
     [key]: {
+      ...(existing && typeof existing === "object" ? existing : {}),
       ...notification,
       id: key,
-      createdAt: new Date().toISOString(),
+      deliveryStatus: existing?.deliveryStatus || "pending",
+      attempts: Number(existing?.attempts || 0),
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      nextAttemptAt: existing?.nextAttemptAt || now,
     },
   };
 }
@@ -506,6 +518,13 @@ function saveStaticFinanceData(financeData) {
   saveStaticBootstrap();
 }
 
+function addDaysToDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + Number(days || 0));
+  return toDateKey(date);
+}
+
 function getStaticRetentionParcelDateKey(parcel) {
   return normalizeDateKey(parcel?.archivedAt || parcel?.completedAt || parcel?.deliveredAt || parcel?.failedAt || parcel?.updatedAt || parcel?.createdAt);
 }
@@ -527,7 +546,58 @@ function filterStaticRetentionAdjustments(adjustments, cutoffDate) {
   });
 }
 
+function shouldArchiveStaticParcelToHistory(parcel) {
+  return Boolean(parcel?.archivedAt && !isStaticDeletedParcel(parcel) && ["delivered", "failed"].includes(parcel.status));
+}
+
+function archiveStaticCompletedParcels(store) {
+  if (!store || !Array.isArray(store.parcels)) return 0;
+  const beforeHistory = Array.isArray(store.history) ? store.history : [];
+  const nextHistory = [...beforeHistory];
+  const nextParcels = [];
+  let moved = 0;
+
+  store.parcels.forEach((parcel) => {
+    if (!shouldArchiveStaticParcelToHistory(parcel)) {
+      nextParcels.push(parcel);
+      return;
+    }
+    nextHistory.push(parcel);
+    moved += 1;
+  });
+
+  if (!moved) return 0;
+  store.parcels = nextParcels;
+  store.history = mergeStaticRecordsByKey([], nextHistory, getStaticParcelKey, resolveStaticParcelRecord);
+  return moved;
+}
+
+function pruneStaticPushEvents(store, referenceDate = new Date()) {
+  if (!store || typeof store !== "object") return 0;
+  const cutoff = new Date(referenceDate);
+  cutoff.setDate(cutoff.getDate() - STATIC_PUSH_EVENT_RETENTION_DAYS);
+  const cutoffMs = cutoff.getTime();
+  const notifications = store.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications : {};
+  const sent = store.sentAdminNotificationIds && typeof store.sentAdminNotificationIds === "object" ? store.sentAdminNotificationIds : {};
+  let deleted = 0;
+
+  Object.entries(notifications).forEach(([id, item]) => {
+    const status = String(item?.deliveryStatus || "");
+    const dateMs = Date.parse(item?.sentAt || item?.createdAt || item?.updatedAt || "");
+    if (status === "sent" && Number.isFinite(dateMs) && dateMs < cutoffMs) {
+      delete notifications[id];
+      delete sent[id];
+      deleted += 1;
+    }
+  });
+
+  store.adminNotifications = notifications;
+  store.sentAdminNotificationIds = sent;
+  return deleted;
+}
+
 function runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate = cutoffDate) {
+  archiveStaticCompletedParcels(store);
   const beforeHistory = store.history.length;
   const beforeParcels = store.parcels.length;
   const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
@@ -541,6 +611,7 @@ function runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate = c
     if (!parcel.archivedAt) return true;
     return !isStaticRetentionParcelExpired(parcel, isStaticPartnerParcel(parcel) ? partnerOrderCutoffDate : cutoffDate);
   });
+  pruneStaticPushEvents(store);
 
   const cashAdjustments = filterStaticRetentionAdjustments(financeData.cashAdjustments, cutoffDate);
   const partnerCashAdjustments = filterStaticRetentionAdjustments(financeData.partnerCashAdjustments, partnerOrderCutoffDate);
@@ -565,6 +636,31 @@ function runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate = c
     deletedPayAdjustments: beforePayAdjustments - payAdjustments.length,
     deletedDailyBalanceLedger: beforeDailyBalanceLedger - dailyBalanceLedger.length,
   };
+}
+
+function runStaticAutomaticCleanup(store) {
+  if (!store?.settings) return null;
+  const now = new Date();
+  const lastRun = Date.parse(store.settings.lastAutomaticCleanupAt || "");
+  if (Number.isFinite(lastRun) && now.getTime() - lastRun < STATIC_AUTO_RETENTION_INTERVAL_MS) return null;
+
+  const cutoffDate = addDaysToDateKey(getTodayKey(), -30 * Number(CONFIG.dataRetentionMonths || 8));
+  const partnerOrderCutoffDate = addDaysToDateKey(getTodayKey(), -30 * Number(CONFIG.partnerOrderRetentionMonths || 1));
+  const result = runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate || cutoffDate);
+  store.settings.lastAutomaticCleanupAt = now.toISOString();
+  store.settings.lastAutomaticCleanupDate = toDateKey(now);
+  return result;
+}
+
+function assertStaticParcelVersion(parcel, expectedUpdatedAt) {
+  const expected = String(expectedUpdatedAt || "").trim();
+  if (!expected || !parcel?.updatedAt) return;
+  if (String(parcel.updatedAt || "") !== expected) {
+    const error = new Error("შეკვეთა უკვე შეიცვალა სხვა მომხმარებლის მიერ. განაახლეთ გვერდი და თავიდან სცადეთ.");
+    error.status = 409;
+    error.code = "parcel_conflict";
+    throw error;
+  }
 }
 
 function publicStaticUser(user) {
@@ -1232,6 +1328,7 @@ async function staticApi(path, options = {}) {
       autoAssigned: Boolean(assignment.autoAssigned || body.autoAssigned),
       status: "pending",
       createdAt: now,
+      updatedAt: now,
       assignedAt: assignedCourierUsername ? now : "",
     };
     store.parcels.push(parcel);
@@ -1242,12 +1339,15 @@ async function staticApi(path, options = {}) {
 
   if (method === "PATCH" && apiPath === "/api/parcels/assign") {
     const parcelIds = Array.isArray(body.parcelIds) ? body.parcelIds : [];
+    const expectedUpdatedAtById = body.expectedUpdatedAtById && typeof body.expectedUpdatedAtById === "object" ? body.expectedUpdatedAtById : {};
     const missingLocation = store.parcels.find((parcel) => parcelIds.includes(parcel.id) && (!Number.isFinite(Number(parcel.lat)) || !Number.isFinite(Number(parcel.lng))));
     if (missingLocation) throw new Error("კურიერის მიბმამდე მიუთითეთ შეკვეთის პინის ლოკაცია.");
     store.parcels.forEach((parcel) => {
       if (parcelIds.includes(parcel.id) && !isStaticDeletedParcel(parcel)) {
+        assertStaticParcelVersion(parcel, expectedUpdatedAtById[parcel.id]);
         parcel.courierUsername = body.courierUsername || "";
         parcel.assignedAt = new Date().toISOString();
+        parcel.updatedAt = parcel.assignedAt;
         parcel.autoAssigned = false;
         if (parcel.courierUsername) queueStaticPushNotification(store, buildStaticParcelAssignedNotification(parcel, parcel.courierUsername));
       }
@@ -1260,6 +1360,7 @@ async function staticApi(path, options = {}) {
   if (statusMatch && method === "PATCH") {
     const parcel = store.parcels.find((item) => item.id === decodeURIComponent(statusMatch[1]));
     if (!parcel || isStaticDeletedParcel(parcel)) return { ok: false };
+    assertStaticParcelVersion(parcel, body.expectedUpdatedAt);
     if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
     parcel.status = body.status || parcel.status;
@@ -1294,6 +1395,7 @@ async function staticApi(path, options = {}) {
   if (deleteMatch && method === "DELETE") {
     const parcel = store.parcels.find((item) => item.id === decodeURIComponent(deleteMatch[1]));
     if (!parcel || !canDeleteStaticParcel(parcel)) throw new Error("ამ შეკვეთის წაშლა შეუძლებელია.");
+    assertStaticParcelVersion(parcel, body.expectedUpdatedAt);
     const now = new Date().toISOString();
     parcel.deletedAt = now;
     parcel.deletedBy = state.currentUser || "";
@@ -1333,6 +1435,8 @@ async function staticApi(path, options = {}) {
       store.settings.lastAutoCloseDate = body.autoClosedDate;
       store.settings.lastAutoCloseAt = now;
     }
+    archiveStaticCompletedParcels(store);
+    pruneStaticPushEvents(store);
     saveStaticBootstrap();
     return { archived };
   }
@@ -1341,6 +1445,7 @@ async function staticApi(path, options = {}) {
   if (locationMatch && method === "PATCH") {
     const parcel = store.parcels.find((item) => item.id === decodeURIComponent(locationMatch[1]));
     if (!parcel || isStaticDeletedParcel(parcel)) return { ok: false };
+    assertStaticParcelVersion(parcel, body.expectedUpdatedAt);
     const lat = Number(body.lat ?? body.latitude);
     const lng = Number(body.lng ?? body.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("სწორი გრძედი და განედი აუცილებელია.");
@@ -1440,10 +1545,10 @@ async function searchParcels(query) {
   return (await api(`/api/parcels/search?q=${encodeURIComponent(query || "")}`)).parcels;
 }
 
-async function deleteParcel(parcelId, reason = "") {
+async function deleteParcel(parcelId, reason = "", expectedUpdatedAt = "") {
   return api(`/api/parcels/${encodeURIComponent(parcelId)}`, {
     method: "DELETE",
-    body: { reason },
+    body: { reason, expectedUpdatedAt },
   });
 }
 
