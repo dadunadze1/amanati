@@ -788,7 +788,7 @@ async function handleAddressSearch(event, username) {
 
   try {
     if (message) message.textContent = normalizedAddress.corrected
-      ? `რაიონი გასწორდა: ${normalizedAddress.match?.district || ""}`
+      ? `უბანი გასწორდა: ${normalizedAddress.match?.neighborhood || normalizedAddress.match?.district || ""}`
       : STRINGS.addressLoading;
     if (resultsElement) resultsElement.innerHTML = "";
     const results = await searchAddress(query);
@@ -799,7 +799,7 @@ async function handleAddressSearch(event, username) {
       updateAddressSearchPreview("");
       return;
     }
-    if (message) message.textContent = normalizedAddress.corrected ? `რაიონი გასწორდა: ${normalizedAddress.match?.district || ""}` : results[0].warning || "";
+    if (message) message.textContent = normalizedAddress.corrected ? `უბანი გასწორდა: ${normalizedAddress.match?.neighborhood || normalizedAddress.match?.district || ""}` : results[0].warning || "";
     renderAddressSearchResults(results, username, query);
     await selectAddressSearchResult(results[0], username, 0, query);
   } catch (error) {
@@ -857,7 +857,7 @@ async function selectAddressSearchResult(result, username, selectedIndex = -1, r
   state.pendingAddress = address;
   state.pendingAddressLocked = Boolean(cleanAddressInput(requestedAddress));
   state.pendingAddressWarning = normalizedRequested.corrected
-    ? `რაიონი გასწორდა: ${normalizedRequested.match?.district || ""}`
+    ? `უბანი გასწორდა: ${normalizedRequested.match?.neighborhood || normalizedRequested.match?.district || ""}`
     : result.warning || "";
   showPendingMarker(coords);
   if (state.map?.flyTo) {

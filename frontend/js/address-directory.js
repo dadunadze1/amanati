@@ -3082,6 +3082,40 @@ const ADDRESS_DIRECTORY = [
 
 const addressDirectorySelections = {};
 
+const ADDRESS_NEIGHBORHOOD_KEYWORDS = [
+  { name: "დიდი დიღომი", patterns: ["დიდი დიღომი"] },
+  { name: "სოფელი დიღომი", patterns: ["სოფელი დიღომი", "სოფ. დიღომი"] },
+  { name: "დიღმის მასივი", patterns: ["დიღმის მასივი"] },
+  { name: "ვაშლიჯვარი", patterns: ["ვაშლიჯვარი"] },
+  { name: "ნუცუბიძე", patterns: ["ნუცუბიძე", "ნუცუბიძის"] },
+  { name: "ვარკეთილი", patterns: ["ვარკეთილი"] },
+  { name: "მუხიანი", patterns: ["მუხიანი"] },
+  { name: "ავჭალა", patterns: ["ავჭალა"] },
+  { name: "ზღვისუბანი", patterns: ["ზღვისუბანი"] },
+  { name: "თემქა", patterns: ["თემქა"] },
+  { name: "სანზონა", patterns: ["სანზონა"] },
+  { name: "ლოტკინი", patterns: ["ლოტკინი"] },
+  { name: "ვერა", patterns: ["ვერა"] },
+  { name: "სოლოლაკი", patterns: ["სოლოლაკი"] },
+  { name: "ორთაჭალა", patterns: ["ორთაჭალა"] },
+  { name: "ფონიჭალა", patterns: ["ფონიჭალა"] },
+  { name: "ხარფუხი", patterns: ["ხარფუხი"] },
+  { name: "ავლაბარი", patterns: ["ავლაბარი"] },
+  { name: "ნავთლუღი", patterns: ["ნავთლუღი"] },
+  { name: "ვაზისუბანი", patterns: ["ვაზისუბანი"] },
+  { name: "ლილო", patterns: ["ლილო"] },
+  { name: "ორხევი", patterns: ["ორხევი"] },
+  { name: "აეროპორტი", patterns: ["აეროპორტი"] },
+  { name: "კუკია", patterns: ["კუკია"] },
+  { name: "მარჯანიშვილი", patterns: ["მარჯანიშვილი", "მარჯანიშვილის"] },
+  { name: "წყნეთი", patterns: ["წყნეთი", "წყნეთის"] },
+  { name: "ბაგები", patterns: ["ბაგები", "ბაგების"] },
+  { name: "ახალდაბა", patterns: ["ახალდაბა"] },
+  { name: "ბეთანია", patterns: ["ბეთანია"] },
+  { name: "თხინვალა", patterns: ["თხინვალა"] },
+  { name: "ლისი", patterns: ["ლისი", "ლისის"] },
+];
+
 function getAddressDirectoryCities() {
   return ADDRESS_DIRECTORY.map((item) => item.city);
 }
@@ -3093,6 +3127,37 @@ function getAddressDirectoryCity(city) {
 
 function getAddressDirectoryDistricts(city) {
   return getAddressDirectoryCity(city)?.districts || [];
+}
+
+function getAddressDirectoryNeighborhood(districtName, street = "") {
+  const normalizedStreet = normalizeAddressDirectoryText(street);
+  const match = ADDRESS_NEIGHBORHOOD_KEYWORDS.find((item) => (
+    item.patterns.some((pattern) => normalizedStreet.includes(normalizeAddressDirectoryText(pattern)))
+  ));
+  return match?.name || districtName || "";
+}
+
+function getAddressDirectoryNeighborhoods(city) {
+  const cityRecord = getAddressDirectoryCity(city);
+  const seen = new Set();
+  const neighborhoods = [];
+  (cityRecord?.districts || []).forEach((districtRecord) => {
+    districtRecord.streets.forEach((street) => {
+      const neighborhood = getAddressDirectoryNeighborhood(districtRecord.name, street);
+      const key = normalizeAddressDirectoryText(neighborhood);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      neighborhoods.push({ name: neighborhood, district: districtRecord.name });
+    });
+  });
+  return neighborhoods.sort((a, b) => a.name.localeCompare(b.name, "ka-GE"));
+}
+
+function getAddressDirectoryDistrictForNeighborhood(city, neighborhood) {
+  const normalizedNeighborhood = normalizeAddressDirectoryText(neighborhood);
+  if (!normalizedNeighborhood) return "";
+  return getAddressDirectoryNeighborhoods(city)
+    .find((item) => normalizeAddressDirectoryText(item.name) === normalizedNeighborhood)?.district || "";
 }
 
 function normalizeAddressDirectoryText(value) {
@@ -3120,13 +3185,18 @@ function addressDirectoryMatches(value, query) {
 
 function getAddressDirectoryStreetMatches({ city, district, query, limit = 12 } = {}) {
   const cityRecord = getAddressDirectoryCity(city);
-  const normalizedDistrict = normalizeAddressDirectoryText(district);
+  const normalizedFilter = normalizeAddressDirectoryText(district);
   const rows = [];
   (cityRecord?.districts || []).forEach((districtRecord) => {
-    if (normalizedDistrict && normalizeAddressDirectoryText(districtRecord.name) !== normalizedDistrict) return;
     districtRecord.streets.forEach((street) => {
+      const neighborhood = getAddressDirectoryNeighborhood(districtRecord.name, street);
+      if (
+        normalizedFilter
+        && normalizeAddressDirectoryText(districtRecord.name) !== normalizedFilter
+        && normalizeAddressDirectoryText(neighborhood) !== normalizedFilter
+      ) return;
       if (!addressDirectoryMatches(street, query)) return;
-      rows.push({ city: cityRecord.city, district: districtRecord.name, street });
+      rows.push({ city: cityRecord.city, district: districtRecord.name, neighborhood, street });
     });
   });
   return rows.slice(0, limit);
@@ -3138,6 +3208,7 @@ function getAddressDirectoryAllStreets(city) {
     districtRecord.streets.map((street) => ({
       city: cityRecord.city,
       district: districtRecord.name,
+      neighborhood: getAddressDirectoryNeighborhood(districtRecord.name, street),
       street,
     }))
   ));
@@ -3172,7 +3243,7 @@ function normalizeAddressDirectoryAddress(address, options = {}) {
     || normalizeAddressDirectoryStreetKey(part).includes(normalizeAddressDirectoryStreetKey(match.street))
   ));
   const streetPart = streetIndex >= 0 ? normalizedParts[streetIndex] : match.street;
-  const nextAddress = [cityPart, match.district, streetPart].filter(Boolean).join(", ");
+  const nextAddress = [cityPart, match.neighborhood || match.district, streetPart].filter(Boolean).join(", ");
   return {
     address: nextAddress,
     corrected: normalizeAddressDirectoryText(nextAddress) !== normalizeAddressDirectoryText(rawAddress),
@@ -3190,7 +3261,7 @@ function renderAddressDirectoryFields(prefix, options = {}) {
       <select id="${escapeAttr(prefix)}City" data-address-city>
         ${cityOptions}
       </select>
-      <label for="${escapeAttr(prefix)}District">რაიონი</label>
+      <label for="${escapeAttr(prefix)}District">უბანი</label>
       <select id="${escapeAttr(prefix)}District" data-address-district></select>
       <label for="${escapeAttr(prefix)}Street">ქუჩა</label>
       <div class="address-autocomplete-shell">
@@ -3217,13 +3288,13 @@ function bindAddressDirectoryControls(prefix, options = {}) {
   const districtRequired = Boolean(options.requireDistrict);
 
   const fillDistricts = () => {
-    const districts = getAddressDirectoryDistricts(citySelect.value);
+    const neighborhoods = getAddressDirectoryNeighborhoods(citySelect.value);
     const selected = districtSelect.value;
     districtSelect.innerHTML = [
-      districtRequired ? "" : "<option value=\"\">ყველა რაიონი</option>",
-      ...districts.map((district) => `<option value="${escapeAttr(district.name)}">${escapeHtml(district.name)}</option>`),
+      districtRequired ? "" : "<option value=\"\">ყველა უბანი</option>",
+      ...neighborhoods.map((neighborhood) => `<option value="${escapeAttr(neighborhood.name)}">${escapeHtml(neighborhood.name)}</option>`),
     ].join("");
-    if (districts.some((district) => district.name === selected)) districtSelect.value = selected;
+    if (neighborhoods.some((neighborhood) => neighborhood.name === selected)) districtSelect.value = selected;
   };
 
   const closeDropdown = () => {
@@ -3242,7 +3313,7 @@ function bindAddressDirectoryControls(prefix, options = {}) {
   const selectStreet = (match) => {
     addressDirectorySelections[prefix] = match;
     streetInput.value = match.street;
-    districtSelect.value = match.district;
+    districtSelect.value = match.neighborhood || match.district;
     closeDropdown();
     updateTarget();
   };
@@ -3271,7 +3342,7 @@ function bindAddressDirectoryControls(prefix, options = {}) {
         ${matches.map((match, index) => `
           <button class="address-autocomplete-item" type="button" data-address-directory-index="${index}">
             <strong>${escapeHtml(match.street)}</strong>
-            <span>${escapeHtml(`${match.city} · ${match.district}`)}</span>
+            <span>${escapeHtml(`${match.city} · ${match.neighborhood || match.district}`)}</span>
           </button>
         `).join("")}
       </div>
@@ -3310,9 +3381,9 @@ function bindAddressDirectoryControls(prefix, options = {}) {
         district: "",
         query: streetInput.value,
         limit: 30,
-  }).find((match) => normalizeAddressDirectoryStreetKey(match.street) === normalizeAddressDirectoryStreetKey(streetInput.value));
+      }).find((match) => normalizeAddressDirectoryStreetKey(match.street) === normalizeAddressDirectoryStreetKey(streetInput.value));
       if (exact && !districtSelect.value) selectStreet(exact);
-      else if (exact && exact.district !== districtSelect.value) selectStreet(exact);
+      else if (exact && (exact.neighborhood || exact.district) !== districtSelect.value) selectStreet(exact);
       else closeDropdown();
     }, 140);
   });
@@ -3322,20 +3393,26 @@ function bindAddressDirectoryControls(prefix, options = {}) {
 function getAddressDirectoryValue(prefix) {
   const root = document.querySelector(`[data-address-directory="${prefix}"]`);
   const city = root?.querySelector("[data-address-city]")?.value.trim() || "";
+  const selectedNeighborhood = root?.querySelector("[data-address-district]")?.value.trim() || "";
   const exact = getAddressDirectoryStreetMatches({
     city,
     district: "",
     query: root?.querySelector("[data-address-street]")?.value.trim() || "",
     limit: 50,
   }).find((match) => normalizeAddressDirectoryStreetKey(match.street) === normalizeAddressDirectoryStreetKey(root?.querySelector("[data-address-street]")?.value.trim() || ""));
-  const district = exact?.district || root?.querySelector("[data-address-district]")?.value.trim() || addressDirectorySelections[prefix]?.district || "";
+  const neighborhood = exact?.neighborhood || selectedNeighborhood || addressDirectorySelections[prefix]?.neighborhood || "";
+  const district = exact?.district
+    || addressDirectorySelections[prefix]?.district
+    || getAddressDirectoryDistrictForNeighborhood(city, neighborhood)
+    || selectedNeighborhood;
   const street = root?.querySelector("[data-address-street]")?.value.trim() || "";
   const building = root?.querySelector("[data-address-building]")?.value.trim() || "";
   const streetAddress = [street, building].filter(Boolean).join(" ").trim();
-  const fullAddress = [city, district, streetAddress].filter(Boolean).join(", ");
+  const fullAddress = [city, neighborhood || district, streetAddress].filter(Boolean).join(", ");
   return {
     city,
     district,
+    neighborhood,
     street,
     building,
     streetAddress,
