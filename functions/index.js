@@ -1,15 +1,17 @@
 "use strict";
 
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
 const webpush = require("web-push");
 const { logger } = require("firebase-functions");
 const { defineSecret } = require("firebase-functions/params");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 
-admin.initializeApp();
+initializeApp();
 
-const db = admin.firestore();
-const messaging = admin.messaging();
+const db = getFirestore();
+const messaging = getMessaging();
 const WEB_PUSH_PRIVATE_KEY = defineSecret("WEB_PUSH_PRIVATE_KEY");
 const STATIC_STORE_REF = "deliveryApp/staticStore";
 const ADMIN_TOKEN_COLLECTION = "adminPushTokens";
@@ -52,7 +54,7 @@ exports.sendStaticStoreAdminNotifications = onDocumentWritten({
     if (!(await claimAdminNotificationSend(notification))) continue;
     await sendToAdminDevices(notification);
     await markAdminNotificationSent(notification);
-    sentUpdates[`sentAdminNotificationIds.${notification.id}`] = admin.firestore.FieldValue.serverTimestamp();
+    sentUpdates[`sentAdminNotificationIds.${notification.id}`] = FieldValue.serverTimestamp();
   }
 
   await db.doc(STATIC_STORE_REF).set(sentUpdates, { merge: true });
@@ -117,7 +119,7 @@ async function claimAdminNotificationSend(notification) {
       notificationId: notification.id,
       parcelId: notification.parcelId,
       status: notification.status,
-      processingAt: admin.firestore.FieldValue.serverTimestamp(),
+      processingAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     return true;
   });
@@ -125,7 +127,7 @@ async function claimAdminNotificationSend(notification) {
 
 async function markAdminNotificationSent(notification) {
   await db.collection("adminNotificationSendLocks").doc(notification.id).set({
-    sentAt: admin.firestore.FieldValue.serverTimestamp(),
+    sentAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 }
 
@@ -296,7 +298,7 @@ async function deactivateInvalidTokens(tokens, responses) {
   for (const token of invalidTokens) {
     batch.set(db.collection(ADMIN_TOKEN_COLLECTION).doc(getTokenKey(token)), {
       active: false,
-      invalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      invalidatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   }
   await batch.commit();
@@ -308,7 +310,7 @@ async function deactivateInvalidWebPushSubscriptions(endpoints) {
   for (const endpoint of endpoints) {
     batch.set(db.collection(ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION).doc(getTokenKey(endpoint)), {
       active: false,
-      invalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      invalidatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   }
   await batch.commit();
