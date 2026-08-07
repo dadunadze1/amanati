@@ -252,6 +252,7 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
   const title = isFailed ? "შეკვეთა ვერ ჩაბარდა" : "შეკვეთა ჩაბარდა";
   const details = [address, fullName].filter(Boolean).join(", ") || "შეკვეთის სტატუსი შეიცვალა";
   const body = isFailed && failureReason ? `${details}\nმიზეზი: ${failureReason}` : details;
+  const statusTime = options.completedAt || options.deliveredAt || options.failedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || "";
 
   return {
     type: isFailed ? "parcel_failed" : "parcel_delivered",
@@ -266,7 +267,7 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
     createdBy: state.currentUser || "",
     createdByRole: state.currentUserProfile?.role || "",
     pageUrl: "./",
-    eventKey: `${parcel.id || "parcel"}-${status}-${Date.now()}`,
+    eventKey: `${parcel.id || "parcel"}-${status}-${statusTime || "now"}`,
   };
 }
 

@@ -25,7 +25,9 @@ exports.sendAdminNotification = onDocumentCreated({
 }, async (event) => {
   const notification = normalizeNotification(event.data?.data(), event.params.notificationId);
   if (!notification) return;
+  if (!(await claimAdminNotificationSend(notification))) return;
   await sendToAdminDevices(notification);
+  await markAdminNotificationSent(notification);
 });
 
 exports.sendStaticStoreAdminNotifications = onDocumentWritten({
@@ -47,7 +49,9 @@ exports.sendStaticStoreAdminNotifications = onDocumentWritten({
 
   const sentUpdates = {};
   for (const notification of pending) {
+    if (!(await claimAdminNotificationSend(notification))) continue;
     await sendToAdminDevices(notification);
+    await markAdminNotificationSent(notification);
     sentUpdates[`sentAdminNotificationIds.${notification.id}`] = admin.firestore.FieldValue.serverTimestamp();
   }
 
@@ -100,6 +104,28 @@ async function sendToAdminDevices(notification) {
     webPushSuccessCount: webPushResult.successCount,
     webPushFailureCount: webPushResult.failureCount,
   });
+}
+
+async function claimAdminNotificationSend(notification) {
+  const ref = db.collection("adminNotificationSendLocks").doc(notification.id);
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists && snapshot.data()?.sentAt) return false;
+    if (snapshot.exists && snapshot.data()?.processingAt) return false;
+    transaction.set(ref, {
+      notificationId: notification.id,
+      parcelId: notification.parcelId,
+      status: notification.status,
+      processingAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
+}
+
+async function markAdminNotificationSent(notification) {
+  await db.collection("adminNotificationSendLocks").doc(notification.id).set({
+    sentAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
 }
 
 async function loadAdminPushTokens() {
