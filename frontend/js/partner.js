@@ -343,12 +343,7 @@ async function openPartnerOrdersDialog() {
 function openPartnerNewOrderDialog() {
   const body = `
     <form id="partnerOrderForm" class="partner-form">
-      <label for="partnerOrderCity">ქალაქი</label>
-      <input id="partnerOrderCity" type="text" autocomplete="address-level2" required>
-      <label for="partnerOrderDistrict">რაიონი</label>
-      <input id="partnerOrderDistrict" type="text" autocomplete="address-level3" required>
-      <label for="partnerOrderAddress">ქუჩის სახელი</label>
-      <input id="partnerOrderAddress" type="text" autocomplete="street-address" required>
+      ${typeof renderAddressDirectoryFields === "function" ? renderAddressDirectoryFields("partnerOrder") : ""}
       <label for="partnerOrderName">მომხმარებლის სახელი</label>
       <input id="partnerOrderName" type="text" autocomplete="name" required>
       <label for="partnerOrderPhone">მომხმარებლის ნომერი</label>
@@ -362,18 +357,22 @@ function openPartnerNewOrderDialog() {
     { label: "გაგზავნა", variant: "primary", action: savePartnerOrder },
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
+  if (typeof bindAddressDirectoryControls === "function") {
+    bindAddressDirectoryControls("partnerOrder");
+  }
 }
 
 
 async function savePartnerOrder() {
   const message = document.getElementById("partnerOrderMessage");
-  const city = document.getElementById("partnerOrderCity")?.value.trim();
-  const district = document.getElementById("partnerOrderDistrict")?.value.trim();
-  const street = document.getElementById("partnerOrderAddress")?.value.trim();
+  const addressParts = typeof getAddressDirectoryValue === "function" ? getAddressDirectoryValue("partnerOrder") : {};
+  const city = addressParts.city || document.getElementById("partnerOrderCity")?.value.trim();
+  const district = addressParts.district || document.getElementById("partnerOrderDistrict")?.value.trim() || "";
+  const street = addressParts.streetAddress || document.getElementById("partnerOrderAddress")?.value.trim();
   const fullName = document.getElementById("partnerOrderName")?.value.trim();
   const phone = document.getElementById("partnerOrderPhone")?.value.trim();
   const paymentAmount = parsePaymentAmount(document.getElementById("partnerOrderCash")?.value);
-  if (!city || !district || !street || !fullName || !phone) {
+  if (!city || !street || !fullName || !phone) {
     if (message) message.textContent = STRINGS.emptyFields;
     return;
   }
@@ -382,7 +381,7 @@ async function savePartnerOrder() {
     return;
   }
 
-  const address = [city, district, street].filter(Boolean).join(", ");
+  const address = addressParts.fullAddress || [city, district, street].filter(Boolean).join(", ");
 
   try {
     const payload = await api("/api/parcels", {

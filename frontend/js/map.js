@@ -897,7 +897,7 @@ function parseAddressQuery(query) {
 function normalizeAddressQueryStreet(value) {
   return normalizeGeocodeQuery(value)
     .replace(/[,]+/g, " ")
-    .replace(/\b(tbilisi|georgia|თბილისი|საქართველო)\b/gi, " ")
+    .replace(/\b(tbilisi|rustavi|georgia|თბილისი|რუსთავი|საქართველო)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -907,14 +907,15 @@ function buildAddressSearchParams(queryParts) {
   const query = queryParts.searchQuery;
   const street = queryParts.street;
   const houseNumber = queryParts.houseNumber;
+  const defaultCity = /rustavi|რუსთავი/i.test(queryParts.original || query) ? "რუსთავი" : "თბილისი";
   const variants = [
     query,
     houseNumber && street ? normalizeGeocodeQuery(`${street} ${houseNumber}`) : "",
     houseNumber && street ? normalizeGeocodeQuery(`${houseNumber} ${street}`) : "",
     houseNumber && street ? normalizeGeocodeQuery(street) : "",
-    houseNumber && street ? normalizeGeocodeQuery(`${street}, თბილისი`) : "",
+    houseNumber && street ? normalizeGeocodeQuery(`${street}, ${defaultCity}`) : "",
     queryParts.original && queryParts.original !== query ? queryParts.original : "",
-    queryParts.original ? `თბილისი ${queryParts.original}` : "",
+    queryParts.original ? `${defaultCity} ${queryParts.original}` : "",
     queryParts.original ? `${queryParts.original} საქართველო` : "",
   ].filter(Boolean);
 
@@ -1120,7 +1121,7 @@ function normalizeGeocodeQueryKey(value) {
 
 
 function hasLocationQualifier(value) {
-  return /(?:\btbilisi\b|\bgeorgia\b|თბილისი|საქართველო)/i.test(String(value || ""));
+  return /(?:\btbilisi\b|\brustavi\b|\bgeorgia\b|თბილისი|რუსთავი|საქართველო)/i.test(String(value || ""));
 }
 
 

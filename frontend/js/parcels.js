@@ -117,10 +117,11 @@ function openAddressSearchDialog(username) {
   resetMapSelectionUi();
   const body = `
     <form id="addressSearchForm" class="address-search-form">
-      <label for="addressSearchInput">მისამართის ძებნა თბილისში</label>
+      ${typeof renderAddressDirectoryFields === "function" ? renderAddressDirectoryFields("addressSearch") : ""}
+      <label for="addressSearchInput">სრული მისამართი</label>
       <div class="address-autocomplete-shell">
         <div class="address-search-row">
-          <input id="addressSearchInput" type="search" autocomplete="street-address" aria-autocomplete="list" aria-controls="addressSearchSuggestions" required>
+          <input id="addressSearchInput" type="search" autocomplete="street-address" aria-autocomplete="list" aria-controls="addressSearchSuggestions" placeholder="მაგ: თბილისი, საბურთალო, პეკინის გამზირი 35" required>
           <button class="button primary" type="submit">ძებნა</button>
         </div>
         <div id="addressSearchSuggestions" class="address-autocomplete-dropdown" role="listbox" hidden></div>
@@ -146,6 +147,9 @@ function openAddressSearchDialog(username) {
   document.getElementById("addressSearchForm")?.addEventListener("submit", (event) => {
     handleAddressSearch(event, username);
   });
+  if (typeof bindAddressDirectoryControls === "function") {
+    bindAddressDirectoryControls("addressSearch", { targetInputId: "addressSearchInput" });
+  }
   bindAddressAutocomplete({
     inputId: "addressSearchInput",
     dropdownId: "addressSearchSuggestions",
