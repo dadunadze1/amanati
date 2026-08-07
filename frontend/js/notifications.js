@@ -15,6 +15,13 @@ function canUseAdminPush() {
   );
 }
 
+function setAdminPushError(message) {
+  state.adminPushStatus = "error";
+  state.adminPushLastError = message;
+  showToast(message);
+  return false;
+}
+
 async function initializeAdminPushNotifications() {
   if (!state.isAdmin) return false;
   if (!canUseAdminPush()) {
@@ -31,26 +38,26 @@ async function initializeAdminPushNotifications() {
 async function requestAdminPushNotifications() {
   if (!state.isAdmin) return false;
   if (!canUseAdminPush()) {
-    showToast("ამ ბრაუზერს ფუშ შეტყობინებები არ აქვს ჩართული.");
-    return false;
+    return setAdminPushError(getAdminPushCapabilityMessage());
   }
 
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
     state.adminPushStatus = permission === "denied" ? "denied" : "permission-needed";
-    showToast("ფუშ შეტყობინება არ ჩაირთო.");
-    return false;
+    return setAdminPushError(permission === "denied"
+      ? "ბრაუზერში notification permission დაბლოკილია."
+      : "notification permission არ დადასტურდა.");
   }
 
   const registered = await registerAdminPushToken();
   if (registered) showToast("ფუშ შეტყობინებები ჩაირთო.");
-  else if (!state.adminPushLastError) showToast("ფუშ შეტყობინება ვერ ჩაირთო. ნახეთ ბრაუზერის მხარდაჭერა და Firebase კავშირი.");
+  else if (!state.adminPushLastError) setAdminPushError("ფუშის რეგისტრაცია შეწყდა უცნობ ეტაპზე.");
   return registered;
 }
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=2", { scope: "./" });
     await registration.update().catch(() => {});
     const subscription = await createAdminStandardWebPushSubscription(registration);
 
@@ -60,7 +67,7 @@ async function registerAdminPushToken() {
     const webPushRegistered = subscription ? await saveAdminWebPushSubscription(db, subscription.toJSON()) : false;
     const fcmRegistered = webPushRegistered ? false : await registerAdminFirebaseMessaging(db, app, registration);
 
-    if (!webPushRegistered && !fcmRegistered) return false;
+    if (!webPushRegistered && !fcmRegistered) throw new Error("push-registration-no-token-or-subscription");
     state.adminPushStatus = "enabled";
     state.adminPushLastError = "";
     return true;
@@ -308,9 +315,26 @@ function subscriptionMatchesWebPushKey(subscription) {
 
 function getAdminPushErrorMessage(error) {
   const code = String(error?.code || error?.name || error?.message || "");
+  if (/firebase-context-unavailable/i.test(code)) return "Firebase SDK ვერ ჩაიტვირთა ან Firestore არ არის ხელმისაწვდომი.";
+  if (/push-manager-unavailable/i.test(code)) return "ამ ბრაუზერში PushManager არ არის ხელმისაწვდომი.";
+  if (/push-registration-no-token-or-subscription/i.test(code)) return "ბრაუზერმა push subscription/token არ დააბრუნა.";
+  if (/AbortError/i.test(code)) return "ბრაუზერმა push subscription შეწყვიტა. სცადეთ refresh და ხელახლა ფუშების ჩართვა.";
+  if (/InvalidStateError/i.test(code)) return "ძველი push subscription დაზიანებულია. სცადეთ საიტის permissions/cache გასუფთავება და თავიდან ჩართვა.";
+  if (/ServiceWorker|service worker/i.test(code)) return "service worker ვერ დარეგისტრირდა. გვერდი სრულად დაარეფრეშეთ და სცადეთ თავიდან.";
   if (/unsupported|not supported/i.test(code)) return "ამ ბრაუზერს ეს ფუშ ტექნოლოგია არ უჭერს მხარს.";
   if (/firestore|permission|Missing or insufficient permissions/i.test(code)) return "Firebase-ში ფუშ token-ის შენახვა დაიბლოკა.";
   if (/denied|permission/i.test(code)) return "ბრაუზერში notification permission დაბლოკილია.";
   if (/network|fetch|internet/i.test(code)) return "ფუშის ჩართვა ვერ მოხერხდა ინტერნეტის/Firebase კავშირის გამო.";
-  return "ფუშ შეტყობინება ვერ ჩაირთო.";
+  return `ფუშ შეტყობინება ვერ ჩაირთო. დეტალი: ${code.slice(0, 120) || "unknown"}`;
+}
+
+function getAdminPushCapabilityMessage() {
+  const missing = [];
+  if (!("Notification" in window)) missing.push("Notification API");
+  if (!("serviceWorker" in navigator)) missing.push("Service Worker");
+  if (!("PushManager" in window)) missing.push("PushManager");
+  if (!state.isAdmin) missing.push("admin session");
+  return missing.length
+    ? `ამ ბრაუზერში ფუში ვერ ჩაირთო. აკლია: ${missing.join(", ")}.`
+    : "ამ ბრაუზერში ფუშ შეტყობინებები არ არის ხელმისაწვდომი.";
 }
