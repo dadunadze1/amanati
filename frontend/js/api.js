@@ -75,6 +75,10 @@ function mergeStaticStores(...stores) {
       .filter((user) => !isDemoStaticUser(user));
     const parcels = (Array.isArray(store.parcels) ? store.parcels : []).filter((parcel) => !isDemoStaticParcel(parcel)).map(normalizeStaticParcelFinance);
     const history = (Array.isArray(store.history) ? store.history : []).filter((parcel) => !isDemoStaticParcel(parcel)).map(normalizeStaticParcelFinance);
+    const adminNotifications = {
+      ...(merged.adminNotifications && typeof merged.adminNotifications === "object" ? merged.adminNotifications : {}),
+      ...(store.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications : {}),
+    };
 
     return {
       users: mergeStaticRecordsByKey(merged.users, users, getStaticUserKey, resolveStaticUserRecord),
@@ -84,6 +88,7 @@ function mergeStaticStores(...stores) {
       history: mergeStaticRecordsByKey(merged.history, history, getStaticParcelKey, resolveStaticParcelRecord),
       zones: mergeStaticRecordsByKey(merged.zones, Array.isArray(store.zones) ? store.zones : [], getStaticZoneKey),
       financeData: mergeStaticFinanceData(merged.financeData, store.financeData),
+      adminNotifications,
       settings: {
         ...(merged.settings && typeof merged.settings === "object" ? merged.settings : {}),
         ...(store.settings && typeof store.settings === "object" ? store.settings : {}),
@@ -96,6 +101,7 @@ function mergeStaticStores(...stores) {
     history: [],
     zones: [],
     financeData: {},
+    adminNotifications: {},
     settings: {},
   });
 }
@@ -111,6 +117,7 @@ function normalizeStaticStore(store) {
     history: merged.history,
     zones: merged.zones,
     financeData: merged.financeData,
+    adminNotifications: merged.adminNotifications || {},
     settings: merged.settings,
   };
 }
@@ -381,6 +388,114 @@ function hydrateStaticFinanceStorage(financeData = {}) {
   if (loadData(CONFIG.dailyBalanceLedgerStorageKey) === null && Array.isArray(financeData.dailyBalanceLedger)) {
     saveData(CONFIG.dailyBalanceLedgerStorageKey, financeData.dailyBalanceLedger);
   }
+}
+
+function queueStaticPushNotification(store, notification) {
+  if (!store || !notification) return;
+  const key = getStaticPushNotificationKey(notification.eventKey || `${notification.parcelId || "parcel"}-${notification.status || Date.now()}`);
+  store.adminNotifications = {
+    ...(store.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications : {}),
+    [key]: {
+      ...notification,
+      id: key,
+      createdAt: new Date().toISOString(),
+    },
+  };
+}
+
+function getStaticPushNotificationKey(value) {
+  try {
+    return btoa(unescape(encodeURIComponent(String(value || ""))))
+      .replace(/[+/=]/g, "_")
+      .slice(0, 180) || `push_${Date.now()}`;
+  } catch {
+    return String(value || `push_${Date.now()}`).replace(/[.[\]*`/]/g, "_").slice(0, 180);
+  }
+}
+
+function getStaticParcelPushAddress(parcel) {
+  return String(
+    parcel?.address
+    || parcel?.fullAddress
+    || [parcel?.city, parcel?.district, parcel?.streetAddress, parcel?.building].filter(Boolean).join(", ")
+    || ""
+  ).trim();
+}
+
+function getStaticParcelPushDetails(parcel) {
+  const address = getStaticParcelPushAddress(parcel);
+  const fullName = String(parcel?.fullName || parcel?.customerName || parcel?.name || "").trim();
+  return {
+    address,
+    fullName,
+    details: [address, fullName].filter(Boolean).join(", "),
+  };
+}
+
+function buildStaticParcelCreatedNotification(parcel) {
+  const { address, fullName, details } = getStaticParcelPushDetails(parcel);
+  const courierUsername = String(parcel?.courierUsername || "").trim();
+  const partnerName = String(parcel?.partnerName || parcel?.partnerUsername || "პარტნიორი").trim();
+  return {
+    type: "parcel_created",
+    status: "created",
+    recipientRoles: courierUsername ? ["admin", "courier"] : ["admin"],
+    title: "პარტნიორმა ახალი ამანათი დაამატა",
+    body: `${partnerName || "პარტნიორი"} - ${details || "ახალი ამანათი დაემატა"}`,
+    parcelId: String(parcel?.id || ""),
+    address,
+    fullName,
+    failureReason: "",
+    partnerId: String(parcel?.partnerId || parcel?.partnerUsername || ""),
+    partnerUsername: String(parcel?.partnerUsername || ""),
+    partnerName,
+    courierUsername,
+    eventKey: `${parcel?.id || "parcel"}-created-${courierUsername || "admin"}-${parcel?.createdAt || "now"}`,
+  };
+}
+
+function buildStaticParcelAssignedNotification(parcel, courierUsername) {
+  const { address, fullName, details } = getStaticParcelPushDetails(parcel);
+  return {
+    type: "parcel_assigned",
+    status: "assigned",
+    recipientRoles: ["courier"],
+    title: "ახალი ამანათი გაქვთ",
+    body: details || "ახალი ამანათი გაქვთ",
+    parcelId: String(parcel?.id || ""),
+    address,
+    fullName,
+    failureReason: "",
+    partnerId: String(parcel?.partnerId || parcel?.partnerUsername || ""),
+    partnerUsername: String(parcel?.partnerUsername || ""),
+    partnerName: String(parcel?.partnerName || ""),
+    courierUsername: String(courierUsername || parcel?.courierUsername || ""),
+    eventKey: `${parcel?.id || "parcel"}-assigned-${courierUsername || parcel?.courierUsername || "courier"}`,
+  };
+}
+
+function buildStaticParcelStatusNotification(parcel, status, options = {}) {
+  const { address, fullName, details } = getStaticParcelPushDetails(parcel);
+  const failureReason = String(options.failureReason || parcel?.failureReason || "").trim();
+  const isFailed = status === "failed";
+  const body = isFailed && failureReason ? `${details || "შეკვეთის სტატუსი შეიცვალა"}\nმიზეზი: ${failureReason}` : (details || "შეკვეთის სტატუსი შეიცვალა");
+  const statusTime = options.completedAt || options.deliveredAt || options.failedAt || parcel?.completedAt || parcel?.deliveredAt || parcel?.failedAt || "";
+  return {
+    type: isFailed ? "parcel_failed" : "parcel_delivered",
+    status,
+    recipientRoles: parcel?.partnerId || parcel?.partnerUsername ? ["admin", "partner"] : ["admin"],
+    title: isFailed ? "შეკვეთა ვერ ჩაბარდა" : "შეკვეთა ჩაბარდა",
+    body,
+    parcelId: String(parcel?.id || ""),
+    address,
+    fullName,
+    failureReason,
+    partnerId: String(parcel?.partnerId || parcel?.partnerUsername || ""),
+    partnerUsername: String(parcel?.partnerUsername || ""),
+    partnerName: String(parcel?.partnerName || ""),
+    courierUsername: String(parcel?.courierUsername || ""),
+    eventKey: `${parcel?.id || "parcel"}-${status}-${statusTime || "now"}`,
+  };
 }
 
 function getStaticFinanceData() {
@@ -1122,6 +1237,7 @@ async function staticApi(path, options = {}) {
       assignedAt: assignedCourierUsername ? now : "",
     };
     store.parcels.push(parcel);
+    if (state.isPartner) queueStaticPushNotification(store, buildStaticParcelCreatedNotification(parcel));
     saveStaticBootstrap();
     return { parcel: publicStaticParcel(store, parcel) };
   }
@@ -1135,6 +1251,7 @@ async function staticApi(path, options = {}) {
         parcel.courierUsername = body.courierUsername || "";
         parcel.assignedAt = new Date().toISOString();
         parcel.autoAssigned = false;
+        if (parcel.courierUsername) queueStaticPushNotification(store, buildStaticParcelAssignedNotification(parcel, parcel.courierUsername));
       }
     });
     saveStaticBootstrap();
@@ -1167,6 +1284,9 @@ async function staticApi(path, options = {}) {
       parcel.deliveredAt = "";
       parcel.failedAt = "";
       parcel.failureReason = "";
+    }
+    if (["delivered", "failed"].includes(parcel.status)) {
+      queueStaticPushNotification(store, buildStaticParcelStatusNotification(parcel, parcel.status, body));
     }
     saveStaticBootstrap();
     return { parcel: publicStaticParcel(store, parcel) };

@@ -336,7 +336,7 @@ function normalizeNotification(raw, id) {
     : details;
 
   return {
-    id: getSafeFieldKey(id || raw.eventKey || raw.parcelId || Date.now()),
+    id: getSafeFieldKey(raw.eventKey || id || raw.parcelId || Date.now()),
     type: String(raw.type || (status === "failed" ? "parcel_failed" : "parcel_delivered")),
     status,
     title,

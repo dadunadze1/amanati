@@ -149,8 +149,12 @@ async function saveFirebaseStaticStore(store) {
     const storeJson = JSON.stringify(store);
     if (storeJson && storeJson === lastFirebaseStoreJson) return true;
     lastFirebaseStoreJson = storeJson;
+    const pushFields = store.adminNotifications && typeof store.adminNotifications === "object"
+      ? { adminNotifications: store.adminNotifications }
+      : {};
     await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
       store,
+      ...pushFields,
       updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     console.log("[firebase] static store saved");
