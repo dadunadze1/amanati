@@ -735,6 +735,12 @@ body.auth-loading .app-shell {
   font-weight: 700;
 }
 
+.address-directory-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
 .address-directory-panel select,
 .address-directory-panel input {
   background: #fff;
@@ -12744,4 +12750,58 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 .app-shell.is-admin-dashboard .selected-pin-pulse.dispatch-pin-partner-unconfirmed {
   stroke: #b45309 !important;
   fill: #f59e0b !important;
+}
+
+.partner-order-form {
+  display: grid !important;
+  gap: 12px !important;
+}
+
+.partner-order-section {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  color: var(--window-text, var(--text));
+  background: var(--window-surface, #fff);
+  border: 1px solid var(--window-line, var(--border));
+  border-radius: 8px;
+}
+
+.partner-order-section .address-directory-panel {
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.address-directory-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.address-directory-field label,
+.partner-form-field label {
+  margin: 0;
+}
+
+.partner-form-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.partner-order-details {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.partner-order-details .partner-form-field:first-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .address-directory-panel,
+  .partner-order-details {
+    grid-template-columns: 1fr;
+  }
 }

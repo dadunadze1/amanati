@@ -342,14 +342,24 @@ async function openPartnerOrdersDialog() {
 
 function openPartnerNewOrderDialog() {
   const body = `
-    <form id="partnerOrderForm" class="partner-form">
-      ${typeof renderAddressDirectoryFields === "function" ? renderAddressDirectoryFields("partnerOrder") : ""}
-      <label for="partnerOrderName">მომხმარებლის სახელი</label>
-      <input id="partnerOrderName" type="text" autocomplete="name" required>
-      <label for="partnerOrderPhone">მომხმარებლის ნომერი</label>
-      <input id="partnerOrderPhone" type="tel" autocomplete="tel" required>
-      <label for="partnerOrderCash">ქეში</label>
-      <input id="partnerOrderCash" type="text" inputmode="decimal" autocomplete="off" value="0">
+    <form id="partnerOrderForm" class="partner-form partner-order-form">
+      <section class="partner-order-section">
+        ${typeof renderAddressDirectoryFields === "function" ? renderAddressDirectoryFields("partnerOrder") : ""}
+      </section>
+      <section class="partner-order-section partner-order-details">
+        <div class="partner-form-field">
+          <label for="partnerOrderName">მომხმარებლის სახელი</label>
+          <input id="partnerOrderName" type="text" autocomplete="name" required>
+        </div>
+        <div class="partner-form-field">
+          <label for="partnerOrderPhone">მომხმარებლის ნომერი</label>
+          <input id="partnerOrderPhone" type="tel" autocomplete="tel" required>
+        </div>
+        <div class="partner-form-field">
+          <label for="partnerOrderCash">ქეში</label>
+          <input id="partnerOrderCash" type="text" inputmode="decimal" autocomplete="off" value="0">
+        </div>
+      </section>
       <p class="form-message" id="partnerOrderMessage" role="alert"></p>
     </form>
   `;
