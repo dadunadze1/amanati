@@ -160,7 +160,7 @@ async function sendStandardWebPush(subscriptions, notification) {
   webpush.setVapidDetails(
     "mailto:dadunadze@gmail.com",
     WEB_PUSH_PUBLIC_KEY,
-    WEB_PUSH_PRIVATE_KEY.value(),
+    WEB_PUSH_PRIVATE_KEY.value().trim(),
   );
 
   const payload = JSON.stringify({
