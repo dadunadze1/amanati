@@ -3078,6 +3078,33 @@ const ADDRESS_DIRECTORY = [
       },
     ],
   },
+  {
+    city: "თბილისის შემოგარენი",
+    tariffId: "suburbs",
+    geocodeCity: "თბილისი",
+    districts: [
+      { name: "წყნეთი", streets: ["წყნეთი"] },
+      { name: "ბეთანია", streets: ["ბეთანია"] },
+      { name: "ახალდაბა", streets: ["ახალდაბა"] },
+      { name: "კოჯორი", streets: ["კოჯორი"] },
+      { name: "ტაბახმელა", streets: ["ტაბახმელა"] },
+      { name: "შინდისი", streets: ["შინდისი"] },
+      { name: "წავკისი", streets: ["წავკისი"] },
+      { name: "ნაფეტვრები", streets: ["ნაფეტვრები"] },
+      { name: "ოქროყანა", streets: ["ოქროყანა"] },
+      { name: "კიკეთი", streets: ["კიკეთი"] },
+      { name: "სოფელი ლილო", streets: ["სოფელი ლილო"] },
+      { name: "აეროპორტის დასახლება", streets: ["აეროპორტის დასახლება"] },
+      { name: "ზემო ფონიჭალა", streets: ["ზემო ფონიჭალა"] },
+      { name: "ქვემო ფონიჭალა", streets: ["ქვემო ფონიჭალა"] },
+      { name: "თხინვალა", streets: ["თხინვალა"] },
+      { name: "სამადლო", streets: ["სამადლო"] },
+      { name: "წავკისის ველი", streets: ["წავკისის ველი"] },
+      { name: "ზაჰესი", streets: ["ზაჰესი"] },
+      { name: "წოდორეთი", streets: ["წოდორეთი"] },
+      { name: "წავკისი-ტაბახმელას გზა", streets: ["წავკისი-ტაბახმელას გზა"] },
+    ],
+  },
 ];
 
 const addressDirectorySelections = {};
@@ -3123,6 +3150,14 @@ function getAddressDirectoryCities() {
 function getAddressDirectoryCity(city) {
   const normalizedCity = normalizeAddressDirectoryText(city);
   return ADDRESS_DIRECTORY.find((item) => normalizeAddressDirectoryText(item.city) === normalizedCity) || ADDRESS_DIRECTORY[0];
+}
+
+function getAddressDirectoryGeocodeCity(city) {
+  return getAddressDirectoryCity(city)?.geocodeCity || city || "";
+}
+
+function getAddressDirectoryTariffId(city) {
+  return getAddressDirectoryCity(city)?.tariffId || "city";
 }
 
 function getAddressDirectoryDistricts(city) {
@@ -3236,8 +3271,17 @@ function normalizeAddressDirectoryAddress(address, options = {}) {
   if (!match) return { address: rawAddress, corrected: false, match: null };
 
   const normalizedParts = rawAddress.split(",").map((part) => cleanAddressInput(part)).filter(Boolean);
-  const hasCity = normalizedParts.some((part) => normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(match.city));
-  const cityPart = hasCity ? normalizedParts.find((part) => normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(match.city)) : match.city;
+  const geocodeCity = getAddressDirectoryGeocodeCity(match.city) || match.city;
+  const hasCity = normalizedParts.some((part) => (
+    normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(match.city)
+    || normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(geocodeCity)
+  ));
+  const cityPart = hasCity
+    ? normalizedParts.find((part) => (
+      normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(match.city)
+      || normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(geocodeCity)
+    ))
+    : geocodeCity;
   const streetIndex = normalizedParts.findIndex((part) => (
     normalizeAddressDirectoryText(part).includes(normalizeAddressDirectoryText(match.street))
     || normalizeAddressDirectoryStreetKey(part).includes(normalizeAddressDirectoryStreetKey(match.street))
@@ -3408,9 +3452,13 @@ function getAddressDirectoryValue(prefix) {
   const street = root?.querySelector("[data-address-street]")?.value.trim() || "";
   const building = root?.querySelector("[data-address-building]")?.value.trim() || "";
   const streetAddress = [street, building].filter(Boolean).join(" ").trim();
-  const fullAddress = [city, neighborhood || district, streetAddress].filter(Boolean).join(", ");
+  const geocodeCity = getAddressDirectoryGeocodeCity(city);
+  const tariffId = getAddressDirectoryTariffId(city);
+  const fullAddress = [geocodeCity || city, neighborhood || district, streetAddress].filter(Boolean).join(", ");
   return {
     city,
+    geocodeCity,
+    tariffId,
     district,
     neighborhood,
     street,
@@ -3419,4 +3467,18 @@ function getAddressDirectoryValue(prefix) {
     fullAddress,
     selectedStreet: exact || addressDirectorySelections[prefix] || null,
   };
+}
+
+function getAddressDirectoryTariffIdFromAddress(address) {
+  const normalizedAddress = normalizeAddressDirectoryText(address);
+  if (!normalizedAddress) return "";
+  const suburbCity = ADDRESS_DIRECTORY.find((item) => item.tariffId === "suburbs");
+  if (!suburbCity) return "";
+  const hasSuburbCity = normalizedAddress.includes(normalizeAddressDirectoryText(suburbCity.city));
+  const hasSuburbArea = (suburbCity.districts || []).some((districtRecord) => {
+    const districtKey = normalizeAddressDirectoryText(districtRecord.name);
+    return normalizedAddress.includes(districtKey)
+      || districtRecord.streets.some((street) => normalizedAddress.includes(normalizeAddressDirectoryText(street)));
+  });
+  return hasSuburbCity || hasSuburbArea ? "suburbs" : "";
 }

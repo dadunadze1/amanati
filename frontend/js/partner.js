@@ -387,11 +387,12 @@ async function savePartnerOrder() {
     : { address: rawAddress, corrected: false };
   const address = normalizedAddress.address || rawAddress;
   const finalDistrict = normalizedAddress.match?.district || district;
+  const tariffId = addressParts.tariffId || "";
 
   try {
     const payload = await api("/api/parcels", {
       method: "POST",
-      body: { city, district: finalDistrict, streetAddress: street, address, fullAddress: address, fullName, phone, paymentAmount },
+      body: { city, district: finalDistrict, streetAddress: street, address, fullAddress: address, fullName, phone, paymentAmount, tariffId },
     });
     closeDialog();
     await refreshPins();

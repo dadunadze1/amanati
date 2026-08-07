@@ -148,7 +148,12 @@ function openAddressSearchDialog(username) {
     handleAddressSearch(event, username);
   });
   if (typeof bindAddressDirectoryControls === "function") {
-    bindAddressDirectoryControls("addressSearch", { targetInputId: "addressSearchInput" });
+    bindAddressDirectoryControls("addressSearch", {
+      targetInputId: "addressSearchInput",
+      onChange: (value) => {
+        state.pendingTariffId = value.tariffId || "";
+      },
+    });
   }
   bindAddressAutocomplete({
     inputId: "addressSearchInput",
@@ -169,6 +174,7 @@ function startMapSelection(username) {
   state.pendingAddress = "";
   state.pendingAddressLocked = false;
   state.pendingAddressWarning = "";
+  state.pendingTariffId = "";
   state.pendingZone = null;
   state.pendingAutoAssignment = null;
   state.mode = "selectingParcel";
@@ -395,6 +401,8 @@ async function saveParcel() {
     courierName: autoAssignment.courierName || "",
     autoAssigned: Boolean(autoAssignment.autoAssigned && !selectedCourierUsername),
   };
+  const tariffId = state.pendingTariffId
+    || (typeof getAddressDirectoryTariffIdFromAddress === "function" ? getAddressDirectoryTariffIdFromAddress(address) : "");
 
   let payload;
   try {
@@ -413,6 +421,7 @@ async function saveParcel() {
         zoneName: autoAssignment.zoneName || "ზონა არ მოიძებნა",
         autoAssigned: Boolean(autoAssignment.autoAssigned && !selectedCourierUsername),
         partnerId,
+        tariffId,
       },
     });
   } catch (error) {
@@ -856,6 +865,9 @@ async function selectAddressSearchResult(result, username, selectedIndex = -1, r
   state.pendingCoords = coords;
   state.pendingAddress = address;
   state.pendingAddressLocked = Boolean(cleanAddressInput(requestedAddress));
+  if (typeof getAddressDirectoryTariffIdFromAddress === "function") {
+    state.pendingTariffId = state.pendingTariffId || getAddressDirectoryTariffIdFromAddress(requestedAddress || address);
+  }
   state.pendingAddressWarning = normalizedRequested.corrected
     ? `უბანი გასწორდა: ${normalizedRequested.match?.neighborhood || normalizedRequested.match?.district || ""}`
     : result.warning || "";
@@ -1732,6 +1744,7 @@ function resetMapSelectionUi() {
   state.pendingAddress = "";
   state.pendingAddressLocked = false;
   state.pendingAddressWarning = "";
+  state.pendingTariffId = "";
   state.pendingZone = null;
   state.pendingAutoAssignment = null;
   state.locationEditParcelId = "";
