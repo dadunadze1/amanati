@@ -785,6 +785,41 @@ function bindDateRangeToolbar({ startId, endId, applySelector, onApply }) {
 }
 
 
+function renderFinanceListPanel({ title = "", badges = [], headers = [], rows = [] }) {
+  return `
+    <div class="partner-panel-head">
+      <h2>${escapeHtml(title)}</h2>
+      <div class="partner-filter-row">
+        ${badges.filter(Boolean).map((badge) => `<span class="partner-tag">${escapeHtml(badge)}</span>`).join("")}
+      </div>
+    </div>
+    <div class="partner-table-wrap">
+      <table class="partner-order-table">
+        <thead>
+          <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>
+          ${rows.join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+function renderFinanceTableText(title, subtitle = "") {
+  return `
+    <strong>${escapeHtml(title || "არ არის")}</strong>
+    ${subtitle ? `<small>${escapeHtml(subtitle)}</small>` : ""}
+  `;
+}
+
+
+function renderFinanceTableAction(action, label, value = "", className = "mini-button") {
+  return `<button class="${escapeAttr(className)}" type="button" data-action="${escapeAttr(action)}"${value ? ` data-value="${escapeAttr(value)}"` : ""}>${escapeHtml(label)}</button>`;
+}
+
+
 async function openFinanceDashboard() {
   if (!state.isAdmin) {
     await openFinanceCourier(state.currentUser);
@@ -812,45 +847,62 @@ async function openFinanceDashboard() {
   }, 0));
   const closablePins = pins.filter(isCompletedParcelStatus);
   const deliveredToday = pins.filter((pin) => pin.status === "delivered").length;
-  const content = `
-      <section class="finance-section finance-flow-grid">
-        <button class="finance-card finance-flow-card finance-card--cash finance-card--alert" type="button" data-action="openFinanceCash">
-          <span class="finance-summary-icon finance-summary-icon--cash" aria-hidden="true">₾</span>
-          <span>კურიერების ქეში</span>
-          <strong>${escapeHtml(formatMoney(totalOutstandingCash))}</strong>
-          <small>კურიერმა კომპანიას უნდა ჩააბაროს</small>
-        </button>
-        <button class="finance-card finance-flow-card finance-card--final" type="button" data-action="openFinanceCourierPay">
-          <span class="finance-summary-icon finance-summary-icon--final" aria-hidden="true">₾</span>
-          <span>კურიერის ანაზღაურება</span>
-          <strong>${escapeHtml(formatMoney(totalCourierPay))}</strong>
-          <small>კომპანიამ კურიერებს უნდა გადაუხადოს</small>
-        </button>
-        <button class="finance-card finance-flow-card finance-card--partner" type="button" data-action="openFinancePartnerCash">
-          <span class="finance-summary-icon" aria-hidden="true">₾</span>
-          <span>პარტნიორის ქეში</span>
-          <strong>${escapeHtml(formatMoney(partnerCashDue))}</strong>
-          <small>პარტნიორების კომპანიისთვის მისაცემი ქეში</small>
-        </button>
-        <button class="finance-card finance-flow-card" type="button" data-action="adminDailyBalance">
-          <span class="finance-summary-icon" aria-hidden="true">▦</span>
-          <span>დღიური ბალანსი</span>
-          <strong>${escapeHtml(formatMoney(todaySummary.adminProfit))}</strong>
-          <small>კურიერი, პარტნიორი და მოგება კალენდრით</small>
-        </button>
-        <button class="finance-card finance-flow-card finance-card--day" type="button" data-action="openFinanceDayClose">
-          <span class="finance-summary-icon" aria-hidden="true">✓</span>
-          <span>დღის დახურვა / ისტორია</span>
-          <strong>${escapeHtml(String(closablePins.length))}</strong>
-          <small>${escapeHtml(deliveredToday)} ჩაბარებული, მოგება ${escapeHtml(formatMoney(todaySummary.adminProfit))}</small>
-        </button>
-      </section>
-      <section class="finance-section finance-explain-grid">
-        <div class="finance-explain-row"><strong>ქეში</strong><span>შეკვეთის თანხა, რომელიც კომპანიას უნდა დაუბრუნდეს.</span></div>
-        <div class="finance-explain-row"><strong>ანაზღაურება</strong><span>კურიერის ხელფასი/გამომუშავება, ქეშისგან ცალკეა.</span></div>
-        <div class="finance-explain-row"><strong>კორექტირება</strong><span>ადმინი ირჩევს მიმატებას ან ჩამოკლებას. ჩამოკლება ნაშთს 0-ს ქვემოთ არ უშვებს.</span></div>
-      </section>
-  `;
+  const content = renderFinanceListPanel({
+    title: "ფინანსური სია",
+    badges: [
+      `კურიერი: ${couriers.length}`,
+      `პარტნიორი: ${partners.length}`,
+      `დღეს ჩაბარდა: ${deliveredToday}`,
+    ],
+    headers: ["განყოფილება", "თანხა / რაოდენობა", "სტატუსი", "აღწერა", ""],
+    rows: [
+      `
+        <tr>
+          <td>${renderFinanceTableText("კურიერების ქეში", "კურიერმა კომპანიას უნდა ჩააბაროს")}</td>
+          <td>${escapeHtml(formatMoney(totalOutstandingCash))}</td>
+          <td><span class="history-status status-pending">ჩასაბარებელი</span></td>
+          <td>შეკვეთებიდან დაგროვებული ქეში და კორექტირებები</td>
+          <td>${renderFinanceTableAction("openFinanceCash", "ნახვა")}</td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText("კურიერის ანაზღაურება", "კომპანიამ კურიერებს უნდა გადაუხადოს")}</td>
+          <td>${escapeHtml(formatMoney(totalCourierPay))}</td>
+          <td><span class="history-status status-delivered">გადასახდელი</span></td>
+          <td>საბაზისო ანაზღაურება და ხელფასის კორექტირებები</td>
+          <td>${renderFinanceTableAction("openFinanceCourierPay", "ნახვა")}</td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText("პარტნიორის ქეში", "ობიექტების კომპანიისთვის მისაცემი ქეში")}</td>
+          <td>${escapeHtml(formatMoney(partnerCashDue))}</td>
+          <td><span class="history-status status-pending">ჩასაბარებელი</span></td>
+          <td>პარტნიორების ჩაბარებული შეკვეთები, მოლოდინი და კორექტირებები</td>
+          <td>${renderFinanceTableAction("openFinancePartnerCash", "ნახვა")}</td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText("დღიური ბალანსი", "კალენდრით დათვლა")}</td>
+          <td>${escapeHtml(formatMoney(todaySummary.adminProfit))}</td>
+          <td><span class="history-status status-delivered">მოგება</span></td>
+          <td>კურიერი, პარტნიორი, snapshot, CSV და გადახდილად მონიშვნა</td>
+          <td>${renderFinanceTableAction("adminDailyBalance", "ნახვა")}</td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText("დღის დახურვა / ისტორია", `${deliveredToday} ჩაბარებული`)}</td>
+          <td>${escapeHtml(String(closablePins.length))}</td>
+          <td><span class="history-status status-delivered">დასახური</span></td>
+          <td>დასრულებული ამანათების ისტორიაში გადატანა</td>
+          <td>${renderFinanceTableAction("openFinanceDayClose", "ნახვა")}</td>
+        </tr>
+      `,
+    ],
+  });
   const body = renderFinanceModalLayout({ content });
   showDialog("ფინანსები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
@@ -1245,8 +1297,6 @@ async function openFinanceCourier(username) {
   const delivered = summaryResult.delivered;
   const { basePay, adjustmentTotal, finalPay } = summaryResult;
   const cash = summaryResult.cashReceived;
-  const recentAdjustments = renderFinanceAdjustmentHistorySection(username, range.start, range.end);
-  const analytics = renderFinanceAnalyticsSection(courierAllRecords);
   const filters = renderDateRangeToolbar({
     startId: "financeCourierStartDate",
     endId: "financeCourierEndDate",
@@ -1255,55 +1305,69 @@ async function openFinanceCourier(username) {
     applySelector: "data-finance-range-apply",
     className: "finance-range-toolbar",
   });
-  const summary = `
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--hero finance-summary-item--final",
-          icon: "₾",
-          label: "საბოლოო გამომუშავება",
-          value: formatMoney(finalPay),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--cash finance-summary-item--alert",
-          icon: "₾",
-          label: "ჩასაბარებელი ქეში",
-          value: formatMoney(cash),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--compact finance-summary-item--delivered",
-          icon: "✓",
-          label: "ჩაბარებული",
-          value: String(delivered),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--compact finance-summary-item--adjustment",
-          icon: "↺",
-          label: getAdjustmentDirectionLabel(adjustmentTotal),
-          value: formatAdjustmentDisplay(adjustmentTotal),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--compact finance-summary-item--period",
-          icon: "◷",
-          label: "პერიოდი",
-          value: formatDateRangeLabel(range.start, range.end),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--compact finance-summary-item--base",
-          icon: "Σ",
-          label: "საბაზისო",
-          value: formatMoney(basePay),
-        })}
-  `;
-  const content = `
-      ${recentAdjustments}
-      ${analytics}
-  `;
+  const content = renderFinanceListPanel({
+    title: "კურიერის ფინანსები",
+    badges: [
+      formatDateRangeLabel(range.start, range.end),
+      `ჩაბარებული: ${delivered}`,
+      `კორექტირება: ${formatAdjustmentDisplay(adjustmentTotal)}`,
+    ],
+    headers: ["მაჩვენებელი", "თანხა / რაოდენობა", "სტატუსი", "აღწერა", ""],
+    rows: [
+      `
+        <tr>
+          <td>${renderFinanceTableText("საბოლოო გამომუშავება", courier.username)}</td>
+          <td>${escapeHtml(formatMoney(finalPay))}</td>
+          <td><span class="history-status status-delivered">გადასახდელი</span></td>
+          <td>საბაზისო ანაზღაურება + კორექტირება</td>
+          <td>${state.isAdmin ? renderFinanceTableAction("adjustCourierPay", "გასწორება", username, "mini-button finance-button-primary") : ""}</td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText("ჩასაბარებელი ქეში", courier.username)}</td>
+          <td>${escapeHtml(formatMoney(cash))}</td>
+          <td><span class="history-status status-pending">ჩასაბარებელი</span></td>
+          <td>შეკვეთების ქეში + ქეშის კორექტირება</td>
+          <td>${state.isAdmin ? renderFinanceTableAction("adjustCourierCash", "გასწორება", username, "mini-button finance-button-primary") : ""}</td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText("ჩაბარებული", "არჩეულ პერიოდში")}</td>
+          <td>${escapeHtml(String(delivered))}</td>
+          <td><span class="history-status status-delivered">დასრულებული</span></td>
+          <td>ჩაბარებული შეკვეთების რაოდენობა</td>
+          <td></td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText(getAdjustmentDirectionLabel(adjustmentTotal), "ხელფასის კორექტირება")}</td>
+          <td>${escapeHtml(formatAdjustmentDisplay(adjustmentTotal))}</td>
+          <td><span class="history-status status-pending">კორექტირება</span></td>
+          <td>საბოლოო ანაზღაურებაზე გავლენა</td>
+          <td></td>
+        </tr>
+      `,
+      `
+        <tr>
+          <td>${renderFinanceTableText("საბაზისო", "კორექტირებამდე")}</td>
+          <td>${escapeHtml(formatMoney(basePay))}</td>
+          <td><span class="history-status status-delivered">დარიცხული</span></td>
+          <td>შეკვეთებიდან დათვლილი კურიერის ანაზღაურება</td>
+          <td></td>
+        </tr>
+      `,
+    ],
+  });
   const footer = state.isAdmin ? `
         <div class="finance-actions finance-actions--dashboard" aria-label="ფინანსების მოქმედებები">
           <button class="mini-button finance-button-primary finance-action-button" type="button" data-action="adjustCourierCash" data-value="${escapeAttr(username)}">ქეშის გასწორება</button>
           <button class="mini-button finance-button-primary finance-action-button" type="button" data-action="adjustCourierPay" data-value="${escapeAttr(username)}">გამომუშავების გასწორება</button>
         </div>
       ` : "";
-  const body = renderFinanceModalLayout({ filters, summary, content, footer });
+  const body = renderFinanceModalLayout({ filters, content, footer });
   showDialog(userDisplayName(courier), body, [
     state.isAdmin ? { label: "უკან", variant: "secondary", action: openFinanceDashboard } : { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
@@ -1335,46 +1399,31 @@ async function openFinanceCash() {
   const totalCash = safeMoney(couriers.reduce((sum, courier) => (
     sum + calculateFinanceSummary({ records }, { username: courier.username, startDate: range.start, endDate: range.end }).cashReceived
   ), 0));
-  const summary = `
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--hero finance-summary-item--cash finance-summary-item--alert",
-          icon: "₾",
-          label: "სულ ჩასაბარებელი ქეში",
-          value: formatMoney(totalCash),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--period",
-          icon: "◷",
-          label: "პერიოდი",
-          value: formatDateRangeLabel(range.start, range.end),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--delivered",
-          icon: "✓",
-          label: "კურიერები",
-          value: String(couriers.length),
-        })}
-  `;
-  const content = `
-      <section class="finance-section finance-card-list finance-card-list--dashboard">
-        ${couriers.map((courier) => {
-          const username = courier.username;
-          const courierSummary = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
-          const cash = courierSummary.cashReceived;
-          return `
-            <article class="finance-card finance-mini-card finance-static-card finance-card--cash finance-card--alert">
-              <span class="finance-summary-icon finance-summary-icon--cash" aria-hidden="true">₾</span>
-              <span>${escapeHtml(userDisplayName(courier))}</span>
-              <small>ჩასაბარებელი ქეში</small>
-              <strong>${escapeHtml(formatMoney(cash))}</strong>
-              <small>შეკვეთები: ${escapeHtml(formatMoney(courierSummary.totalOrdersAmount))} · ${escapeHtml(getAdjustmentDirectionLabel(courierSummary.cashAdjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(courierSummary.cashAdjustmentTotal))}</small>
-              <button class="mini-button finance-button-primary" type="button" data-action="adjustCourierCash" data-value="${escapeAttr(username)}">რედაქტირება</button>
-            </article>
-          `;
-        }).join("") || "<div class=\"history-empty history-empty-card\">კურიერი ჯერ არ არის დამატებული</div>"}
-      </section>
-  `;
-  const body = renderFinanceModalLayout({ filters, summary, content });
+  const rows = couriers.map((courier) => {
+    const username = courier.username;
+    const courierSummary = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
+    return `
+      <tr>
+        <td>${renderFinanceTableText(userDisplayName(courier), username)}</td>
+        <td>${escapeHtml(formatMoney(courierSummary.cashReceived))}</td>
+        <td>${escapeHtml(formatMoney(courierSummary.totalOrdersAmount))}</td>
+        <td>${escapeHtml(`${getAdjustmentDirectionLabel(courierSummary.cashAdjustmentTotal)}: ${formatAdjustmentDisplay(courierSummary.cashAdjustmentTotal)}`)}</td>
+        <td><span class="history-status status-pending">ჩასაბარებელი</span></td>
+        <td>${renderFinanceTableAction("adjustCourierCash", "რედაქტირება", username, "mini-button finance-button-primary")}</td>
+      </tr>
+    `;
+  });
+  const content = renderFinanceListPanel({
+    title: "კურიერების ქეში",
+    badges: [
+      `სულ: ${formatMoney(totalCash)}`,
+      formatDateRangeLabel(range.start, range.end),
+      `კურიერი: ${couriers.length}`,
+    ],
+    headers: ["კურიერი", "ჩასაბარებელი", "შეკვეთები", "კორექტირება", "სტატუსი", ""],
+    rows: rows.length ? rows : [`<tr><td colspan="6">კურიერი ჯერ არ არის დამატებული</td></tr>`],
+  });
+  const body = renderFinanceModalLayout({ filters, content });
   showDialog("ქეში", body, [{ label: "უკან", variant: "secondary", action: openFinanceDashboard }]);
   bindDateRangeToolbar({
     startId: "financeCashStartDate",
@@ -1408,44 +1457,31 @@ async function openFinanceCourierPay() {
   const totalPay = safeMoney(summaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
   const basePay = safeMoney(summaries.reduce((sum, item) => sum + item.summary.basePay, 0));
   const adjustmentTotal = safeMoney(summaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
-  const summary = `
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--hero finance-summary-item--final",
-          icon: "₾",
-          label: "სულ გადასახდელი კურიერებს",
-          value: formatMoney(totalPay),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--base",
-          icon: "Σ",
-          label: "საბაზისო",
-          value: formatMoney(basePay),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--adjustment",
-          icon: "↺",
-          label: getAdjustmentDirectionLabel(adjustmentTotal),
-          value: formatAdjustmentDisplay(adjustmentTotal),
-        })}
-  `;
-  const content = `
-      <section class="finance-section finance-card-list finance-card-list--dashboard">
-        ${summaries.map(({ courier, summary: courierSummary }) => `
-          <article class="finance-card finance-mini-card finance-static-card finance-card--final">
-            <span class="finance-summary-icon finance-summary-icon--final" aria-hidden="true">₾</span>
-            <span>${escapeHtml(userDisplayName(courier))}</span>
-            <small>საბოლოო ანაზღაურება</small>
-            <strong>${escapeHtml(formatMoney(courierSummary.finalPay))}</strong>
-            <small>საბაზისო: ${escapeHtml(formatMoney(courierSummary.basePay))} · ${escapeHtml(getAdjustmentDirectionLabel(courierSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(courierSummary.adjustmentTotal))}</small>
-            <div class="finance-card-actions">
-              <button class="mini-button finance-button-primary" type="button" data-action="adjustCourierPay" data-value="${escapeAttr(courier.username)}">რედაქტირება</button>
-              <button class="mini-button" type="button" data-action="openFinanceCourier" data-value="${escapeAttr(courier.username)}">დეტალურად</button>
-            </div>
-          </article>
-        `).join("") || "<div class=\"history-empty history-empty-card\">კურიერი ჯერ არ არის დამატებული</div>"}
-      </section>
-  `;
-  const body = renderFinanceModalLayout({ filters, summary, content });
+  const content = renderFinanceListPanel({
+    title: "კურიერის ანაზღაურება",
+    badges: [
+      `სულ: ${formatMoney(totalPay)}`,
+      `საბაზისო: ${formatMoney(basePay)}`,
+      `${getAdjustmentDirectionLabel(adjustmentTotal)}: ${formatAdjustmentDisplay(adjustmentTotal)}`,
+    ],
+    headers: ["კურიერი", "საბოლოო", "საბაზისო", "კორექტირება", "ჩაბარებული", ""],
+    rows: summaries.length ? summaries.map(({ courier, summary: courierSummary }) => `
+      <tr>
+        <td>${renderFinanceTableText(userDisplayName(courier), courier.username)}</td>
+        <td>${escapeHtml(formatMoney(courierSummary.finalPay))}</td>
+        <td>${escapeHtml(formatMoney(courierSummary.basePay))}</td>
+        <td>${escapeHtml(`${getAdjustmentDirectionLabel(courierSummary.adjustmentTotal)}: ${formatAdjustmentDisplay(courierSummary.adjustmentTotal)}`)}</td>
+        <td><span class="history-status status-delivered">${escapeHtml(String(courierSummary.delivered))}</span></td>
+        <td>
+          <div class="row-actions">
+            ${renderFinanceTableAction("adjustCourierPay", "რედაქტირება", courier.username, "mini-button finance-button-primary")}
+            ${renderFinanceTableAction("openFinanceCourier", "დეტალურად", courier.username)}
+          </div>
+        </td>
+      </tr>
+    `) : [`<tr><td colspan="6">კურიერი ჯერ არ არის დამატებული</td></tr>`],
+  });
+  const body = renderFinanceModalLayout({ filters, content });
   showDialog("კურიერის ანაზღაურება", body, [{ label: "უკან", variant: "secondary", action: openFinanceDashboard }]);
   bindDateRangeToolbar({
     startId: "financePayStartDate",
@@ -1474,48 +1510,26 @@ async function openFinancePartnerCash() {
   const baseCash = safeMoney(summaries.reduce((sum, item) => sum + item.summary.baseCash, 0));
   const adjustmentTotal = safeMoney(summaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
   const pendingCash = safeMoney(summaries.reduce((sum, item) => sum + item.summary.pendingCash, 0));
-  const summary = `
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--hero finance-summary-item--cash finance-summary-item--alert",
-          icon: "₾",
-          label: "პარტნიორების მისაცემი ქეში",
-          value: formatMoney(cashDue),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--base",
-          icon: "Σ",
-          label: "ჩაბარებული შეკვეთები",
-          value: formatMoney(baseCash),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--adjustment",
-          icon: "↺",
-          label: getAdjustmentDirectionLabel(adjustmentTotal),
-          value: formatAdjustmentDisplay(adjustmentTotal),
-        })}
-        ${renderFinanceSummaryItem({
-          className: "finance-summary-item--period",
-          icon: "◷",
-          label: "მოლოდინში ქეში",
-          value: formatMoney(pendingCash),
-        })}
-  `;
-  const content = `
-      <section class="finance-section finance-card-list finance-card-list--dashboard">
-        ${summaries.map(({ partner, summary: partnerSummary }) => `
-          <article class="finance-card finance-mini-card finance-static-card finance-card--partner ${partnerSummary.cashDue > 0 ? "finance-card--alert" : ""}">
-            <span class="finance-summary-icon" aria-hidden="true">₾</span>
-            <span>${escapeHtml(partnerName(partner))}</span>
-            <small>კომპანიისთვის მისაცემი ქეში</small>
-            <strong>${escapeHtml(formatMoney(partnerSummary.cashDue))}</strong>
-            <small>ჩაბარებული: ${escapeHtml(formatMoney(partnerSummary.baseCash))} · ${escapeHtml(getAdjustmentDirectionLabel(partnerSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(partnerSummary.adjustmentTotal))}</small>
-            <small>მოლოდინში: ${escapeHtml(formatMoney(partnerSummary.pendingCash))}</small>
-            <button class="mini-button finance-button-primary" type="button" data-action="adjustPartnerCash" data-value="${escapeAttr(partner.username)}">რედაქტირება</button>
-          </article>
-        `).join("") || "<div class=\"history-empty history-empty-card\">პარტნიორი ჯერ არ არის დამატებული</div>"}
-      </section>
-  `;
-  const body = renderFinanceModalLayout({ summary, content });
+  const content = renderFinanceListPanel({
+    title: "პარტნიორის ქეში",
+    badges: [
+      `სულ: ${formatMoney(cashDue)}`,
+      `ჩაბარებული: ${formatMoney(baseCash)}`,
+      `მოლოდინში: ${formatMoney(pendingCash)}`,
+    ],
+    headers: ["პარტნიორი", "მისაცემი ქეში", "ჩაბარებული", "მოლოდინში", "კორექტირება", ""],
+    rows: summaries.length ? summaries.map(({ partner, summary: partnerSummary }) => `
+      <tr>
+        <td>${renderFinanceTableText(partnerName(partner), partner.username || partner.id || "")}</td>
+        <td>${escapeHtml(formatMoney(partnerSummary.cashDue))}</td>
+        <td>${escapeHtml(formatMoney(partnerSummary.baseCash))}</td>
+        <td>${escapeHtml(formatMoney(partnerSummary.pendingCash))}</td>
+        <td>${escapeHtml(`${getAdjustmentDirectionLabel(partnerSummary.adjustmentTotal)}: ${formatAdjustmentDisplay(partnerSummary.adjustmentTotal)}`)}</td>
+        <td>${renderFinanceTableAction("adjustPartnerCash", "რედაქტირება", partner.username, "mini-button finance-button-primary")}</td>
+      </tr>
+    `) : [`<tr><td colspan="6">პარტნიორი ჯერ არ არის დამატებული</td></tr>`],
+  });
+  const body = renderFinanceModalLayout({ content });
   showDialog("პარტნიორის ქეში", body, [{ label: "უკან", variant: "secondary", action: openFinanceDashboard }]);
 }
 
