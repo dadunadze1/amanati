@@ -190,13 +190,13 @@ function calculateFinanceSummary(data = {}, filters = {}) {
 function getAdjustmentDirectionLabel(total) {
   const amount = safeMoney(total);
   if (amount > 0) return "მიმატებული";
-  if (amount < 0) return "ჩამოკლებული";
   return "კორექტირება";
 }
 
 
 function formatAdjustmentDisplay(total) {
-  return formatMoney(Math.abs(safeMoney(total)));
+  const amount = safeMoney(total);
+  return formatMoney(amount > 0 ? amount : 0);
 }
 
 

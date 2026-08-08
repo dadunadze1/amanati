@@ -36,18 +36,22 @@ async function rejectCourier(username) {
 }
 
 
-async function openPushInboxDialog() {
+async function openPushInboxDialog(filter = state.pushInboxFilter || "all") {
+  state.pushInboxFilter = filter;
   showDialog("ფუშების inbox", `<p class="history-empty">ფუშები იტვირთება...</p>`, [
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
 
   const notifications = await loadPushInboxNotifications();
-  const body = renderPushInboxTable(notifications);
+  const body = renderPushInboxTable(notifications, state.pushInboxFilter);
 
   showDialog("ფუშების inbox", body, [
     { label: "განახლება", variant: "primary", action: openPushInboxDialog },
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
+  document.getElementById("pushInboxFilter")?.addEventListener("change", async (event) => {
+    await openPushInboxDialog(event.target.value || "all");
+  });
 }
 
 
@@ -142,8 +146,9 @@ function normalizePushInboxNotification(item) {
 }
 
 
-function renderPushInboxTable(notifications) {
+function renderPushInboxTable(notifications, filter = "all") {
   if (!notifications.length) return `<div class="history-empty history-empty-card">ფუშები ჯერ არ არის შენახული.</div>`;
+  const filteredNotifications = notifications.filter((item) => pushInboxMatchesFilter(item, filter));
   const sent = notifications.filter((item) => item.deliveryStatus === "sent").length;
   const failed = notifications.filter((item) => item.deliveryStatus === "failed").length;
   const pending = notifications.filter((item) => !["sent", "failed"].includes(item.deliveryStatus)).length;
@@ -151,7 +156,14 @@ function renderPushInboxTable(notifications) {
     <div class="partner-panel-head">
       <h2>ბოლო ფუშები</h2>
       <div class="partner-filter-row">
+        <select id="pushInboxFilter" aria-label="ფუშების ფილტრი">
+          <option value="all" ${filter === "all" ? "selected" : ""}>ყველა</option>
+          <option value="created" ${filter === "created" ? "selected" : ""}>ახალი ამანათები</option>
+          <option value="delivered" ${filter === "delivered" ? "selected" : ""}>ჩაბარებულები</option>
+          <option value="failed" ${filter === "failed" ? "selected" : ""}>ვერ ჩაბარებულები</option>
+        </select>
         <span class="partner-tag">სულ: ${escapeHtml(notifications.length)}</span>
+        <span class="partner-tag">ნაჩვენები: ${escapeHtml(filteredNotifications.length)}</span>
         <span class="partner-tag">გაგზავნილი: ${escapeHtml(sent)}</span>
         <span class="partner-tag">რიგში/შენახული: ${escapeHtml(pending)}</span>
         ${failed ? `<span class="partner-tag">შეცდომა: ${escapeHtml(failed)}</span>` : ""}
@@ -171,11 +183,19 @@ function renderPushInboxTable(notifications) {
           </tr>
         </thead>
         <tbody>
-          ${notifications.map(renderPushInboxRow).join("")}
+          ${filteredNotifications.length ? filteredNotifications.map(renderPushInboxRow).join("") : `<tr><td colspan="7">ამ ფილტრში ფუში არ არის</td></tr>`}
         </tbody>
       </table>
     </div>
   `;
+}
+
+
+function pushInboxMatchesFilter(notification, filter) {
+  if (filter === "created") return notification.type === "parcel_created" || notification.status === "created";
+  if (filter === "delivered") return notification.type === "parcel_delivered" || notification.status === "delivered";
+  if (filter === "failed") return notification.type === "parcel_failed" || notification.status === "failed";
+  return true;
 }
 
 

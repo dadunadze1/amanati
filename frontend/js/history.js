@@ -418,7 +418,64 @@ async function renderParcelHistoryResults(parcels) {
     results.innerHTML = "<div class=\"history-empty history-empty-card\">ამანათი ვერ მოიძებნა</div>";
     return;
   }
-  results.innerHTML = (await Promise.all(parcels.map(renderParcelHistoryCard))).join("");
+  results.innerHTML = await renderParcelHistoryTable(parcels);
+}
+
+
+async function renderParcelHistoryTable(parcels) {
+  const rows = await Promise.all(parcels.map(renderParcelHistoryTableRow));
+  return `
+    <div class="partner-table-wrap">
+      <table class="partner-order-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>მიმღები</th>
+            <th>მისამართი</th>
+            <th>კურიერი</th>
+            <th>სტატუსი</th>
+            <th>ქეში</th>
+            <th>თარიღი</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+async function renderParcelHistoryTableRow(item) {
+  const payment = getPaymentAmount(item);
+  const address = await resolveParcelAddress(item);
+  const courierPay = getCourierPay(item);
+  const failureReason = parcelFailureReason(item);
+  const canFocusMap = Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng));
+  return `
+    <tr>
+      <td><span class="partner-tag">${escapeHtml(String(item.id || "").slice(0, 8) || "არ არის")}</span></td>
+      <td>
+        <strong>${escapeHtml(item.fullName || "უსახელო მიმღები")}</strong>
+        <small>${escapeHtml(item.phone || "ტელეფონი არ არის")}</small>
+      </td>
+      <td>
+        <strong>${escapeHtml(address || STRINGS.addressMissing)}</strong>
+        ${item.status === "failed" && failureReason ? `<small>მიზეზი: ${escapeHtml(failureReason)}</small>` : ""}
+      </td>
+      <td>
+        <strong>${escapeHtml(parcelCourierDisplayName(item))}</strong>
+        <small>${escapeHtml(parcelCourierPhone(item) || item.courierUsername || "მიუბმელი")}</small>
+      </td>
+      <td><span class="history-status status-${escapeAttr(item.status)}">${escapeHtml(getStatusLabel(item.status))}</span></td>
+      <td>
+        <strong>${escapeHtml(payment > 0 ? formatMoney(payment) : "არ აქვს")}</strong>
+        <small>კურიერი: ${escapeHtml(formatMoney(courierPay))}</small>
+      </td>
+      <td>${escapeHtml(formatOptionalDateTime(getParcelHistoryDisplayDate(item)))}</td>
+      <td>${canFocusMap ? `<button class="mini-button" type="button" data-action="focusHistoryParcel" data-value="${escapeAttr(item.id)}">რუკა</button>` : ""}</td>
+    </tr>
+  `;
 }
 
 
@@ -462,6 +519,11 @@ async function renderParcelHistoryCard(item) {
       </div>
     </article>
   `;
+}
+
+
+function getParcelHistoryDisplayDate(parcel) {
+  return parcel.archivedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || parcel.updatedAt || parcel.assignedAt || parcel.createdAt || "";
 }
 
 
