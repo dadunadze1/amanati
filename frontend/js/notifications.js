@@ -5,6 +5,12 @@ const ADMIN_WEB_PUSH_PUBLIC_KEY = "BAEuO5gXFaWrtcaxhWxvzgNc1hlvCYZoNtYdxJno43Rqz
 const ADMIN_PUSH_TOKENS_COLLECTION = "adminPushTokens";
 const ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION = "adminWebPushSubscriptions";
 const ADMIN_NOTIFICATIONS_COLLECTION = "adminNotifications";
+const PUSH_NOTIFICATION_TITLE_PREFIXES = {
+  delivered: "📦",
+  created: "🛵",
+  assigned: "🛵",
+  failed: "🚨",
+};
 
 function canUseAdminPush() {
   return Boolean(
@@ -386,7 +392,7 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
   const fullName = String(parcel.fullName || parcel.customerName || parcel.name || "").trim();
   const failureReason = String(options.failureReason || parcelFailureReason(parcel) || "").trim();
   const isFailed = status === "failed";
-  const title = isFailed ? "შეკვეთა ვერ ჩაბარდა" : "შეკვეთა ჩაბარდა";
+  const title = formatPushNotificationTitle(status, isFailed ? "შეკვეთა ვერ ჩაბარდა" : "შეკვეთა ჩაბარდა");
   const details = [address, fullName].filter(Boolean).join(", ") || "შეკვეთის სტატუსი შეიცვალა";
   const body = isFailed && failureReason ? `${details}\nმიზეზი: ${failureReason}` : details;
   const statusTime = options.completedAt || options.deliveredAt || options.failedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || "";
@@ -424,7 +430,7 @@ function buildParcelCreatedNotification(parcel) {
     type: "parcel_created",
     status: "created",
     recipientRoles,
-    title: "პარტნიორმა ახალი ამანათი დაამატა",
+    title: formatPushNotificationTitle("created", "პარტნიორმა ახალი ამანათი დაამატა"),
     body: `${partnerName || "პარტნიორი"} - ${details}`,
     parcelId: String(parcel.id || ""),
     address,
@@ -450,7 +456,7 @@ function buildParcelAssignedNotification(parcel, courierUsername) {
     type: "parcel_assigned",
     status: "assigned",
     recipientRoles: ["courier"],
-    title: "ახალი ამანათი გაქვთ",
+    title: formatPushNotificationTitle("assigned", "ახალი ამანათი გაქვთ"),
     body: details,
     parcelId: String(parcel.id || ""),
     address,
@@ -465,6 +471,14 @@ function buildParcelAssignedNotification(parcel, courierUsername) {
     pageUrl: "./",
     eventKey: `${parcel.id || "parcel"}-assigned-${courierUsername || parcel.courierUsername || "courier"}`,
   };
+}
+
+function formatPushNotificationTitle(status, title) {
+  const cleanTitle = String(title || "").trim();
+  const prefix = PUSH_NOTIFICATION_TITLE_PREFIXES[status] || "";
+  if (!prefix || !cleanTitle) return cleanTitle;
+  if (Object.values(PUSH_NOTIFICATION_TITLE_PREFIXES).some((item) => cleanTitle.startsWith(item))) return cleanTitle;
+  return `${prefix} ${cleanTitle}`;
 }
 
 async function publishAdminParcelStatusNotificationFallback(db, notification) {

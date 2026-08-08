@@ -25,6 +25,12 @@ const WEB_PUSH_PUBLIC_KEY = "BAEuO5gXFaWrtcaxhWxvzgNc1hlvCYZoNtYdxJno43RqzgANahv
 const PUSH_MAX_ATTEMPTS = 5;
 const PUSH_RETRY_DELAY_MS = 5 * 60 * 1000;
 const PUSH_LOCK_STALE_MS = 2 * 60 * 1000;
+const NOTIFICATION_TITLE_PREFIXES = {
+  delivered: "📦",
+  created: "🛵",
+  assigned: "🛵",
+  failed: "🚨",
+};
 const VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate";
 const MAX_STICKER_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
 const googleAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
@@ -472,7 +478,7 @@ function normalizeNotification(raw, id) {
   const recipientRoles = Array.isArray(raw.recipientRoles)
     ? raw.recipientRoles.map((role) => String(role || "").trim()).filter(Boolean)
     : [];
-  const title = String(raw.title || getDefaultNotificationTitle(status)).trim();
+  const title = formatNotificationTitle(status, raw.title || getDefaultNotificationTitle(status));
   const details = String(raw.body || [address, fullName].filter(Boolean).join(", ") || "შეკვეთის სტატუსი შეიცვალა").trim();
   const body = status === "failed" && failureReason && !details.includes(failureReason)
     ? `${details}\nმიზეზი: ${failureReason}`
@@ -502,6 +508,14 @@ function getDefaultNotificationTitle(status) {
   if (status === "created") return "ახალი ამანათი";
   if (status === "assigned") return "ახალი ამანათი გაქვთ";
   return "შეკვეთა ჩაბარდა";
+}
+
+function formatNotificationTitle(status, title) {
+  const cleanTitle = String(title || "").trim();
+  const prefix = NOTIFICATION_TITLE_PREFIXES[status] || "";
+  if (!prefix || !cleanTitle) return cleanTitle;
+  if (Object.values(NOTIFICATION_TITLE_PREFIXES).some((item) => cleanTitle.startsWith(item))) return cleanTitle;
+  return `${prefix} ${cleanTitle}`;
 }
 
 function normalizeRecipientKey(value) {
