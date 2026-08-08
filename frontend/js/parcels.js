@@ -120,10 +120,10 @@ function openAddressSearchDialog(username) {
     <form id="addressSearchForm" class="address-search-form">
       ${typeof renderParcelPhotoImportPanel === "function" ? renderParcelPhotoImportPanel("addressSearch") : ""}
       ${typeof renderAddressDirectoryFields === "function" ? renderAddressDirectoryFields("addressSearch") : ""}
-      <label for="addressSearchInput">სრული მისამართი</label>
+      <label for="addressSearchInput">მისამართის ძებნა</label>
       <div class="address-autocomplete-shell">
         <div class="address-search-row">
-          <input id="addressSearchInput" type="search" autocomplete="street-address" aria-autocomplete="list" aria-controls="addressSearchSuggestions" placeholder="მაგ: თბილისი, საბურთალო, პეკინის გამზირი 35" required>
+          <input id="addressSearchInput" type="search" autocomplete="street-address" aria-autocomplete="list" aria-controls="addressSearchSuggestions" placeholder="მაგ: პეკინის გამზირი 35 ან გლდანის 8 მიკრო" required>
           <button class="button primary" type="submit">ძებნა</button>
         </div>
         <div id="addressSearchSuggestions" class="address-autocomplete-dropdown" role="listbox" hidden></div>

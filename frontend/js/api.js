@@ -850,6 +850,14 @@ function localStaticPartnerAddressFallback(street, building) {
     { tokens: ["tsintsadze", "ცინცაძე", "ცინცაძის"], base: { lat: 41.72166, lng: 44.76621 }, step: { lat: -0.000015, lng: -0.000010 } },
     { tokens: ["taqtakishvili", "taktakishvili", "თაქთაქიშვილი", "თაქთაქიშვილის"], base: { lat: 41.70819, lng: 44.76478 }, step: { lat: 0.000010, lng: -0.000010 } },
     { tokens: ["rustaveli", "რუსთაველი", "რუსთაველის"], base: { lat: 41.70077, lng: 44.79561 }, step: { lat: 0.000010, lng: -0.000015 } },
+    { tokens: ["vazha pshavela", "ვაჟა ფშაველა", "ვაჟა-ფშაველა", "ვაჟაფშაველა"], base: { lat: 41.7240, lng: 44.7330 }, step: { lat: 0, lng: 0 } },
+    { tokens: ["varketili", "ვარკეთილი", "ვარკეთილის"], base: { lat: 41.6940, lng: 44.8840 }, step: { lat: 0, lng: 0 } },
+    { tokens: ["gldani", "გლდანი", "გლდანის"], base: { lat: 41.7930, lng: 44.8170 }, step: { lat: 0, lng: 0 } },
+    { tokens: ["mukhiani", "მუხიანი", "მუხიანის"], base: { lat: 41.8050, lng: 44.8390 }, step: { lat: 0, lng: 0 } },
+    { tokens: ["nutsubidze", "ნუცუბიძე", "ნუცუბიძის"], base: { lat: 41.7225, lng: 44.7290 }, step: { lat: 0, lng: 0 } },
+    { tokens: ["temka", "თემქა", "თემქის"], base: { lat: 41.7770, lng: 44.8110 }, step: { lat: 0, lng: 0 } },
+    { tokens: ["zgvisubani", "ზღვისუბანი", "ზღვისუბნის", "ზღვის უბანი"], base: { lat: 41.7860, lng: 44.8320 }, step: { lat: 0, lng: 0 } },
+    { tokens: ["dighmis masivi", "დიღმის მასივი", "დიღმის მასივის"], base: { lat: 41.7590, lng: 44.7790 }, step: { lat: 0, lng: 0 } },
   ];
   const match = known.find((item) => item.tokens.some((itemToken) => token.includes(normalizeStaticAddressLookupToken(itemToken))));
   if (!match) return null;

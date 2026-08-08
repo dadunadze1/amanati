@@ -1,6 +1,6 @@
 "use strict";
 
-const ADDRESS_DIRECTORY_DATA_URL = "data/address-directory.json?v=1";
+const ADDRESS_DIRECTORY_DATA_URL = "data/address-directory.json?v=2";
 const ADDRESS_DIRECTORY_FALLBACK = [
   {
     "city": "თბილისი",
@@ -75,7 +75,37 @@ let addressDirectorySuburbNeighborhoodKeys = null;
 let addressDirectoryNeighborhoodKeywordPatterns = null;
 const addressDirectoryStreetIndexCache = new Map();
 const addressDirectoryNeighborhoodCache = new Map();
-const ADDRESS_DIRECTORY_STREET_KEY_IGNORED = new Set(["ქუჩა", "ქ", "გამზირი", "გამზ", "ჩიხი", "შესახვევი", "გასასვლელი", "გზატკეცილი", "ხეივანი"]);
+const ADDRESS_DIRECTORY_STREET_KEY_IGNORED = new Set(["ქუჩა", "ქ", "გამზირი", "გამზ", "ჩიხი", "შესახვევი", "გასასვლელი", "გზატკეცილი", "ხეივანი", "მიკრორაიონი", "კორპუსი"]);
+const ADDRESS_DIRECTORY_ROMAN_NUMERALS = {
+  i: "1",
+  ii: "2",
+  iii: "3",
+  iv: "4",
+  v: "5",
+  vi: "6",
+  vii: "7",
+  viii: "8",
+  ix: "9",
+  x: "10",
+  xi: "11",
+  xii: "12",
+};
+const ADDRESS_DIRECTORY_ORDINAL_WORDS = {
+  პირველი: "1",
+  პირველ: "1",
+  მეორე: "2",
+  მესამი: "3",
+  მესამე: "3",
+  მეოთხე: "4",
+  მეხუთე: "5",
+  მეექვსე: "6",
+  მეშვიდე: "7",
+  მერვე: "8",
+  მეცხრე: "9",
+  მეათე: "10",
+  მეთერთმეტე: "11",
+  მეთორმეტე: "12",
+};
 
 const ADDRESS_NEIGHBORHOOD_KEYWORDS = [
   { name: "დიდი დიღომი", patterns: ["დიდი დიღომი"] },
@@ -83,10 +113,12 @@ const ADDRESS_NEIGHBORHOOD_KEYWORDS = [
   { name: "დიღმის მასივი", patterns: ["დიღმის მასივი"] },
   { name: "ვაშლიჯვარი", patterns: ["ვაშლიჯვარი"] },
   { name: "ნუცუბიძე", patterns: ["ნუცუბიძე", "ნუცუბიძის"] },
+  { name: "ვაჟა-ფშაველა", patterns: ["ვაჟა ფშაველა", "ვაჟა-ფშაველა", "ვაჟაფშაველა"] },
+  { name: "გლდანი", patterns: ["გლდანი", "გლდანის"] },
   { name: "ვარკეთილი", patterns: ["ვარკეთილი"] },
   { name: "მუხიანი", patterns: ["მუხიანი"] },
   { name: "ავჭალა", patterns: ["ავჭალა"] },
-  { name: "ზღვისუბანი", patterns: ["ზღვისუბანი"] },
+  { name: "ზღვისუბანი", patterns: ["ზღვისუბანი", "ზღვისუბნის", "ზღვის უბანი"] },
   { name: "თემქა", patterns: ["თემქა"] },
   { name: "სანზონა", patterns: ["სანზონა"] },
   { name: "ლოტკინი", patterns: ["ლოტკინი"] },
@@ -225,11 +257,34 @@ function getAddressDirectoryDistrictForNeighborhood(city, neighborhood) {
 }
 
 function normalizeAddressDirectoryText(value) {
-  return String(value || "")
+  const tokens = String(value || "")
     .toLocaleLowerCase("ka-GE")
+    .replace(/მ\s*\/\s*რ/giu, " მიკრორაიონი ")
+    .replace(/მკრ\.?/giu, " მიკრორაიონი ")
+    .replace(/მიკრო(?:რაიონი)?/giu, " მიკრორაიონი ")
+    .replace(/კვარტ\.?/giu, " კვარტალი ")
+    .replace(/კორპ\.?/giu, " კორპუსი ")
+    .replace(/ზღვის\s+უბანი/giu, "ზღვისუბანი")
+    .replace(/თემქის/giu, "თემქა")
+    .replace(/დიღმის\s+მასივის/giu, "დიღმის მასივი")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  return tokens
+    .filter((token, index) => !(token === "მე" && /^\d+$/.test(tokens[index + 1] || "")))
+    .map(normalizeAddressDirectoryOrdinalToken)
+    .join(" ");
+}
+
+function normalizeAddressDirectoryOrdinalToken(token) {
+  if (ADDRESS_DIRECTORY_ORDINAL_WORDS[token]) return ADDRESS_DIRECTORY_ORDINAL_WORDS[token];
+  const romanMatch = token.match(/^([ivx]+)([ა-ჰ])?$/iu);
+  if (romanMatch && ADDRESS_DIRECTORY_ROMAN_NUMERALS[romanMatch[1]]) {
+    return `${ADDRESS_DIRECTORY_ROMAN_NUMERALS[romanMatch[1]]}${romanMatch[2] || ""}`;
+  }
+  return token;
 }
 
 function normalizeAddressDirectoryStreetKey(value) {
@@ -259,9 +314,26 @@ function getAddressDirectoryStreetMatches({ city, district, query, limit = 12 } 
       && !(normalizedQueryKey && row.streetKey.includes(normalizedQueryKey))
     ) continue;
     rows.push({ city: row.city, district: row.district, neighborhood: row.neighborhood, street: row.street });
-    if (rows.length >= limit) break;
   }
-  return rows;
+  return rows
+    .sort((a, b) => (
+      scoreAddressDirectoryMatch(a.street, normalizedQuery, normalizedQueryKey)
+      - scoreAddressDirectoryMatch(b.street, normalizedQuery, normalizedQueryKey)
+      || a.street.length - b.street.length
+      || a.street.localeCompare(b.street, "ka-GE")
+    ))
+    .slice(0, limit);
+}
+
+function scoreAddressDirectoryMatch(street, normalizedQuery, normalizedQueryKey) {
+  if (!normalizedQuery) return 0;
+  const streetText = normalizeAddressDirectoryText(street);
+  const streetKey = normalizeAddressDirectoryStreetKey(street);
+  if (streetText === normalizedQuery || streetKey === normalizedQueryKey) return 0;
+  if (streetText.startsWith(normalizedQuery) || (normalizedQueryKey && streetKey.startsWith(normalizedQueryKey))) return 1;
+  if (streetText.includes(normalizedQuery)) return 2;
+  if (normalizedQueryKey && streetKey.includes(normalizedQueryKey)) return 3;
+  return 4;
 }
 
 function getAddressDirectoryAllStreets(city) {
@@ -320,18 +392,20 @@ function normalizeAddressDirectoryAddress(address, options = {}) {
 }
 
 function renderAddressDirectoryFields(prefix, options = {}) {
+  const hideCity = options.hideCity !== false;
+  const hideDistrict = options.hideDistrict !== false;
   const cityOptions = getAddressDirectoryCities().map((city) => `
     <option value="${escapeAttr(city)}" ${city === (options.city || "თბილისი") ? "selected" : ""}>${escapeHtml(city)}</option>
   `).join("");
   return `
-    <div class="address-directory-panel" data-address-directory="${escapeAttr(prefix)}">
-      <div class="address-directory-field">
+    <div class="address-directory-panel" data-address-directory="${escapeAttr(prefix)}" data-address-directory-city-hidden="${hideCity ? "true" : "false"}" data-address-directory-district-hidden="${hideDistrict ? "true" : "false"}">
+      <div class="address-directory-field ${hideCity ? "address-directory-field--hidden" : ""}">
         <label for="${escapeAttr(prefix)}City">ქალაქი</label>
         <select id="${escapeAttr(prefix)}City" data-address-city>
           ${cityOptions}
         </select>
       </div>
-      <div class="address-directory-field">
+      <div class="address-directory-field ${hideDistrict ? "address-directory-field--hidden" : ""}">
         <label for="${escapeAttr(prefix)}District">უბანი</label>
         <select id="${escapeAttr(prefix)}District" data-address-district></select>
       </div>
@@ -346,6 +420,7 @@ function renderAddressDirectoryFields(prefix, options = {}) {
         <label for="${escapeAttr(prefix)}Building">ნომერი</label>
         <input id="${escapeAttr(prefix)}Building" type="text" autocomplete="address-line2" data-address-building placeholder="მაგ: 35">
       </div>
+      <p id="${escapeAttr(prefix)}AddressDirectoryStatus" class="address-directory-status" data-address-directory-status></p>
     </div>
   `;
 }
@@ -359,6 +434,7 @@ function bindAddressDirectoryControls(prefix, options = {}) {
   const districtSelect = root.querySelector("[data-address-district]");
   const streetInput = root.querySelector("[data-address-street]");
   const buildingInput = root.querySelector("[data-address-building]");
+  const statusElement = root.querySelector("[data-address-directory-status]");
   const dropdown = document.getElementById(`${prefix}StreetSuggestions`);
   const targetInput = options.targetInputId ? document.getElementById(options.targetInputId) : null;
   const districtRequired = Boolean(options.requireDistrict);
@@ -385,6 +461,7 @@ function bindAddressDirectoryControls(prefix, options = {}) {
   const updateTarget = () => {
     const value = getAddressDirectoryValue(prefix);
     if (targetInput) targetInput.value = value.fullAddress;
+    updateAddressDirectoryStatus(statusElement, value);
     if (typeof options.onChange === "function") options.onChange(value);
   };
 
@@ -483,6 +560,21 @@ function bindAddressDirectoryControls(prefix, options = {}) {
     }, 140);
   });
   buildingInput.addEventListener("input", updateTarget);
+}
+
+function updateAddressDirectoryStatus(element, value) {
+  if (!element) return;
+  const location = value.neighborhood || value.district || "";
+  const street = value.street || "";
+  if (!street) {
+    element.textContent = "";
+    element.hidden = true;
+    return;
+  }
+  element.hidden = false;
+  element.textContent = location
+    ? `ავტომატურად მოინიშნა: ${location}`
+    : "უბანი ავტომატურად მოინიშნება ქუჩის არჩევის შემდეგ";
 }
 
 function getAddressDirectoryValue(prefix) {

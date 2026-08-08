@@ -940,6 +940,54 @@ function searchLocalAddressFallback(queryParts) {
       step: { lat: 0.000010, lng: 0.000020 },
       address: "საირმის ქუჩა",
     },
+    {
+      tokens: ["ვაჟა ფშაველა", "ვაჟა-ფშაველა", "ვაჟაფშაველა", "vazha pshavela"],
+      base: { lat: 41.7240, lng: 44.7330 },
+      step: { lat: 0, lng: 0 },
+      address: "ვაჟა-ფშაველას კვარტლები",
+    },
+    {
+      tokens: ["ვარკეთილი", "ვარკეთილის", "varketili"],
+      base: { lat: 41.6940, lng: 44.8840 },
+      step: { lat: 0, lng: 0 },
+      address: "ვარკეთილი",
+    },
+    {
+      tokens: ["გლდანი", "გლდანის", "gldani"],
+      base: { lat: 41.7930, lng: 44.8170 },
+      step: { lat: 0, lng: 0 },
+      address: "გლდანი",
+    },
+    {
+      tokens: ["მუხიანი", "მუხიანის", "mukhiani"],
+      base: { lat: 41.8050, lng: 44.8390 },
+      step: { lat: 0, lng: 0 },
+      address: "მუხიანი",
+    },
+    {
+      tokens: ["ნუცუბიძე", "ნუცუბიძის", "nutsubidze"],
+      base: { lat: 41.7225, lng: 44.7290 },
+      step: { lat: 0, lng: 0 },
+      address: "ნუცუბიძის პლატო",
+    },
+    {
+      tokens: ["თემქა", "თემქის", "temka"],
+      base: { lat: 41.7770, lng: 44.8110 },
+      step: { lat: 0, lng: 0 },
+      address: "თემქა",
+    },
+    {
+      tokens: ["ზღვისუბანი", "ზღვისუბნის", "ზღვის უბანი", "zgvisubani"],
+      base: { lat: 41.7860, lng: 44.8320 },
+      step: { lat: 0, lng: 0 },
+      address: "ზღვისუბანი",
+    },
+    {
+      tokens: ["დიღმის მასივი", "დიღმის მასივის", "dighmis masivi"],
+      base: { lat: 41.7590, lng: 44.7790 },
+      step: { lat: 0, lng: 0 },
+      address: "დიღმის მასივი",
+    },
   ];
 
   const street = knownStreets.find((item) => item.tokens.some((token) => streetToken.includes(normalizeAddressToken(token))));
