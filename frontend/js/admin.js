@@ -42,15 +42,12 @@ async function openPushInboxDialog() {
   ]);
 
   const notifications = await loadPushInboxNotifications();
-  const body = notifications.length
-    ? `<div class="parcel-history-results">${notifications.map(renderPushInboxNotification).join("")}</div>`
-    : `<div class="history-empty history-empty-card">ფუშები ჯერ არ არის შენახული.</div>`;
+  const body = renderPushInboxTable(notifications);
 
   showDialog("ფუშების inbox", body, [
     { label: "განახლება", variant: "primary", action: openPushInboxDialog },
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
-  els.dialogModal.classList.add("history-dialog");
 }
 
 
@@ -145,47 +142,69 @@ function normalizePushInboxNotification(item) {
 }
 
 
-function renderPushInboxNotification(notification) {
-  const deliveryStatus = notification.deliveryStatus || "stored";
-  const deliveryClass = deliveryStatus === "sent" ? "delivered" : deliveryStatus === "failed" ? "failed" : "pending";
-  const body = escapeHtml(notification.body || "შინაარსი არ არის").replace(/\n/g, "<br>");
-  const meta = [
-    pushInboxDetail("ტიპი", getPushInboxTypeLabel(notification.type, notification.status)),
-    pushInboxDetail("ადრესატი", getPushInboxRecipientLabel(notification)),
-    pushInboxDetail("ამანათი", notification.parcelId || "არ არის"),
-    pushInboxDetail("კურიერი", notification.courierUsername || "არ არის"),
-    pushInboxDetail("პარტნიორი", notification.partnerName || "არ არის"),
-    pushInboxDetail("შექმნა", formatPushInboxDate(notification.createdAt)),
-    pushInboxDetail("გაგზავნა", formatPushInboxDate(notification.sentAt || notification.lastAttemptAt || notification.updatedAt)),
-  ].join("");
-
+function renderPushInboxTable(notifications) {
+  if (!notifications.length) return `<div class="history-empty history-empty-card">ფუშები ჯერ არ არის შენახული.</div>`;
+  const sent = notifications.filter((item) => item.deliveryStatus === "sent").length;
+  const failed = notifications.filter((item) => item.deliveryStatus === "failed").length;
+  const pending = notifications.filter((item) => !["sent", "failed"].includes(item.deliveryStatus)).length;
   return `
-    <article class="parcel-history-card">
-      <div class="parcel-history-card-head">
-        <div>
-          <strong>${escapeHtml(notification.title)}</strong>
-          <span>${body}</span>
-        </div>
-        <span class="history-status status-${escapeAttr(deliveryClass)}">${escapeHtml(getPushDeliveryStatusLabel(deliveryStatus))}</span>
+    <div class="partner-panel-head">
+      <h2>ბოლო ფუშები</h2>
+      <div class="partner-filter-row">
+        <span class="partner-tag">სულ: ${escapeHtml(notifications.length)}</span>
+        <span class="partner-tag">გაგზავნილი: ${escapeHtml(sent)}</span>
+        <span class="partner-tag">რიგში/შენახული: ${escapeHtml(pending)}</span>
+        ${failed ? `<span class="partner-tag">შეცდომა: ${escapeHtml(failed)}</span>` : ""}
       </div>
-      ${notification.address || notification.fullName ? `<div class="parcel-history-address">${escapeHtml([notification.address, notification.fullName].filter(Boolean).join(", "))}</div>` : ""}
-      <div class="parcel-history-grid">${meta}</div>
-      ${notification.lastError ? `<div class="parcel-history-note"><span>შეცდომა</span><strong>${escapeHtml(notification.lastError)}</strong></div>` : ""}
-      <div class="parcel-history-actions">
-        <span>${escapeHtml(notification.source === "firestore" ? "Firestore" : "Static store")}</span>
-        ${notification.parcelId ? `<button class="mini-button" type="button" data-action="focusPushInboxParcel" data-value="${escapeAttr(notification.parcelId)}">ამანათზე გადასვლა</button>` : ""}
-      </div>
-    </article>
+    </div>
+    <div class="partner-table-wrap">
+      <table class="partner-order-table">
+        <thead>
+          <tr>
+            <th>დრო</th>
+            <th>შეტყობინება</th>
+            <th>ადრესატი</th>
+            <th>ამანათი</th>
+            <th>კურიერი</th>
+            <th>სტატუსი</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${notifications.map(renderPushInboxRow).join("")}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
 
-function pushInboxDetail(label, value) {
+function renderPushInboxRow(notification) {
+  const deliveryStatus = notification.deliveryStatus || "stored";
+  const deliveryClass = deliveryStatus === "sent" ? "delivered" : deliveryStatus === "failed" ? "failed" : "pending";
+  const message = [notification.address, notification.fullName].filter(Boolean).join(", ");
   return `
-    <div class="parcel-history-detail">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value || "არ არის")}</strong>
-    </div>
+    <tr>
+      <td>${escapeHtml(formatPushInboxDate(notification.sentAt || notification.createdAt || notification.updatedAt))}</td>
+      <td>
+        <strong>${escapeHtml(notification.title)}</strong>
+        <small>${escapeHtml(notification.body || message || "შინაარსი არ არის")}</small>
+        ${notification.lastError ? `<small>${escapeHtml(notification.lastError)}</small>` : ""}
+      </td>
+      <td>${escapeHtml(getPushInboxRecipientLabel(notification))}</td>
+      <td>
+        <span class="partner-tag">${escapeHtml(notification.parcelId ? notification.parcelId.slice(0, 8) : "არ არის")}</span>
+        ${notification.partnerName ? `<small>${escapeHtml(notification.partnerName)}</small>` : ""}
+      </td>
+      <td>${escapeHtml(notification.courierUsername || "არ არის")}</td>
+      <td>
+        <span class="history-status status-${escapeAttr(deliveryClass)}">${escapeHtml(getPushDeliveryStatusLabel(deliveryStatus))}</span>
+        <small>${escapeHtml(getPushInboxTypeLabel(notification.type, notification.status))}</small>
+      </td>
+      <td>
+        ${notification.parcelId ? `<button class="mini-button" type="button" data-action="focusPushInboxParcel" data-value="${escapeAttr(notification.parcelId)}">ნახვა</button>` : ""}
+      </td>
+    </tr>
   `;
 }
 
