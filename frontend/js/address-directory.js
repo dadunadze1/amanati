@@ -392,7 +392,7 @@ function normalizeAddressDirectoryAddress(address, options = {}) {
 }
 
 function renderAddressDirectoryFields(prefix, options = {}) {
-  const hideCity = options.hideCity !== false;
+  const hideCity = options.hideCity === true;
   const hideDistrict = options.hideDistrict !== false;
   const cityOptions = getAddressDirectoryCities().map((city) => `
     <option value="${escapeAttr(city)}" ${city === (options.city || "თბილისი") ? "selected" : ""}>${escapeHtml(city)}</option>
