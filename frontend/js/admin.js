@@ -2,6 +2,9 @@
 
 
 
+const PUSH_INBOX_LIMIT = 60;
+
+
 async function openPendingRequests() {
   const pending = await getPending();
   const body = pending.length
@@ -30,6 +33,229 @@ async function approveCourier(username) {
 async function rejectCourier(username) {
   await api(`/api/pending/${encodeURIComponent(username)}`, { method: "DELETE" });
   await openPendingRequests();
+}
+
+
+async function openPushInboxDialog() {
+  showDialog("ფუშების inbox", `<p class="history-empty">ფუშები იტვირთება...</p>`, [
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+
+  const notifications = await loadPushInboxNotifications();
+  const body = notifications.length
+    ? `<div class="parcel-history-results">${notifications.map(renderPushInboxNotification).join("")}</div>`
+    : `<div class="history-empty history-empty-card">ფუშები ჯერ არ არის შენახული.</div>`;
+
+  showDialog("ფუშების inbox", body, [
+    { label: "განახლება", variant: "primary", action: openPushInboxDialog },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+  els.dialogModal.classList.add("history-dialog");
+}
+
+
+async function loadPushInboxNotifications() {
+  const [firestoreItems, staticItems] = await Promise.all([
+    loadFirestorePushInboxNotifications(),
+    loadStaticPushInboxNotifications(),
+  ]);
+  const merged = new Map();
+
+  [...firestoreItems, ...staticItems].forEach((item) => {
+    if (!item?.id) return;
+    const current = merged.get(item.id);
+    if (!current || getPushInboxTime(item) >= getPushInboxTime(current)) merged.set(item.id, item);
+  });
+
+  return [...merged.values()]
+    .sort((a, b) => getPushInboxTime(b) - getPushInboxTime(a))
+    .slice(0, PUSH_INBOX_LIMIT);
+}
+
+
+async function loadFirestorePushInboxNotifications() {
+  if (typeof initializeFirebaseStorage !== "function") return [];
+  const db = await initializeFirebaseStorage();
+  if (!db) return [];
+
+  try {
+    const snapshot = await db
+      .collection("adminNotifications")
+      .orderBy("createdAt", "desc")
+      .limit(PUSH_INBOX_LIMIT)
+      .get();
+    const items = [];
+    snapshot.forEach((doc) => {
+      items.push(normalizePushInboxNotification({ id: doc.id, ...doc.data(), source: "firestore" }));
+    });
+    return items.filter(Boolean);
+  } catch (error) {
+    console.warn("[push] inbox collection read failed", error);
+    return [];
+  }
+}
+
+
+async function loadStaticPushInboxNotifications() {
+  const stores = [];
+  if (typeof loadStaticBootstrap === "function" && loadStaticBootstrap.cache) stores.push(loadStaticBootstrap.cache);
+  if (typeof loadStaticBootstrap === "function") {
+    const loaded = await loadStaticBootstrap().catch((error) => {
+      console.warn("[push] inbox static store read failed", error);
+      return null;
+    });
+    if (loaded) stores.push(loaded);
+  }
+
+  const items = [];
+  stores.forEach((store) => {
+    const notifications = store?.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications : {};
+    Object.entries(notifications).forEach(([id, item]) => {
+      items.push(normalizePushInboxNotification({ id, ...item, source: "static" }));
+    });
+  });
+  return items.filter(Boolean);
+}
+
+
+function normalizePushInboxNotification(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = String(item.id || item.eventKey || item.parcelId || "").trim();
+  if (!id) return null;
+  return {
+    ...item,
+    id,
+    title: String(item.title || "Swift Delivery").trim(),
+    body: String(item.body || "").trim(),
+    type: String(item.type || "").trim(),
+    status: String(item.status || "").trim(),
+    deliveryStatus: String(item.deliveryStatus || "").trim(),
+    parcelId: String(item.parcelId || "").trim(),
+    address: String(item.address || "").trim(),
+    fullName: String(item.fullName || "").trim(),
+    partnerName: String(item.partnerName || item.partnerUsername || item.partnerId || "").trim(),
+    courierUsername: String(item.courierUsername || "").trim(),
+    createdAt: normalizePushInboxDate(item.createdAt),
+    updatedAt: normalizePushInboxDate(item.updatedAt),
+    sentAt: normalizePushInboxDate(item.sentAt),
+    failedAt: normalizePushInboxDate(item.failedAt),
+    lastAttemptAt: normalizePushInboxDate(item.lastAttemptAt),
+    lastError: String(item.lastError || "").trim(),
+  };
+}
+
+
+function renderPushInboxNotification(notification) {
+  const deliveryStatus = notification.deliveryStatus || "stored";
+  const deliveryClass = deliveryStatus === "sent" ? "delivered" : deliveryStatus === "failed" ? "failed" : "pending";
+  const body = escapeHtml(notification.body || "შინაარსი არ არის").replace(/\n/g, "<br>");
+  const meta = [
+    pushInboxDetail("ტიპი", getPushInboxTypeLabel(notification.type, notification.status)),
+    pushInboxDetail("ადრესატი", getPushInboxRecipientLabel(notification)),
+    pushInboxDetail("ამანათი", notification.parcelId || "არ არის"),
+    pushInboxDetail("კურიერი", notification.courierUsername || "არ არის"),
+    pushInboxDetail("პარტნიორი", notification.partnerName || "არ არის"),
+    pushInboxDetail("შექმნა", formatPushInboxDate(notification.createdAt)),
+    pushInboxDetail("გაგზავნა", formatPushInboxDate(notification.sentAt || notification.lastAttemptAt || notification.updatedAt)),
+  ].join("");
+
+  return `
+    <article class="parcel-history-card">
+      <div class="parcel-history-card-head">
+        <div>
+          <strong>${escapeHtml(notification.title)}</strong>
+          <span>${body}</span>
+        </div>
+        <span class="history-status status-${escapeAttr(deliveryClass)}">${escapeHtml(getPushDeliveryStatusLabel(deliveryStatus))}</span>
+      </div>
+      ${notification.address || notification.fullName ? `<div class="parcel-history-address">${escapeHtml([notification.address, notification.fullName].filter(Boolean).join(", "))}</div>` : ""}
+      <div class="parcel-history-grid">${meta}</div>
+      ${notification.lastError ? `<div class="parcel-history-note"><span>შეცდომა</span><strong>${escapeHtml(notification.lastError)}</strong></div>` : ""}
+      <div class="parcel-history-actions">
+        <span>${escapeHtml(notification.source === "firestore" ? "Firestore" : "Static store")}</span>
+        ${notification.parcelId ? `<button class="mini-button" type="button" data-action="focusPushInboxParcel" data-value="${escapeAttr(notification.parcelId)}">ამანათზე გადასვლა</button>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+
+function pushInboxDetail(label, value) {
+  return `
+    <div class="parcel-history-detail">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || "არ არის")}</strong>
+    </div>
+  `;
+}
+
+
+function getPushInboxTypeLabel(type, status) {
+  if (type === "parcel_created") return "ახალი ამანათი";
+  if (type === "parcel_assigned") return "კურიერზე მიბმა";
+  if (type === "parcel_delivered" || status === "delivered") return "ჩაბარება";
+  if (type === "parcel_failed" || status === "failed") return "ვერ ჩაბარდა";
+  return type || status || "ფუში";
+}
+
+
+function getPushInboxRecipientLabel(notification) {
+  const roles = Array.isArray(notification.recipientRoles)
+    ? notification.recipientRoles
+    : String(notification.recipientRoles || "").split(",");
+  const labels = roles.map((role) => {
+    const cleanRole = String(role || "").trim();
+    return cleanRole ? roleLabel(cleanRole) : "";
+  }).filter(Boolean);
+  return labels.length ? [...new Set(labels)].join(", ") : "არ არის";
+}
+
+
+function getPushDeliveryStatusLabel(status) {
+  if (status === "sent") return "გაგზავნილია";
+  if (status === "failed") return "ვერ გაიგზავნა";
+  if (status === "processing") return "იგზავნება";
+  if (status === "pending") return "რიგშია";
+  return "შენახულია";
+}
+
+
+function normalizePushInboxDate(value) {
+  if (!value) return "";
+  if (typeof value.toDate === "function") return value.toDate().toISOString();
+  if (Number.isFinite(value.seconds)) return new Date(value.seconds * 1000).toISOString();
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+
+function getPushInboxTime(notification) {
+  const value = notification?.sentAt || notification?.updatedAt || notification?.createdAt || notification?.lastAttemptAt || "";
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+
+function formatPushInboxDate(value) {
+  return value ? formatDateTime(value) : "არ არის";
+}
+
+
+async function focusPushInboxParcel(parcelId) {
+  const activePin = state.activePins.find((item) => item.id === parcelId);
+  if (activePin) {
+    focusPinById(parcelId);
+    return;
+  }
+
+  const parcels = await searchParcels(parcelId).catch(() => []);
+  const parcel = parcels.find((item) => item.id === parcelId);
+  if (!parcel) {
+    showToast("ამანათი ვერ მოიძებნა.");
+    return;
+  }
+  state.historySearchResults = parcels;
+  focusHistoryParcelOnMap(parcel.id);
 }
 
 

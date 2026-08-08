@@ -94,8 +94,15 @@ exports.sendAdminNotification = onDocumentCreated({
   const notification = normalizeNotification(event.data?.data(), event.params.notificationId);
   if (!notification) return;
   if (!(await claimAdminNotificationSend(notification))) return;
-  await sendToAdminDevices(notification);
-  await markAdminNotificationSent(notification);
+  try {
+    const result = await sendToAdminDevices(notification);
+    await markAdminNotificationSent(notification, result);
+    await markAdminNotificationDocument(event.data.ref, "sent", result);
+  } catch (error) {
+    await markAdminNotificationFailed(notification, error);
+    await markAdminNotificationDocument(event.data.ref, "failed", {}, error);
+    throw error;
+  }
 });
 
 exports.sendStaticStoreAdminNotifications = onDocumentWritten({
@@ -249,6 +256,30 @@ async function markAdminNotificationFailed(notification, error) {
     processingAt: FieldValue.delete(),
     lastError: getErrorMessage(error),
   }, { merge: true });
+}
+
+async function markAdminNotificationDocument(ref, deliveryStatus, result = {}, error = null) {
+  if (!ref) return;
+  const payload = {
+    deliveryStatus,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  if (deliveryStatus === "sent") {
+    payload.sentAt = FieldValue.serverTimestamp();
+    payload.lastError = FieldValue.delete();
+    payload.deliveryResult = result;
+  }
+  if (deliveryStatus === "failed") {
+    payload.failedAt = FieldValue.serverTimestamp();
+    payload.lastError = getErrorMessage(error);
+    payload.deliveryResult = result;
+  }
+  await ref.set(payload, { merge: true }).catch((writeError) => {
+    logger.warn("Admin notification status update failed", {
+      deliveryStatus,
+      error: getErrorMessage(writeError),
+    });
+  });
 }
 
 async function loadAdminPushTokens(notification) {

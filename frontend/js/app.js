@@ -112,6 +112,7 @@ function renderActions() {
         state.adminDashboardHidden
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
+        ["pushInbox", "ფუშები", "✉", "გაგზავნილი შეტყობინებები"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
@@ -567,6 +568,7 @@ async function handleAction(action, value, sourceElement) {
     pending: openPendingRequests,
     adminRegister: openAdminRegisterDialog,
     adminStats: openAdminStatsUsers,
+    pushInbox: openPushInboxDialog,
     liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
     adminParcels: openAdminParcelsHub,
@@ -650,6 +652,7 @@ async function handleAction(action, value, sourceElement) {
     parcelHistorySearch: searchParcelHistory,
     focusHistoryParcel: () => focusHistoryParcelOnMap(value),
     focusStatsParcel: () => focusStatsParcelOnMap(value),
+    focusPushInboxParcel: () => focusPushInboxParcel(value),
     focusAdminPin: () => focusPinById(value),
     focusSelectedParcel,
     routeSelectedParcel,
