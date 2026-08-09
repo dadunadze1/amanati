@@ -45,20 +45,7 @@ async function rejectCourier(username) {
 
 async function openPushInboxDialog(filter = state.pushInboxFilter || "all") {
   state.pushInboxFilter = filter;
-  showDialog("ფუშების inbox", `<p class="history-empty">ფუშები იტვირთება...</p>`, [
-    { label: "დახურვა", variant: "secondary", action: closeDialog },
-  ]);
-
-  const notifications = await loadPushInboxNotifications();
-  const body = renderPushInboxTable(notifications, state.pushInboxFilter);
-
-  showDialog("ფუშების inbox", body, [
-    { label: "განახლება", variant: "primary", action: openPushInboxDialog },
-    { label: "დახურვა", variant: "secondary", action: closeDialog },
-  ]);
-  document.getElementById("pushInboxFilter")?.addEventListener("change", async (event) => {
-    await openPushInboxDialog(event.target.value || "all");
-  });
+  await openAdminPartnerInbox("push");
 }
 
 
@@ -166,6 +153,7 @@ function renderPushInboxTable(notifications, filter = "all") {
         <select id="pushInboxFilter" aria-label="ფუშების ფილტრი">
           <option value="all" ${filter === "all" ? "selected" : ""}>ყველა</option>
           <option value="created" ${filter === "created" ? "selected" : ""}>ახალი ამანათები</option>
+          <option value="message" ${filter === "message" ? "selected" : ""}>წერილები</option>
           <option value="delivered" ${filter === "delivered" ? "selected" : ""}>ჩაბარებულები</option>
           <option value="failed" ${filter === "failed" ? "selected" : ""}>ვერ ჩაბარებულები</option>
         </select>
@@ -200,6 +188,7 @@ function renderPushInboxTable(notifications, filter = "all") {
 
 function pushInboxMatchesFilter(notification, filter) {
   if (filter === "created") return notification.type === "parcel_created" || notification.status === "created";
+  if (filter === "message") return notification.type === "partner_inbox" || notification.status === "message";
   if (filter === "delivered") return notification.type === "parcel_delivered" || notification.status === "delivered";
   if (filter === "failed") return notification.type === "parcel_failed" || notification.status === "failed";
   return true;
@@ -237,6 +226,7 @@ function renderPushInboxRow(notification) {
 
 
 function getPushInboxTypeLabel(type, status) {
+  if (type === "partner_inbox" || status === "message") return "ახალი წერილი";
   if (type === "parcel_created") return "ახალი ამანათი";
   if (type === "parcel_assigned") return "კურიერზე მიბმა";
   if (type === "parcel_delivered" || status === "delivered") return "ჩაბარება";

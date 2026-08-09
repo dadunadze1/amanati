@@ -507,6 +507,28 @@ function buildStaticParcelAssignedNotification(parcel, courierUsername) {
   };
 }
 
+function buildStaticPartnerInboxNotification(message = {}) {
+  const targetType = message.targetType === "all" ? "all" : "partner";
+  const text = String(message.message || "").replace(/\s+/g, " ").trim();
+  const createdAt = message.createdAt || new Date().toISOString();
+  return {
+    type: "partner_inbox",
+    status: "message",
+    recipientRoles: ["partner"],
+    title: "თქვენ გაქვთ ახალი წერილი",
+    body: text ? (text.length > 120 ? `${text.slice(0, 120)}...` : text) : "ადმინის შეტყობინება",
+    parcelId: "",
+    address: "",
+    fullName: "",
+    failureReason: "",
+    partnerId: targetType === "all" ? "" : String(message.partnerId || message.partnerUsername || ""),
+    partnerUsername: targetType === "all" ? "" : String(message.partnerUsername || ""),
+    partnerName: String(message.partnerName || ""),
+    courierUsername: "",
+    eventKey: `${message.id || "partner-inbox"}-message-${createdAt}`,
+  };
+}
+
 function buildStaticParcelStatusNotification(parcel, status, options = {}) {
   const { address, fullName, details } = getStaticParcelPushDetails(parcel);
   const failureReason = String(options.failureReason || parcel?.failureReason || "").trim();
@@ -1130,6 +1152,7 @@ async function staticApi(path, options = {}) {
       expiresAt: addStaticDaysIso(now, STATIC_PARTNER_INBOX_RETENTION_DAYS),
     });
     store.partnerInboxMessages = [message, ...(Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages : []).map(publicStaticPartnerInboxMessage)];
+    queueStaticPushNotification(store, buildStaticPartnerInboxNotification(message));
     saveStaticBootstrap();
     return { message };
   }

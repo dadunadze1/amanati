@@ -13557,6 +13557,49 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   min-height: 0;
 }
 
+.partner-mail-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  background: #eef2f7;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.partner-mail-tab {
+  min-width: 0;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-weight: 850;
+}
+
+.partner-mail-tab small {
+  min-width: 24px;
+  padding: 2px 7px;
+  color: var(--primary-strong);
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.partner-mail-tab.is-active {
+  color: var(--primary-strong);
+  background: #fff;
+  border-color: rgba(148, 163, 184, 0.34);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
 .modal-card:has(.partner-inbox-panel) {
   width: min(940px, calc(100vw - 18px));
   padding: 14px;

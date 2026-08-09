@@ -104,7 +104,7 @@ function renderActions() {
         ["adminCouriers", "კურიერები", "◎", "სია, რეგისტრაცია, ზონები და სტატისტიკა"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
         ["adminPartnersHub", "პარტნიორები", "◫", "პარტნიორები და შეკვეთები"],
-        ["adminPartnerInbox", "ინბოქსი", "✉", "შეტყობინებები პარტნიორებისთვის"],
+        ["adminPartnerInbox", "ფოსტა", "✉", "წერილები და ფუშები"],
       ],
     },
     {
@@ -113,7 +113,6 @@ function renderActions() {
         state.adminDashboardHidden
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
-        ["pushInbox", "ფუშები", "✉", "გაგზავნილი შეტყობინებები"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
@@ -236,7 +235,7 @@ function openAdminPartnersHub() {
       <section class="finance-section finance-flow-grid">
         ${renderAdminHubAction("adminPartners", "პარტნიორები", "◫", "პარტნიორი ანგარიშები და ქეში")}
         ${renderAdminHubAction("adminPartnerOrders", "შეკვეთები", "▣", "პარტნიორის შეკვეთების სია")}
-        ${renderAdminHubAction("adminPartnerInbox", "ინბოქსი", "✉", "შეტყობინებები პარტნიორებისთვის")}
+        ${renderAdminHubAction("adminPartnerInbox", "ფოსტა", "✉", "წერილები და ფუშები")}
       </section>
     `,
   });
@@ -571,7 +570,7 @@ async function handleAction(action, value, sourceElement) {
     pending: openPendingRequests,
     adminRegister: openAdminRegisterDialog,
     adminStats: openAdminStatsUsers,
-    pushInbox: openPushInboxDialog,
+    pushInbox: () => openAdminPartnerInbox("push"),
     liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
     adminParcels: openAdminParcelsHub,
@@ -585,6 +584,7 @@ async function handleAction(action, value, sourceElement) {
     adminPartners: openPartnerManagement,
     adminPartnerOrders: openAdminPartnerOrders,
     adminPartnerInbox: openAdminPartnerInbox,
+    adminPartnerInboxTab: () => openAdminPartnerInbox(value),
     addParcel: openAdminAddParcel,
     adminCloseDay: openAdminCloseDay,
     parcelHistory: openParcelHistorySearch,
