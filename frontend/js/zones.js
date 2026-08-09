@@ -359,55 +359,62 @@ async function openZoneManagement() {
 
 
 function renderZoneCards(zones) {
-  return zones.map((zone) => {
+  const rows = zones.map((zone) => {
     const areas = getZoneAreas(zone);
     return `
-      <article class="zone-card">
-        <div>
-          <strong>${escapeHtml(getZoneName(zone))}</strong>
-          <small>${escapeHtml(getZoneId(zone))}</small>
-        </div>
-        <p>${areas.map(escapeHtml).join(", ") || "უბნები არ არის მითითებული"}</p>
-      </article>
+      <tr>
+        <td>${renderAppTableText(getZoneName(zone), getZoneId(zone))}</td>
+        <td>${escapeHtml(areas.join(", ") || "უბნები არ არის მითითებული")}</td>
+      </tr>
     `;
-  }).join("");
+  });
+
+  return renderAppListPanel({
+    title: "ზონების სია",
+    badges: [`ზონა: ${zones.length}`],
+    headers: ["ზონა", "უბნები"],
+    emptyMessage: "ზონა ჯერ არ არის დამატებული",
+    rows,
+  });
 }
 
 
 function renderZoneCourierRows(couriers, zones) {
-  if (!couriers.length) return `<div class="history-empty history-empty-card">კურიერი ჯერ არ არის დამატებული</div>`;
+  const rows = couriers.map((courier) => {
+    const selectedZoneIds = new Set(getCourierZoneIds(courier, zones));
+    const zoneOptions = zones.map((zone) => {
+      const zoneId = getZoneId(zone);
+      return `
+        <label class="zone-checkbox-option">
+          <input type="checkbox" value="${escapeAttr(zoneId)}" data-zone-courier="${escapeAttr(courier.username)}" ${selectedZoneIds.has(zoneId) ? "checked" : ""}>
+          <span>${escapeHtml(getZoneName(zone))}</span>
+        </label>
+      `;
+    }).join("");
+    return `
+      <tr>
+        <td>${renderAppTableText([courier.firstName, courier.lastName].filter(Boolean).join(" ") || courier.username, courier.username)}</td>
+        <td>${escapeHtml(courier.phone || "არ არის")}</td>
+        <td>${escapeHtml(getCourierZoneLabel(courier, zones))}</td>
+        <td><div class="zone-checkbox-grid" aria-label="${escapeAttr(userDisplayName(courier))} ზონები">${zoneOptions}</div></td>
+        <td>
+          <div class="row-actions">
+            <button class="mini-button" type="button" data-action="saveCourierZone" data-value="${escapeAttr(courier.username)}">შენახვა</button>
+            <button class="mini-button danger" type="button" data-action="removeCourierZone" data-value="${escapeAttr(courier.username)}">ზონების მოხსნა</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
   return `
-    <div class="zone-courier-list">
-      ${couriers.map((courier) => {
-        const selectedZoneIds = new Set(getCourierZoneIds(courier, zones));
-        const zoneOptions = zones.map((zone) => {
-          const zoneId = getZoneId(zone);
-          return `
-            <label class="zone-checkbox-option">
-              <input type="checkbox" value="${escapeAttr(zoneId)}" data-zone-courier="${escapeAttr(courier.username)}" ${selectedZoneIds.has(zoneId) ? "checked" : ""}>
-              <span>${escapeHtml(getZoneName(zone))}</span>
-            </label>
-          `;
-        }).join("");
-        return `
-          <article class="zone-courier-row">
-            <span class="zone-courier-main">
-              <strong>${escapeHtml([courier.firstName, courier.lastName].filter(Boolean).join(" ") || courier.username)}</strong>
-              <small>username: ${escapeHtml(courier.username)}</small>
-              <small>ტელეფონი: ${escapeHtml(courier.phone || "არ არის")}</small>
-              <small>ამჟამინდელი ზონები: ${escapeHtml(getCourierZoneLabel(courier, zones))}</small>
-            </span>
-            <div class="zone-courier-controls">
-              <div class="zone-checkbox-grid" aria-label="${escapeAttr(userDisplayName(courier))} ზონები">
-                ${zoneOptions}
-              </div>
-              <button class="button primary" type="button" data-action="saveCourierZone" data-value="${escapeAttr(courier.username)}">შენახვა</button>
-              <button class="button danger" type="button" data-action="removeCourierZone" data-value="${escapeAttr(courier.username)}">ზონების მოხსნა</button>
-            </div>
-          </article>
-        `;
-      }).join("")}
-    </div>
+    ${renderAppListPanel({
+      title: "კურიერების ზონები",
+      badges: [`კურიერი: ${couriers.length}`],
+      headers: ["კურიერი", "ტელეფონი", "ამჟამინდელი ზონები", "ზონის არჩევა", ""],
+      emptyMessage: "კურიერი ჯერ არ არის დამატებული",
+      rows,
+    })}
   `;
 }
 

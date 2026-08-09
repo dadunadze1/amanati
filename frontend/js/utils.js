@@ -202,6 +202,42 @@ function escapeAttr(value) {
 }
 
 
+function renderAppListPanel({ title = "", badges = [], headers = [], rows = [], emptyMessage = "ჩანაწერი არ არის" }) {
+  const visibleRows = rows.filter(Boolean);
+  return `
+    <div class="partner-panel-head">
+      <h2>${escapeHtml(title)}</h2>
+      <div class="partner-filter-row">
+        ${badges.filter(Boolean).map((badge) => `<span class="partner-tag">${escapeHtml(badge)}</span>`).join("")}
+      </div>
+    </div>
+    <div class="partner-table-wrap">
+      <table class="partner-order-table">
+        <thead>
+          <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>
+          ${visibleRows.length ? visibleRows.join("") : `<tr><td colspan="${Math.max(headers.length, 1)}">${escapeHtml(emptyMessage)}</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+
+function renderAppTableText(title, subtitle = "") {
+  return `
+    <strong>${escapeHtml(title || "არ არის")}</strong>
+    ${subtitle ? `<small>${escapeHtml(subtitle)}</small>` : ""}
+  `;
+}
+
+
+function renderAppStatusBadge(status, label = "") {
+  return `<span class="history-status status-${escapeAttr(status || "pending")}">${escapeHtml(label || getStatusLabel(status))}</span>`;
+}
+
+
 function formatDateTime(value) {
   return value ? new Date(value).toLocaleString("ka-GE") : "";
 }

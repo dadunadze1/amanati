@@ -308,27 +308,20 @@ async function renderHistoryForDate(username, dateKey) {
   const payAdjustment = summary.adjustmentTotal;
   const rows = (await Promise.all(records.map(async (item) => {
     const payment = getPaymentAmount(item);
-    const status = getStatusLabel(item.status);
     const address = await resolveParcelAddress(item);
     const itemCourierPay = getCourierPay(item);
     const failureReason = parcelFailureReason(item);
     const dateLabel = item.archivedAt || item.completedAt || item.deliveredAt || item.failedAt || item.updatedAt || item.createdAt;
     return `
-    <div class="history-row">
-      <div class="history-row-main">
-        <strong>${escapeHtml(item.fullName)}</strong>
-        <span class="history-status status-${item.status}">${status}</span>
-      </div>
-      <div class="history-address">${escapeHtml(address)}</div>
-      ${item.status === "failed" && failureReason ? `<div class="history-address">მიზეზი: ${escapeHtml(failureReason)}</div>` : ""}
-      <div class="history-row-meta">
-        <span>ქეში: ${escapeHtml(formatMoney(payment))}</span>
-        <span class="history-pay">კურიერის ანაზღაურება: ${escapeHtml(formatMoney(itemCourierPay))}</span>
-        <span>${formatDateTime(dateLabel)}</span>
-      </div>
-    </div>
+      <tr>
+        <td>${renderAppTableText(item.fullName || "უსახელო მიმღები", item.phone || "ტელეფონი არ არის")}</td>
+        <td>${renderAppTableText(address || STRINGS.addressMissing, item.status === "failed" && failureReason ? `მიზეზი: ${failureReason}` : "")}</td>
+        <td>${renderAppStatusBadge(item.status, getStatusLabel(item.status))}</td>
+        <td>${renderAppTableText(payment > 0 ? formatMoney(payment) : "არ აქვს", `კურიერი: ${formatMoney(itemCourierPay)}`)}</td>
+        <td>${escapeHtml(formatDateTime(dateLabel))}</td>
+      </tr>
   `;
-  }))).join("");
+  })));
 
   document.getElementById("calendarResults").innerHTML = `
     <div class="history-summary">
@@ -342,7 +335,13 @@ async function renderHistoryForDate(username, dateKey) {
         <span><b>${escapeHtml(formatMoney(courierPay))}</b> საბოლოო გამომუშავება</span>
       </div>
     </div>
-    <div class="history-list">${rows || "<p class=\"history-empty\">ამ თარიღზე დახურული ამანათი არ არის.</p>"}</div>
+    ${renderAppListPanel({
+      title: "დღის ჩანაწერები",
+      badges: [`სულ: ${records.length}`],
+      headers: ["მიმღები", "მისამართი", "სტატუსი", "თანხა", "თარიღი"],
+      emptyMessage: "ამ თარიღზე დახურული ამანათი არ არის.",
+      rows,
+    })}
   `;
 }
 

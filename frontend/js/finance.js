@@ -786,32 +786,12 @@ function bindDateRangeToolbar({ startId, endId, applySelector, onApply }) {
 
 
 function renderFinanceListPanel({ title = "", badges = [], headers = [], rows = [] }) {
-  return `
-    <div class="partner-panel-head">
-      <h2>${escapeHtml(title)}</h2>
-      <div class="partner-filter-row">
-        ${badges.filter(Boolean).map((badge) => `<span class="partner-tag">${escapeHtml(badge)}</span>`).join("")}
-      </div>
-    </div>
-    <div class="partner-table-wrap">
-      <table class="partner-order-table">
-        <thead>
-          <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
-        </thead>
-        <tbody>
-          ${rows.join("")}
-        </tbody>
-      </table>
-    </div>
-  `;
+  return renderAppListPanel({ title, badges, headers, rows });
 }
 
 
 function renderFinanceTableText(title, subtitle = "") {
-  return `
-    <strong>${escapeHtml(title || "არ არის")}</strong>
-    ${subtitle ? `<small>${escapeHtml(subtitle)}</small>` : ""}
-  `;
+  return renderAppTableText(title, subtitle);
 }
 
 

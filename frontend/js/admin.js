@@ -7,18 +7,25 @@ const PUSH_INBOX_LIMIT = 60;
 
 async function openPendingRequests() {
   const pending = await getPending();
-  const body = pending.length
-    ? pending.map((request) => `
-        <div class="parcel-row">
-          <strong>${escapeHtml(request.username)}</strong>
-          <span>მოთხოვნის დრო: ${formatDateTime(request.requestedAt)}</span>
+  const body = renderAppListPanel({
+    title: "რეგისტრაციის მოთხოვნები",
+    badges: [`სულ: ${pending.length}`],
+    headers: ["მომხმარებელი", "მოთხოვნის დრო", "სტატუსი", ""],
+    emptyMessage: STRINGS.noPending,
+    rows: pending.map((request) => `
+      <tr>
+        <td>${renderAppTableText(request.username)}</td>
+        <td>${escapeHtml(formatDateTime(request.requestedAt))}</td>
+        <td>${renderAppStatusBadge("pending", "დასადასტურებელი")}</td>
+        <td>
           <div class="row-actions">
-            <button class="button" type="button" data-action="approve" data-value="${escapeAttr(request.username)}">დადასტურება</button>
-            <button class="button danger" type="button" data-action="reject" data-value="${escapeAttr(request.username)}">უარყოფა</button>
+            <button class="mini-button" type="button" data-action="approve" data-value="${escapeAttr(request.username)}">დადასტურება</button>
+            <button class="mini-button danger" type="button" data-action="reject" data-value="${escapeAttr(request.username)}">უარყოფა</button>
           </div>
-        </div>
-      `).join("")
-    : `<p>${STRINGS.noPending}</p>`;
+        </td>
+      </tr>
+    `),
+  });
 
   showDialog("რეგისტრაციის მოთხოვნები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
@@ -300,9 +307,20 @@ async function focusPushInboxParcel(parcelId) {
 
 async function openCourierPicker() {
   const users = await getCouriers();
-  const body = users.length
-    ? users.map((user) => `<button class="list-button" type="button" data-action="chooseCourier" data-value="${escapeAttr(user.username)}">${escapeHtml(user.username)}</button>`).join("")
-    : `<p>${STRINGS.noCouriers}</p>`;
+  const body = renderAppListPanel({
+    title: "კურიერის არჩევა",
+    badges: [`კურიერი: ${users.length}`],
+    headers: ["კურიერი", "ტელეფონი", "ზონა", ""],
+    emptyMessage: STRINGS.noCouriers,
+    rows: users.map((user) => `
+      <tr>
+        <td>${renderAppTableText(userDisplayName(user), user.username)}</td>
+        <td>${escapeHtml(user.phone || "არ არის")}</td>
+        <td>${escapeHtml(user.zoneName || "მიუბმელი")}</td>
+        <td><button class="mini-button" type="button" data-action="chooseCourier" data-value="${escapeAttr(user.username)}">არჩევა</button></td>
+      </tr>
+    `),
+  });
 
   showDialog("კურიერის არჩევა", body, [{ label: "გაუქმება", variant: "secondary", action: closeDialog }]);
 }
@@ -310,9 +328,20 @@ async function openCourierPicker() {
 
 async function openAnalyticsPicker() {
   const users = await getCouriers();
-  const body = users.length
-    ? users.map((user) => `<button class="list-button" type="button" data-action="openCourierAnalytics" data-value="${escapeAttr(user.username)}">${escapeHtml(user.username)}</button>`).join("")
-    : `<p>${STRINGS.noCouriers}</p>`;
+  const body = renderAppListPanel({
+    title: "კურიერის ანალიტიკა",
+    badges: [`კურიერი: ${users.length}`],
+    headers: ["კურიერი", "ტელეფონი", "ზონა", ""],
+    emptyMessage: STRINGS.noCouriers,
+    rows: users.map((user) => `
+      <tr>
+        <td>${renderAppTableText(userDisplayName(user), user.username)}</td>
+        <td>${escapeHtml(user.phone || "არ არის")}</td>
+        <td>${escapeHtml(user.zoneName || "მიუბმელი")}</td>
+        <td><button class="mini-button" type="button" data-action="openCourierAnalytics" data-value="${escapeAttr(user.username)}">ნახვა</button></td>
+      </tr>
+    `),
+  });
 
   showDialog("კურიერის ანალიტიკა", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
@@ -394,10 +423,14 @@ async function saveAdminRegistration() {
 async function openAdminStatsUsers() {
   try {
     const users = (await getUsers()).filter((user) => user.role === "courier");
-    const cards = await Promise.all(users.map(renderCourierStatsUserCard));
-    const body = users.length
-      ? `<div class="finance-card-list courier-stats-user-list">${cards.join("")}</div>`
-      : `<div class="history-empty history-empty-card">კურიერი ჯერ არ არის დამატებული</div>`;
+    const rows = await Promise.all(users.map(renderCourierStatsUserCard));
+    const body = renderAppListPanel({
+      title: "კურიერის სტატისტიკა",
+      badges: [`კურიერი: ${users.length}`],
+      headers: ["კურიერი", "დღეს ჩაბარდა", "დღევანდელი გამომუშავება", "აქტიური", ""],
+      emptyMessage: "კურიერი ჯერ არ არის დამატებული",
+      rows,
+    });
     showDialog("კურიერის სტატისტიკა", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
     els.dialogModal.classList.add("courier-stats-dialog");
   } catch {
@@ -422,19 +455,14 @@ async function openLiveCouriersDialog() {
   }
   try {
     const couriers = await getCouriers();
-    const rows = couriers.map(renderLiveCourierRow).join("");
     const onlineCount = couriers.filter((courier) => getLiveCourierStatus(courier.username).isOnline).length;
-    const body = `
-      <div class="live-courier-panel">
-        <div class="live-courier-summary">
-          <span>ონლაინ</span>
-          <strong>${onlineCount}/${couriers.length}</strong>
-        </div>
-        <div class="live-courier-list">
-          ${rows || "<div class=\"history-empty history-empty-card\">კურიერი ჯერ არ არის</div>"}
-        </div>
-      </div>
-    `;
+    const body = renderAppListPanel({
+      title: "Live კურიერები",
+      badges: [`ონლაინ: ${onlineCount}/${couriers.length}`],
+      headers: ["კურიერი", "ტელეფონი", "სტატუსი", "ბოლო განახლება", "აქტიური"],
+      emptyMessage: "კურიერი ჯერ არ არის",
+      rows: couriers.map(renderLiveCourierRow),
+    });
     showDialog("Live კურიერები", body, [
       { label: "განახლება", variant: "primary", action: openLiveCouriersDialog },
       { label: "დახურვა", variant: "secondary", action: closeDialog },
@@ -451,20 +479,13 @@ function renderLiveCourierRow(courier) {
   const live = getLiveCourierStatus(courier.username);
   const activeCount = state.activePins.filter((pin) => normalizeUsername(pin.courierUsername) === normalizeUsername(courier.username) && pin.status === "pending").length;
   return `
-    <article class="live-courier-card ${live.isOnline ? "is-online" : "is-offline"}">
-      <div>
-        <strong>${escapeHtml(userFullName(courier) || courier.username)}</strong>
-        <span>${escapeHtml(courier.phone || "ტელეფონი არ არის")}</span>
-      </div>
-      <div class="live-courier-meta">
-        <span>${live.isOnline ? "ონლაინ" : "ოფლაინ"}</span>
-        <small>${escapeHtml(live.label)}</small>
-      </div>
-      <div class="live-courier-orders">
-        <b>${activeCount}</b>
-        <span>აქტიური</span>
-      </div>
-    </article>
+    <tr>
+      <td>${renderAppTableText(userFullName(courier) || courier.username, courier.username)}</td>
+      <td>${escapeHtml(courier.phone || "ტელეფონი არ არის")}</td>
+      <td>${renderAppStatusBadge(live.isOnline ? "delivered" : "failed", live.isOnline ? "ონლაინ" : "ოფლაინ")}</td>
+      <td>${escapeHtml(live.label)}</td>
+      <td>${escapeHtml(String(activeCount))}</td>
+    </tr>
   `;
 }
 
@@ -514,15 +535,13 @@ async function renderCourierStatsUserCard(user) {
   const deliveredToday = todayOrders.filter((parcel) => parcel.status === "delivered").length;
   const earnedToday = calculateCourierPay(todayOrders, user.username, todayKey, todayKey);
   return `
-    <button class="finance-card finance-static-card courier-stats-user-card" type="button" data-action="adminStatsUser" data-value="${escapeAttr(user.username)}">
-      <span class="courier-stats-user-name">${escapeHtml(userDisplayName(user))}</span>
-      <small>username: ${escapeHtml(user.username)}</small>
-      <div class="courier-stats-user-metrics">
-        <span><b>${deliveredToday}</b> დღეს ჩაბარდა</span>
-        <span><b>${escapeHtml(formatMoney(earnedToday))}</b> დღევანდელი გამომუშავება</span>
-        <span><b>${activeCount}</b> აქტიური</span>
-      </div>
-    </button>
+    <tr>
+      <td>${renderAppTableText(userDisplayName(user), user.username)}</td>
+      <td>${renderAppStatusBadge("delivered", String(deliveredToday))}</td>
+      <td>${escapeHtml(formatMoney(earnedToday))}</td>
+      <td>${escapeHtml(String(activeCount))}</td>
+      <td><button class="mini-button" type="button" data-action="adminStatsUser" data-value="${escapeAttr(user.username)}">დეტალურად</button></td>
+    </tr>
   `;
 }
 
@@ -717,8 +736,14 @@ function renderCourierCalendar(history, selectedDate) {
 
 
 async function renderCourierDayOrders(orders) {
-  if (!orders.length) return `<div class="history-empty history-empty-card">არჩეულ პერიოდში კურიერს შეკვეთები არ ჰქონდა</div>`;
-  return `<div class="courier-order-list">${(await Promise.all(orders.map(renderCourierOrderCard))).join("")}</div>`;
+  const rows = await Promise.all(orders.map(renderCourierOrderCard));
+  return renderAppListPanel({
+    title: "შეკვეთები",
+    badges: [`სულ: ${orders.length}`],
+    headers: ["მიმღები", "მისამართი", "სტატუსი", "ქეში", "კურიერი", "თარიღი", ""],
+    emptyMessage: "არჩეულ პერიოდში კურიერს შეკვეთები არ ჰქონდა",
+    rows,
+  });
 }
 
 
@@ -731,26 +756,17 @@ async function renderCourierOrderCard(parcel) {
   const failureReason = parcelFailureReason(parcel);
   const canFocusMap = Number.isFinite(Number(parcel.lat)) && Number.isFinite(Number(parcel.lng));
   return `
-    <article class="courier-order-card">
-      <div class="courier-order-head">
-        <div>
-          <strong>${escapeHtml(parcel.fullName || "უსახელო მიმღები")}</strong>
-          <span>${escapeHtml(parcel.phone || "ტელეფონი არ არის")}</span>
-        </div>
-        <span class="history-status status-${escapeAttr(parcel.status)}">${escapeHtml(getStatusLabel(parcel.status))}</span>
-      </div>
-      <div class="courier-order-address">${escapeHtml(address || STRINGS.addressMissing)}</div>
-      <div class="courier-order-grid">
-        ${statsDetail("მიტანის დრო", formatOptionalDateTime(deliveredAt))}
-        ${statsDetail("ვერ ჩაბარდა", formatOptionalDateTime(failedAt))}
-        ${statsDetail("ქეში", payment > 0 ? formatMoney(payment) : "არ აქვს")}
-        ${statsDetail("კურიერის ანაზღაურება", formatMoney(courierPay))}
-        ${statsDetail("ზონა", parcel.zoneName || parcel.zoneId || "არ არის")}
-        ${statsDetail("მიბმა", parcel.autoAssigned ? "ავტომატურად" : "ხელით")}
-      </div>
-      ${parcel.status === "failed" && failureReason ? `<div class="parcel-history-note"><span>მიზეზი</span><strong>${escapeHtml(failureReason)}</strong></div>` : ""}
-      ${canFocusMap ? `<button class="mini-button" type="button" data-action="focusStatsParcel" data-value="${escapeAttr(parcel.id)}">რუკაზე ნახვა</button>` : ""}
-    </article>
+    <tr>
+      <td>${renderAppTableText(parcel.fullName || "უსახელო მიმღები", parcel.phone || "ტელეფონი არ არის")}</td>
+      <td>
+        ${renderAppTableText(address || STRINGS.addressMissing, parcel.status === "failed" && failureReason ? `მიზეზი: ${failureReason}` : "")}
+      </td>
+      <td>${renderAppStatusBadge(parcel.status, getStatusLabel(parcel.status))}</td>
+      <td>${renderAppTableText(payment > 0 ? formatMoney(payment) : "არ აქვს", `კურიერი: ${formatMoney(courierPay)}`)}</td>
+      <td>${renderAppTableText(parcel.zoneName || parcel.zoneId || "არ არის", parcel.autoAssigned ? "ავტომატურად" : "ხელით")}</td>
+      <td>${escapeHtml(formatOptionalDateTime(deliveredAt || failedAt || parcel.updatedAt || parcel.createdAt))}</td>
+      <td>${canFocusMap ? `<button class="mini-button" type="button" data-action="focusStatsParcel" data-value="${escapeAttr(parcel.id)}">რუკა</button>` : ""}</td>
+    </tr>
   `;
 }
 
@@ -913,6 +929,11 @@ function bindAdminMapPanelEvents() {
     input.addEventListener("change", () => adminMapToggleCourier(input.value));
   });
   document.querySelectorAll(".admin-map-courier-card, .admin-map-courier-toggle").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("input, button, a, select, textarea")) return;
+      const input = card.querySelector("input");
+      if (input) input.click();
+    });
     card.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       const input = card.querySelector("input");
@@ -956,39 +977,47 @@ function renderAdminMapCourierList(couriers, pins) {
   const selected = new Set((filters.selectedCouriers || []).map(normalizeUsername));
   const allCourierUsernames = couriers.map((courier) => courier.username);
 
-  const courierCards = couriers.map((courier) => {
+  const courierRows = couriers.map((courier) => {
     const stats = getAdminMapCourierStats(courier, pins);
     const normalized = normalizeUsername(courier.username);
     const isActive = filters.includeAllCouriers || selected.has(normalized);
     return `
-      <label class="admin-map-courier-card ${isActive ? "is-active" : ""}" data-courier-search="${escapeAttr(getAdminMapCourierSearchText(courier))}">
-        <input type="checkbox" name="adminMapCourierFilter" value="${escapeAttr(courier.username)}" ${isActive ? "checked" : ""}>
-        <span class="admin-map-courier-main">
-          <strong>${escapeHtml(userDisplayName(courier))}</strong>
-          <small>${escapeHtml(courier.username)}${courier.phone ? ` / ${escapeHtml(courier.phone)}` : ""}</small>
-        </span>
-        ${renderAdminMapCardMetrics(stats)}
-      </label>
+      <tr class="admin-map-courier-card ${isActive ? "is-active" : ""}" data-courier-search="${escapeAttr(getAdminMapCourierSearchText(courier))}" tabindex="0">
+        <td><input type="checkbox" name="adminMapCourierFilter" value="${escapeAttr(courier.username)}" ${isActive ? "checked" : ""}></td>
+        <td>${renderAppTableText(userDisplayName(courier), `${courier.username}${courier.phone ? ` / ${courier.phone}` : ""}`)}</td>
+        <td>${escapeHtml(String(stats.total))}</td>
+        <td>${renderAppStatusBadge("pending", String(stats.pending))}</td>
+        <td>${renderAppStatusBadge("delivered", String(stats.delivered))}</td>
+        <td>${renderAppStatusBadge("failed", String(stats.failed))}</td>
+      </tr>
     `;
-  }).join("");
+  });
 
   return `
-    <div class="admin-map-courier-list">
-      <label class="admin-map-courier-toggle admin-map-courier-toggle-all ${filters.includeAllCouriers ? "is-active" : ""}">
-        <input id="adminMapAllCouriersToggle" type="checkbox" ${filters.includeAllCouriers ? "checked" : ""}>
-        <span class="admin-map-courier-main">
-          <strong>ყველა კურიერი</strong>
-          <small>${allCourierUsernames.length ? "ყველა კურიერის პინი გამოჩნდება" : "კურიერი არ არის"}</small>
-        </span>
-      </label>
-      <label class="admin-map-courier-toggle admin-map-courier-toggle-unassigned ${filters.showUnassigned ? "is-active" : ""}">
-        <input id="adminMapUnassignedToggle" type="checkbox" ${filters.showUnassigned ? "checked" : ""}>
-        <span class="admin-map-courier-main">
-          <strong>მიუბმელი</strong>
-          <small>მხოლოდ მიუბმელი პინები</small>
-        </span>
-      </label>
-      ${courierCards || "<p class=\"history-empty\">კურიერი ჯერ არ არის.</p>"}
+    <div class="admin-map-courier-list admin-map-courier-list--table">
+      ${renderAppListPanel({
+        title: "კურიერების ფილტრი",
+        badges: [`კურიერი: ${couriers.length}`],
+        headers: ["", "კურიერი", "აქტიური", "პროცესში", "ჩაბარებული", "ვერ ჩაბარებული"],
+        emptyMessage: "კურიერი ჯერ არ არის.",
+        rows: [
+          `
+            <tr class="admin-map-courier-toggle admin-map-courier-toggle-all ${filters.includeAllCouriers ? "is-active" : ""}" tabindex="0">
+              <td><input id="adminMapAllCouriersToggle" type="checkbox" ${filters.includeAllCouriers ? "checked" : ""}></td>
+              <td>${renderAppTableText("ყველა კურიერი", allCourierUsernames.length ? "ყველა კურიერის პინი გამოჩნდება" : "კურიერი არ არის")}</td>
+              <td colspan="4">${renderAppStatusBadge(filters.includeAllCouriers ? "delivered" : "pending", filters.includeAllCouriers ? "ჩართულია" : "გამორთულია")}</td>
+            </tr>
+          `,
+          `
+            <tr class="admin-map-courier-toggle admin-map-courier-toggle-unassigned ${filters.showUnassigned ? "is-active" : ""}" tabindex="0">
+              <td><input id="adminMapUnassignedToggle" type="checkbox" ${filters.showUnassigned ? "checked" : ""}></td>
+              <td>${renderAppTableText("მიუბმელი", "მხოლოდ მიუბმელი პინები")}</td>
+              <td colspan="4">${renderAppStatusBadge(filters.showUnassigned ? "delivered" : "pending", filters.showUnassigned ? "ჩართულია" : "გამორთულია")}</td>
+            </tr>
+          `,
+          ...courierRows,
+        ],
+      })}
       <p class="history-empty admin-map-courier-empty" hidden>კურიერი ვერ მოიძებნა.</p>
     </div>
   `;
@@ -1239,21 +1268,27 @@ async function assignSelectedPins() {
 
 async function openUserManagement() {
   const users = await getUsers();
-  const body = users.length
-    ? `<div class="finance-card-list admin-user-list">${users.map((user) => `
-        <article class="finance-card finance-static-card admin-user-card">
-          <span class="admin-user-name">${escapeHtml(userDisplayName(user))}</span>
-          <small>username: ${escapeHtml(user.username)}</small>
-          <small>ტელეფონი: ${escapeHtml(user.phone || "არ არის")}</small>
-          <small>როლი: ${escapeHtml(roleLabel(user.role))}</small>
-          <small>ზონა: ${escapeHtml(user.zoneName || "მიუბმელი")}</small>
+  const body = renderAppListPanel({
+    title: "კურიერი",
+    badges: [`სულ: ${users.length}`],
+    headers: ["მომხმარებელი", "ტელეფონი", "როლი", "ზონა", "სტატუსი", ""],
+    emptyMessage: "კურიერი არ არის.",
+    rows: users.map((user) => `
+      <tr>
+        <td>${renderAppTableText(userDisplayName(user), user.username)}</td>
+        <td>${escapeHtml(user.phone || "არ არის")}</td>
+        <td>${escapeHtml(roleLabel(user.role))}</td>
+        <td>${escapeHtml(user.zoneName || "მიუბმელი")}</td>
+        <td>${renderAppStatusBadge(user.status === "active" ? "delivered" : "pending", user.status === "active" ? "აქტიური" : getStatusLabel(user.status))}</td>
+        <td>
           <div class="row-actions admin-user-actions">
             <button class="mini-button" type="button" data-action="editUser" data-value="${escapeAttr(user.username)}">რედაქტირება</button>
             ${user.username === "admin" || user.role === "admin" ? "" : `<button class="mini-button danger" type="button" data-action="deleteUser" data-value="${escapeAttr(user.username)}">წაშლა</button>`}
           </div>
-        </article>
-      `).join("")}</div>`
-    : "<p>კურიერი არ არის.</p>";
+        </td>
+      </tr>
+    `),
+  });
   showDialog("კურიერი", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
 
@@ -1334,9 +1369,7 @@ function buildCloseDayCourierStats(couriers, pins) {
 
 
 function renderCloseDayCourierStats(stats) {
-  if (!stats.length) return `<p class="history-empty">კურიერი ჯერ არ არის.</p>`;
-
-  return stats.map((item) => {
+  const rows = stats.map((item) => {
     const deliveredPins = item.parcels.filter((pin) => pin.status === "delivered");
     const delivered = deliveredPins.length;
     const failed = item.parcels.filter((pin) => pin.status === "failed").length;
@@ -1348,22 +1381,24 @@ function renderCloseDayCourierStats(stats) {
     const courierPay = summary.finalPay;
     const payAdjustment = summary.adjustmentTotal;
     return `
-      <div class="history-row">
-        <div class="history-row-main">
-          <strong>${escapeHtml(item.label)}</strong>
-          <span class="history-status">${delivered} დატოვა</span>
-        </div>
-        <div class="history-row-meta">
-          <span>დატოვა: ${delivered}</span>
-          <span>არ ჩაბარდა: ${failed}</span>
-          <span>ქეში: ${escapeHtml(formatMoney(summary.cashReceived))}</span>
-          <span>საბაზისო გამომუშავება: ${escapeHtml(formatMoney(basePay))}</span>
-          <span>${escapeHtml(getAdjustmentDirectionLabel(payAdjustment))}: ${escapeHtml(formatAdjustmentDisplay(payAdjustment))}</span>
-          <span>საბოლოო გამომუშავება: ${escapeHtml(formatMoney(courierPay))}</span>
-        </div>
-      </div>
+      <tr>
+        <td>${renderAppTableText(item.label, item.username)}</td>
+        <td>${renderAppStatusBadge("delivered", `${delivered} დატოვა`)}</td>
+        <td>${renderAppStatusBadge("failed", String(failed))}</td>
+        <td>${escapeHtml(formatMoney(summary.cashReceived))}</td>
+        <td>${renderAppTableText(formatMoney(basePay), `${getAdjustmentDirectionLabel(payAdjustment)}: ${formatAdjustmentDisplay(payAdjustment)}`)}</td>
+        <td>${escapeHtml(formatMoney(courierPay))}</td>
+      </tr>
     `;
-  }).join("");
+  });
+
+  return renderAppListPanel({
+    title: "კურიერების შეჯამება",
+    badges: [`კურიერი: ${stats.length}`],
+    headers: ["კურიერი", "ჩაბარებული", "ვერ ჩაბარდა", "ქეში", "საბაზისო", "საბოლოო"],
+    emptyMessage: "კურიერი ჯერ არ არის.",
+    rows,
+  });
 }
 
 
@@ -1386,9 +1421,7 @@ async function openAdminCloseDay() {
         <span><b>${closable}</b> დაიხურება</span>
       </div>
     </div>
-    <div class="history-list">
-      ${renderCloseDayCourierStats(courierStats)}
-    </div>
+    ${renderCloseDayCourierStats(courierStats)}
     <p>დღის დახურვა ისტორიაში გადაიტანს მხოლოდ ჩაბარებულ პინებს. არ ჩაბარებული და პროცესში დარჩენილი პინები აქტიურად რჩება.</p>
   `;
   showDialog("დღის დახურვა", body, [

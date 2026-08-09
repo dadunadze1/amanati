@@ -875,13 +875,24 @@ async function applyParcelPhotoImportResult(result, username, helpers = {}) {
 function renderAddressSearchResults(results, username, requestedAddress = "") {
   const resultsElement = document.getElementById("addressSearchResults");
   if (!resultsElement) return;
-  resultsElement.innerHTML = results.map((result, index) => `
-    <button class="address-result-button" type="button" data-address-result-index="${index}">
-      <strong>${escapeHtml(getAddressLabelForSearchSelection(result, requestedAddress) || STRINGS.addressMissing)}</strong>
-      <span>${escapeHtml(result.displayName || result.display_name || formatCoordsAddress(getResultCoords(result)))}</span>
-      ${result.warning ? `<small>${escapeHtml(result.warning)}</small>` : ""}
-    </button>
-  `).join("");
+  const rows = results.map((result, index) => {
+    const coords = getResultCoords(result);
+    return `
+      <tr>
+        <td>${renderAppTableText(getAddressLabelForSearchSelection(result, requestedAddress) || STRINGS.addressMissing, result.warning || "")}</td>
+        <td>${escapeHtml(result.displayName || result.display_name || formatCoordsAddress(coords))}</td>
+        <td>${escapeHtml(formatCoordsAddress(coords))}</td>
+        <td><button class="mini-button" type="button" data-address-result-index="${index}">არჩევა</button></td>
+      </tr>
+    `;
+  });
+  resultsElement.innerHTML = renderAppListPanel({
+    title: "მისამართის შედეგები",
+    badges: [`ნაპოვნი: ${results.length}`],
+    headers: ["მისამართი", "აღწერა", "კოორდინატები", ""],
+    emptyMessage: "მისამართი ვერ მოიძებნა",
+    rows,
+  });
   resultsElement.querySelectorAll("[data-address-result-index]").forEach((button) => {
     button.addEventListener("click", async () => {
       await selectAddressSearchResult(results[Number(button.dataset.addressResultIndex)], username, Number(button.dataset.addressResultIndex), requestedAddress);

@@ -226,9 +226,15 @@ async function openTodayStats() {
 async function openCourierParcels() {
   const pins = getCourierLivePins(await getPins(state.currentUser));
   const sortedPins = sortCourierPinsByStatusAndDistance(pins);
-  const rows = (await Promise.all(sortedPins.map((pin) => renderCourierParcelCard(pin, { includeCash: true, includePhone: true })))).join("");
+  const rows = await Promise.all(sortedPins.map((pin) => renderCourierParcelCard(pin, { includeCash: true, includePhone: true })));
 
-  showDialog("ჩემი ამანათები", `<div class="courier-menu-list">${rows || `<p class="history-empty">${escapeHtml("აქტიური ამანათი არ არის.")}</p>`}</div>`, [
+  showDialog("ჩემი ამანათები", renderAppListPanel({
+    title: "ჩემი ამანათები",
+    badges: [`სულ: ${sortedPins.length}`],
+    headers: ["მიმღები", "მისამართი", "სტატუსი", "ქეში", "ტელეფონი", ""],
+    emptyMessage: "აქტიური ამანათი არ არის.",
+    rows,
+  }), [
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
 }
@@ -257,9 +263,15 @@ async function openNearestParcel() {
 async function openCourierStatusPanel() {
   const pins = getCourierLivePins(await getPins(state.currentUser));
   const sortedPins = sortCourierPinsByStatusAndDistance(pins);
-  const rows = (await Promise.all(sortedPins.map((pin) => renderCourierParcelCard(pin, { includeCash: false, includePhone: false })))).join("");
+  const rows = await Promise.all(sortedPins.map((pin) => renderCourierParcelCard(pin, { includeCash: false, includePhone: false })));
 
-  showDialog("სტატუსის შეცვლა", `<div class="courier-menu-list">${rows || `<p class="history-empty">${escapeHtml("აქტიური ამანათი არ არის.")}</p>`}</div>`, [
+  showDialog("სტატუსის შეცვლა", renderAppListPanel({
+    title: "სტატუსის შეცვლა",
+    badges: [`აქტიური: ${sortedPins.length}`],
+    headers: ["მიმღები", "მისამართი", "სტატუსი", "ქეში", "ტელეფონი", ""],
+    emptyMessage: "აქტიური ამანათი არ არის.",
+    rows,
+  }), [
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
 }
@@ -281,22 +293,20 @@ async function renderCourierParcelCard(pin, options = {}) {
   const payment = getPaymentAmount(pin);
 
   return `
-    <article class="courier-parcel-card">
-      <div class="history-row-main">
-        <strong>${escapeHtml(pin.fullName || "")}</strong>
-        <span class="history-status status-${escapeAttr(pin.status)}">${escapeHtml(status)}</span>
-      </div>
-      <div class="history-address">${escapeHtml(address)}</div>
-      <div class="history-row-meta">
-        ${options.includePhone ? `<span>${escapeHtml("ტელეფონი")}: ${escapeHtml(pin.phone || "")}</span>` : ""}
-        ${options.includeCash ? `<span>${escapeHtml("ქეში")}: ${escapeHtml(formatMoney(payment))}</span>` : ""}
-      </div>
-      <div class="courier-parcel-actions">
-        <button class="button secondary" type="button" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">${escapeHtml("რუკა")}</button>
-        <button class="button" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">${escapeHtml("ჩაბარდა")}</button>
-        <button class="button danger" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">${escapeHtml("ვერ ჩაბარდა")}</button>
-      </div>
-    </article>
+    <tr>
+      <td>${renderAppTableText(pin.fullName || "უსახელო", pin.id ? String(pin.id).slice(0, 8) : "")}</td>
+      <td>${escapeHtml(address || STRINGS.addressMissing)}</td>
+      <td>${renderAppStatusBadge(pin.status, status)}</td>
+      <td>${options.includeCash ? escapeHtml(formatMoney(payment)) : "-"}</td>
+      <td>${options.includePhone ? escapeHtml(pin.phone || "არ არის") : "-"}</td>
+      <td>
+        <div class="row-actions courier-parcel-actions">
+          <button class="mini-button" type="button" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">${escapeHtml("რუკა")}</button>
+          <button class="mini-button" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">${escapeHtml("ჩაბარდა")}</button>
+          <button class="mini-button danger" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">${escapeHtml("ვერ ჩაბარდა")}</button>
+        </div>
+      </td>
+    </tr>
   `;
 }
 
@@ -309,31 +319,34 @@ async function openCourierRoute() {
     return distanceInMeters(state.currentPosition, a) - distanceInMeters(state.currentPosition, b);
   });
 
-  const rows = (await Promise.all(sortedPins.map(async (pin, index) => {
+  const rows = await Promise.all(sortedPins.map(async (pin, index) => {
     const address = await resolveParcelAddress(pin);
     const distance = distanceInMeters(state.currentPosition, pin);
     return `
-      <div class="history-row">
-        <div class="history-row-main">
-          <strong>${index + 1}. ${escapeHtml(pin.fullName)}</strong>
-          <span class="history-status status-${pin.status}">${escapeHtml(getStatusLabel(pin.status))}</span>
-        </div>
-        <div class="history-address">${escapeHtml(address)}</div>
-        <div class="history-row-meta">
-          <span>მანძილი: ${escapeHtml(formatDistance(distance))}</span>
-          <span>მობილური: ${escapeHtml(pin.phone || "")}</span>
-          <span>ქეში: ${escapeHtml(formatMoney(getPaymentAmount(pin)))}</span>
-        </div>
-        <div class="route-actions">
-          <button class="button secondary" type="button" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">რუკა</button>
-          <button class="button" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">ჩაბარდა</button>
-          <button class="button danger" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">არ ჩაბარდა</button>
-        </div>
-      </div>
+      <tr>
+        <td>${renderAppTableText(`${index + 1}. ${pin.fullName || "უსახელო"}`, pin.phone || "ტელეფონი არ არის")}</td>
+        <td>${escapeHtml(address || STRINGS.addressMissing)}</td>
+        <td>${renderAppStatusBadge(pin.status, getStatusLabel(pin.status))}</td>
+        <td>${escapeHtml(formatDistance(distance))}</td>
+        <td>${escapeHtml(formatMoney(getPaymentAmount(pin)))}</td>
+        <td>
+          <div class="row-actions route-actions">
+            <button class="mini-button" type="button" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">რუკა</button>
+            <button class="mini-button" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="delivered">ჩაბარდა</button>
+            <button class="mini-button danger" type="button" data-action="setStatus" data-value="${escapeAttr(pin.id)}" data-status="failed">არ ჩაბარდა</button>
+          </div>
+        </td>
+      </tr>
     `;
-  }))).join("");
+  }));
 
-  showDialog("მარშრუტი", rows || "<p class=\"history-empty\">აქტიური ამანათი არ არის.</p>", [
+  showDialog("მარშრუტი", renderAppListPanel({
+    title: "მარშრუტი",
+    badges: [`აქტიური: ${sortedPins.length}`],
+    headers: ["მიმღები", "მისამართი", "სტატუსი", "მანძილი", "ქეში", ""],
+    emptyMessage: "აქტიური ამანათი არ არის.",
+    rows,
+  }), [
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
 }
@@ -376,30 +389,15 @@ async function renderStats(stats) {
     const statusChangedAt = item.updatedAt || item.completedAt || "";
     const failureReason = parcelFailureReason(item);
     return `
-    <article class="parcel-history-card">
-      <div class="parcel-history-card-head">
-        <div>
-          <strong>${escapeHtml(item.fullName || "უსახელო მიმღები")}</strong>
-          <span>${escapeHtml(item.phone || "ტელეფონი არ არის")}</span>
-        </div>
-        <span class="history-status status-${escapeAttr(item.status)}">${escapeHtml(getStatusLabel(item.status))}</span>
-      </div>
-      <div class="parcel-history-address">${escapeHtml(address || STRINGS.addressMissing)}</div>
-      <div class="parcel-history-grid">
-        ${historyDetail("ქეში", payment > 0 ? formatMoney(payment) : "არ აქვს")}
-        ${historyDetail("ჩასაბარებელი ქეში", formatMoney(stats.outstandingCash ?? stats.companyTotal))}
-        ${historyDetail("კურიერის ანაზღაურება", formatMoney(itemCourierPay))}
-        ${historyDetail("სტატუსის ცვლილება", formatOptionalDateTime(statusChangedAt))}
-        ${historyDetail("მიტანის დრო", formatOptionalDateTime(deliveredAt))}
-        ${historyDetail("ვერ ჩაბარდა დრო", formatOptionalDateTime(failedAt))}
-      </div>
-      ${item.status === "failed" && failureReason ? `<div class="parcel-history-note"><span>მიზეზი</span><strong>${escapeHtml(failureReason)}</strong></div>` : ""}
-      <div class="parcel-history-actions">
-        <span>${escapeHtml(formatDateTime(item.completedAt || item.archivedAt || item.updatedAt || item.createdAt))}</span>
-      </div>
-    </article>
+      <tr>
+        <td>${renderAppTableText(item.fullName || "უსახელო მიმღები", item.phone || "ტელეფონი არ არის")}</td>
+        <td>${renderAppTableText(address || STRINGS.addressMissing, item.status === "failed" && failureReason ? `მიზეზი: ${failureReason}` : "")}</td>
+        <td>${renderAppStatusBadge(item.status, getStatusLabel(item.status))}</td>
+        <td>${renderAppTableText(payment > 0 ? formatMoney(payment) : "არ აქვს", `კურიერი: ${formatMoney(itemCourierPay)}`)}</td>
+        <td>${escapeHtml(formatOptionalDateTime(statusChangedAt || deliveredAt || failedAt))}</td>
+      </tr>
   `;
-  }))).join("");
+  })));
 
   return `
     <div class="history-summary">
@@ -415,6 +413,12 @@ async function renderStats(stats) {
         <span><b>${escapeHtml(formatMoney(stats.courierPay))}</b> საბოლოო გამომუშავება</span>
       </div>
     </div>
-    <div class="history-list">${rows || "<p class=\"history-empty\">დღეს ამანათი არ არის.</p>"}</div>
+    ${renderAppListPanel({
+      title: "დღის ამანათები",
+      badges: [`სულ: ${stats.records.length}`],
+      headers: ["მიმღები", "მისამართი", "სტატუსი", "თანხა", "თარიღი"],
+      emptyMessage: "დღეს ამანათი არ არის.",
+      rows,
+    })}
   `;
 }

@@ -438,11 +438,20 @@ async function openPartnerManagement() {
         <button class="button primary" type="button" data-action="createPartner">დამატება</button>
       </div>
     </div>
-    <div class="finance-card-list admin-user-list">
-      ${partners.map(renderPartnerCard).join("") || "<div class=\"history-empty history-empty-card\">პარტნიორი ჯერ არ არის</div>"}
-    </div>
+    ${renderPartnerTable(partners)}
   `;
   showDialog("პარტნიორები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
+}
+
+
+function renderPartnerTable(partners) {
+  return renderAppListPanel({
+    title: "პარტნიორების სია",
+    badges: [`სულ: ${partners.length}`],
+    headers: ["პარტნიორი", "ქეში", "მოლოდინი", "კორექტირება", "კონტაქტი", "სტატუსი", ""],
+    emptyMessage: "პარტნიორი ჯერ არ არის",
+    rows: partners.map(renderPartnerCard),
+  });
 }
 
 
@@ -450,22 +459,21 @@ function renderPartnerCard(partner) {
   const active = partner.status === "active";
   const cash = calculatePartnerCashSummary(partner, state.partnerCashRecords || []);
   return `
-    <article class="finance-card finance-static-card admin-user-card">
-      <span class="admin-user-name">${escapeHtml(partnerName(partner))}</span>
-      <small>ლოგინი: ${escapeHtml(partner.username)}</small>
-      <small>კომპანიისთვის მისაცემი ქეში: ${escapeHtml(formatMoney(cash.cashDue))}</small>
-      <small>${escapeHtml(getAdjustmentDirectionLabel(cash.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(cash.adjustmentTotal))}</small>
-      <small>მოლოდინში ქეში: ${escapeHtml(formatMoney(cash.pendingCash))}</small>
-      <small>კონტაქტი: ${escapeHtml(partner.contactPerson || "არ არის")}</small>
-      <small>ტელეფონი: ${escapeHtml(partner.phone || "არ არის")}</small>
-      <small>შექმნა: ${escapeHtml(formatOptionalDateTime(partner.createdAt))}</small>
-      <small>სტატუსი: ${active ? "აქტიური" : "არააქტიური"}</small>
-      <div class="row-actions admin-user-actions">
-        <button class="mini-button" type="button" data-action="adjustPartnerCash" data-value="${escapeAttr(partner.username)}">ქეში</button>
-        <button class="mini-button" type="button" data-action="editPartner" data-value="${escapeAttr(partner.username)}">რედაქტირება</button>
-        <button class="mini-button ${active ? "danger" : ""}" type="button" data-action="togglePartnerStatus" data-value="${escapeAttr(partner.username)}">${active ? "დეაქტივაცია" : "აქტივაცია"}</button>
-      </div>
-    </article>
+    <tr>
+      <td>${renderAppTableText(partnerName(partner), partner.username)}</td>
+      <td>${escapeHtml(formatMoney(cash.cashDue))}</td>
+      <td>${escapeHtml(formatMoney(cash.pendingCash))}</td>
+      <td>${renderAppTableText(formatAdjustmentDisplay(cash.adjustmentTotal), getAdjustmentDirectionLabel(cash.adjustmentTotal))}</td>
+      <td>${renderAppTableText(partner.contactPerson || "არ არის", partner.phone || "არ არის")}</td>
+      <td>${renderAppStatusBadge(active ? "delivered" : "failed", active ? "აქტიური" : "არააქტიური")}</td>
+      <td>
+        <div class="row-actions admin-user-actions">
+          <button class="mini-button" type="button" data-action="adjustPartnerCash" data-value="${escapeAttr(partner.username)}">ქეში</button>
+          <button class="mini-button" type="button" data-action="editPartner" data-value="${escapeAttr(partner.username)}">რედაქტირება</button>
+          <button class="mini-button ${active ? "danger" : ""}" type="button" data-action="togglePartnerStatus" data-value="${escapeAttr(partner.username)}">${active ? "დეაქტივაცია" : "აქტივაცია"}</button>
+        </div>
+      </td>
+    </tr>
   `;
 }
 
