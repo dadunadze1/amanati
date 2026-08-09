@@ -104,7 +104,7 @@ function renderActions() {
         ["adminCouriers", "კურიერები", "◎", "სია, რეგისტრაცია, ზონები და სტატისტიკა"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
         ["adminPartnersHub", "პარტნიორები", "◫", "პარტნიორები და შეკვეთები"],
-        ["adminPartnerInbox", "ფოსტა", "✉", "წერილები და ფუშები"],
+        ["adminPartnerInbox", "ინბოქსი", "✉", "შეტყობინებები პარტნიორებისთვის"],
       ],
     },
     {
@@ -113,6 +113,7 @@ function renderActions() {
         state.adminDashboardHidden
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
+        ["pushInbox", "ფუშები", "✉", "გაგზავნილი შეტყობინებები"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
@@ -570,7 +571,7 @@ async function handleAction(action, value, sourceElement) {
     pending: openPendingRequests,
     adminRegister: openAdminRegisterDialog,
     adminStats: openAdminStatsUsers,
-    pushInbox: () => openAdminPartnerInbox("push"),
+    pushInbox: openPushInboxDialog,
     liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
     adminParcels: openAdminParcelsHub,
@@ -584,7 +585,6 @@ async function handleAction(action, value, sourceElement) {
     adminPartners: openPartnerManagement,
     adminPartnerOrders: openAdminPartnerOrders,
     adminPartnerInbox: openAdminPartnerInbox,
-    adminPartnerInboxTab: () => openAdminPartnerInbox(value),
     addParcel: openAdminAddParcel,
     adminCloseDay: openAdminCloseDay,
     parcelHistory: openParcelHistorySearch,
@@ -692,7 +692,6 @@ function showDialog(title, body, actions = []) {
   els.dialogModal.classList.remove("admin-map-dialog");
   els.dialogModal.classList.remove("courier-stats-dialog");
   els.dialogModal.classList.remove("zone-management-dialog");
-  els.dialogModal.classList.remove("mail-dialog");
   els.dialogTitle.textContent = title;
   els.dialogBody.innerHTML = body;
   els.dialogActions.innerHTML = "";
@@ -716,7 +715,6 @@ function closeDialog() {
   els.dialogModal.classList.remove("admin-map-dialog");
   els.dialogModal.classList.remove("courier-stats-dialog");
   els.dialogModal.classList.remove("zone-management-dialog");
-  els.dialogModal.classList.remove("mail-dialog");
   hideModal(els.dialogModal);
   els.dialogTitle.textContent = "";
   els.dialogBody.textContent = "";

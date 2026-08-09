@@ -463,47 +463,6 @@ function renderPartnerInboxCell(label, content, className = "") {
 function renderPartnerInboxList(messages, options = {}) {
   const isAdminList = Boolean(options.admin);
   const items = Array.isArray(messages) ? messages : [];
-  const rows = items.map((message) => renderPartnerInboxMailItem(message, { admin: isAdminList }));
-
-  return `
-    <div class="partner-mail-list" role="list">
-      ${rows.join("") || `<div class="history-empty history-empty-card">შეტყობინება არ არის</div>`}
-    </div>
-  `;
-}
-
-
-function renderPartnerInboxMailItem(message, options = {}) {
-  const isAdminList = Boolean(options.admin);
-  const read = isPartnerInboxRead(message);
-  const status = isAdminList ? "გაგზავნილი" : read ? "წაკითხული" : "ახალი";
-  const target = getPartnerInboxTargetLabel(message);
-  return `
-    <article class="partner-mail-item ${read || isAdminList ? "" : "is-unread"}" role="listitem">
-      <button class="partner-mail-open" type="button" data-action="openPartnerInboxMessage" data-value="${escapeAttr(message.id)}">
-        <span class="partner-mail-avatar" aria-hidden="true">${isAdminList ? "↗" : "✉"}</span>
-        <span class="partner-mail-main">
-          <span class="partner-mail-line">
-            <strong>${escapeHtml(isAdminList ? target : "ადმინი")}</strong>
-            <time>${escapeHtml(formatOptionalDateTime(message.createdAt))}</time>
-          </span>
-          <span class="partner-mail-subject">${escapeHtml(getPartnerInboxSnippet(message))}</span>
-          <span class="partner-mail-meta">
-            <span>${escapeHtml(status)}</span>
-            <span>${escapeHtml(getPartnerInboxDaysLeft(message) || "15 დღე")}</span>
-            ${isAdminList && message.partnerUsername ? `<span>${escapeHtml(message.partnerUsername)}</span>` : ""}
-          </span>
-        </span>
-      </button>
-      ${isAdminList ? `<button class="partner-mail-delete" type="button" data-action="deletePartnerInboxMessage" data-value="${escapeAttr(message.id)}" aria-label="წერილის წაშლა">×</button>` : ""}
-    </article>
-  `;
-}
-
-
-function renderLegacyPartnerInboxList(messages, options = {}) {
-  const isAdminList = Boolean(options.admin);
-  const items = Array.isArray(messages) ? messages : [];
   const rows = items.map((message) => {
     const read = isPartnerInboxRead(message);
     const status = isAdminList ? "გაგზავნილი" : read ? "წაკითხული" : "ახალი";
@@ -544,75 +503,16 @@ function renderLegacyPartnerInboxList(messages, options = {}) {
 }
 
 
-function renderAdminMailTabs(activeView, counts = {}) {
-  return `
-    <div class="partner-mail-tabs" role="tablist" aria-label="ფოსტის ჩანართები">
-      <button class="partner-mail-tab ${activeView === "messages" ? "is-active" : ""}" type="button" data-action="adminPartnerInboxTab" data-value="messages">
-        <span>წერილები</span>
-        <strong>${escapeHtml(counts.messages || 0)}</strong>
-      </button>
-      <button class="partner-mail-tab ${activeView === "push" ? "is-active" : ""}" type="button" data-action="adminPartnerInboxTab" data-value="push">
-        <span>ფუშები</span>
-        <strong>${escapeHtml(counts.push || 0)}</strong>
-      </button>
-    </div>
-  `;
-}
-
-
-function renderPushMailList(notifications) {
-  const items = Array.isArray(notifications) ? notifications : [];
-  return `
-    <div class="partner-mail-list partner-mail-list--push" role="list">
-      ${items.map(renderPushMailItem).join("") || `<div class="history-empty history-empty-card">ფუში ჯერ არ არის შენახული.</div>`}
-    </div>
-  `;
-}
-
-
-function renderPushMailItem(notification) {
-  const deliveryStatus = notification.deliveryStatus || "stored";
-  const deliveryClass = deliveryStatus === "sent" ? "delivered" : deliveryStatus === "failed" ? "failed" : "pending";
-  const typeLabel = getPushInboxTypeLabel(notification.type, notification.status);
-  const body = notification.body || [notification.address, notification.fullName].filter(Boolean).join(", ") || "შინაარსი არ არის";
-  return `
-    <article class="partner-mail-item partner-mail-item--push" role="listitem">
-      <div class="partner-mail-open">
-        <span class="partner-mail-avatar" aria-hidden="true">↯</span>
-        <span class="partner-mail-main">
-          <span class="partner-mail-line">
-            <strong>${escapeHtml(notification.title)}</strong>
-            <time>${escapeHtml(formatPushInboxDate(notification.sentAt || notification.createdAt || notification.updatedAt))}</time>
-          </span>
-          <span class="partner-mail-subject">${escapeHtml(body)}</span>
-          <span class="partner-mail-meta">
-            <span class="history-status status-${escapeAttr(deliveryClass)}">${escapeHtml(getPushDeliveryStatusLabel(deliveryStatus))}</span>
-            <span>${escapeHtml(typeLabel)}</span>
-            <span>${escapeHtml(getPushInboxRecipientLabel(notification))}</span>
-            ${notification.partnerName ? `<span>${escapeHtml(notification.partnerName)}</span>` : ""}
-            ${notification.lastError ? `<span>${escapeHtml(notification.lastError)}</span>` : ""}
-          </span>
-        </span>
-      </div>
-      ${notification.parcelId ? `<button class="partner-mail-delete partner-mail-map" type="button" data-action="focusPushInboxParcel" data-value="${escapeAttr(notification.parcelId)}" aria-label="ამანათის ნახვა">⌖</button>` : ""}
-    </article>
-  `;
-}
-
-
-async function openAdminPartnerInbox(view = state.adminMailView || "messages") {
+async function openAdminPartnerInbox() {
   if (!state.isAdmin) return;
-  state.adminMailView = view === "push" ? "push" : "messages";
-  const [partners, messages, pushNotifications] = await Promise.all([
+  const [partners, messages] = await Promise.all([
     getPartners(),
     getPartnerInboxMessages(),
-    typeof loadPushInboxNotifications === "function" ? loadPushInboxNotifications() : Promise.resolve([]),
   ]);
   const partnerOptions = partners.map((partner) => `<option value="${escapeAttr(partner.username)}">${escapeHtml(partnerName(partner))}</option>`).join("");
   const body = `
     <div class="partner-inbox-panel">
-      ${renderAdminMailTabs(state.adminMailView, { messages: messages.length, push: pushNotifications.length })}
-      ${state.adminMailView === "messages" ? `<section class="partner-inbox-compose">
+      <section class="partner-inbox-compose">
         <div class="partner-inbox-compose-head">
           <strong>ახალი შეტყობინება</strong>
           <button class="button primary partner-inbox-send-button" type="button" data-action="sendAdminPartnerInboxMessage">გაგზავნა</button>
@@ -631,14 +531,13 @@ async function openAdminPartnerInbox(view = state.adminMailView || "messages") {
           </label>
         </div>
         <p class="form-message" id="partnerInboxAdminMessage" role="alert"></p>
-      </section>` : ""}
-      ${state.adminMailView === "push" ? renderPushMailList(pushNotifications) : renderPartnerInboxList(messages, { admin: true })}
+      </section>
+      ${renderPartnerInboxList(messages, { admin: true })}
     </div>
   `;
-  showDialog("ფოსტა", body, [
+  showDialog("პარტნიორების ინბოქსი", body, [
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
-  els.dialogModal.classList.add("mail-dialog");
 }
 
 
@@ -654,16 +553,11 @@ async function sendAdminPartnerInboxMessage() {
     button.disabled = true;
   });
   try {
-    const payload = await sendPartnerInboxMessage({
+    await sendPartnerInboxMessage({
       targetType: target ? "partner" : "all",
       partnerUsername: target,
       message,
     });
-    if (!(typeof isStaticDeploy === "function" && isStaticDeploy()) && typeof buildPartnerInboxNotification === "function") {
-      await publishPushNotification(buildPartnerInboxNotification(payload?.message)).catch((error) => {
-        console.warn("Partner inbox push notification failed", error);
-      });
-    }
     showToast("შეტყობინება გაიგზავნა.");
     await openAdminPartnerInbox();
   } catch (error) {
@@ -682,7 +576,7 @@ async function openPartnerInbox() {
   const body = `
     <div class="partner-inbox-panel">
       <div class="partner-inbox-toolbar">
-        <span>${escapeHtml(messages.filter((message) => !isPartnerInboxRead(message)).length)} ახალი წერილი</span>
+        <span>შეტყობინებები ავტომატურად იშლება 15 დღეში</span>
         <button class="mini-button danger" type="button" data-action="clearPartnerInbox">გასუფთავება</button>
       </div>
       ${renderPartnerInboxList(messages)}
@@ -691,7 +585,6 @@ async function openPartnerInbox() {
   showDialog("ინბოქსი", body, [
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
-  els.dialogModal.classList.add("mail-dialog");
 }
 
 

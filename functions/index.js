@@ -30,7 +30,6 @@ const NOTIFICATION_TITLE_PREFIXES = {
   created: "🛵",
   assigned: "🛵",
   failed: "🚨",
-  message: "✉",
 };
 const VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate";
 const MAX_STICKER_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
@@ -364,7 +363,6 @@ function shouldSendDeviceNotification(device, notification) {
 
   if (isPartnerDevice) {
     if (recipientRoles.length && !recipientRoles.includes("partner")) return false;
-    if (!notificationPartnerId && recipientRoles.includes("partner")) return true;
     return Boolean(
       notificationPartnerId
       && (
@@ -499,7 +497,7 @@ async function deactivateInvalidWebPushSubscriptions(endpoints) {
 function normalizeNotification(raw, id) {
   if (!raw || typeof raw !== "object") return null;
   const status = String(raw.status || "");
-  if (!["delivered", "failed", "created", "assigned", "message"].includes(status)) return null;
+  if (!["delivered", "failed", "created", "assigned"].includes(status)) return null;
 
   const address = String(raw.address || "").trim();
   const fullName = String(raw.fullName || "").trim();
@@ -512,14 +510,14 @@ function normalizeNotification(raw, id) {
     ? raw.recipientRoles.map((role) => String(role || "").trim()).filter(Boolean)
     : [];
   const title = formatNotificationTitle(status, raw.title || getDefaultNotificationTitle(status));
-  const details = String(raw.body || [address, fullName].filter(Boolean).join(", ") || (status === "message" ? "ადმინის ახალი წერილი" : "შეკვეთის სტატუსი შეიცვალა")).trim();
+  const details = String(raw.body || [address, fullName].filter(Boolean).join(", ") || "შეკვეთის სტატუსი შეიცვალა").trim();
   const body = status === "failed" && failureReason && !details.includes(failureReason)
     ? `${details}\nმიზეზი: ${failureReason}`
     : details;
 
   return {
     id: getSafeFieldKey(raw.eventKey || id || raw.parcelId || Date.now()),
-    type: String(raw.type || (status === "message" ? "partner_inbox" : status === "failed" ? "parcel_failed" : "parcel_delivered")),
+    type: String(raw.type || (status === "failed" ? "parcel_failed" : "parcel_delivered")),
     status,
     attempts: Number(raw.attempts || 0),
     title,
@@ -537,7 +535,6 @@ function normalizeNotification(raw, id) {
 }
 
 function getDefaultNotificationTitle(status) {
-  if (status === "message") return "თქვენ გაქვთ ახალი წერილი";
   if (status === "failed") return "შეკვეთა ვერ ჩაბარდა";
   if (status === "created") return "ახალი ამანათი";
   if (status === "assigned") return "ახალი ამანათი გაქვთ";

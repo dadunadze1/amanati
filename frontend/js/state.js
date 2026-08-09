@@ -37,7 +37,6 @@ const state = {
   adminPushStatus: "unknown",
   adminPushToken: "",
   adminPushLastError: "",
-  adminMailView: "messages",
   selectedCourierLocationUsername: "",
   routeLayer: null,
   routePinId: null,

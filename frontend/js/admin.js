@@ -237,7 +237,6 @@ function renderPushInboxRow(notification) {
 
 
 function getPushInboxTypeLabel(type, status) {
-  if (type === "partner_inbox" || status === "message") return "ახალი წერილი";
   if (type === "parcel_created") return "ახალი ამანათი";
   if (type === "parcel_assigned") return "კურიერზე მიბმა";
   if (type === "parcel_delivered" || status === "delivered") return "ჩაბარება";
