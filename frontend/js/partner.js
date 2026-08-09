@@ -224,6 +224,9 @@ async function renderPartnerDashboard(pins = state.activePins) {
       </div>
       <button class="button primary" type="button" data-action="partnerNewOrder">ახალი შეკვეთა</button>
     </div>
+    <div class="partner-dashboard-actions partner-dashboard-actions--inbox">
+      <button class="button secondary" type="button" data-action="partnerInbox">ინბოქსი</button>
+    </div>
     <div class="partner-stat-grid">
       ${renderPartnerStat("სულ შეკვეთები", orders.length)}
       ${renderPartnerStat("აქტიური შეკვეთები", activeOrders.length)}
@@ -421,6 +424,202 @@ async function savePartnerOrder() {
   } catch (error) {
     if (message) message.textContent = error.message || STRINGS.serverFailed;
   }
+}
+
+
+function getPartnerInboxSnippet(message = {}) {
+  const text = String(message.message || "").replace(/\s+/g, " ").trim();
+  if (!text) return "ცარიელი შეტყობინება";
+  return text.length > 96 ? `${text.slice(0, 96)}...` : text;
+}
+
+
+function getPartnerInboxTargetLabel(message = {}) {
+  if (message.targetType === "all") return "ყველა პარტნიორი";
+  return message.partnerName || message.partnerUsername || "პარტნიორი";
+}
+
+
+function isPartnerInboxRead(message = {}) {
+  const current = normalizeUsername(state.currentUser);
+  return (Array.isArray(message.readBy) ? message.readBy : []).some((username) => normalizeUsername(username) === current);
+}
+
+
+function getPartnerInboxDaysLeft(message = {}) {
+  const expiresAt = Date.parse(message.expiresAt || "");
+  if (!Number.isFinite(expiresAt)) return "";
+  const days = Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "დღეს იწმინდება";
+  return `${days} დღე`;
+}
+
+
+function renderPartnerInboxCell(label, content, className = "") {
+  return `<td ${className ? `class="${escapeAttr(className)}" ` : ""}data-label="${escapeAttr(label)}">${content}</td>`;
+}
+
+
+function renderPartnerInboxList(messages, options = {}) {
+  const isAdminList = Boolean(options.admin);
+  const items = Array.isArray(messages) ? messages : [];
+  const rows = items.map((message) => {
+    const read = isPartnerInboxRead(message);
+    const status = isAdminList ? "გაგზავნილი" : read ? "წაკითხული" : "ახალი";
+    const cells = [
+      isAdminList ? renderPartnerInboxCell("მიმღები", renderAppTableText(getPartnerInboxTargetLabel(message), message.partnerUsername || "")) : "",
+      renderPartnerInboxCell("შეტყობინება", `
+        <button class="partner-inbox-open" type="button" data-action="openPartnerInboxMessage" data-value="${escapeAttr(message.id)}">
+          <strong>${escapeHtml(getPartnerInboxSnippet(message))}</strong>
+          <small>${escapeHtml(message.createdBy ? `ადმინი: ${message.createdBy}` : "ადმინის შეტყობინება")}</small>
+        </button>
+      `, "partner-inbox-message-cell"),
+      renderPartnerInboxCell("თარიღი", escapeHtml(formatOptionalDateTime(message.createdAt))),
+      renderPartnerInboxCell("ვადა", escapeHtml(getPartnerInboxDaysLeft(message) || "15 დღე")),
+      renderPartnerInboxCell("სტატუსი", renderAppStatusBadge(read || isAdminList ? "delivered" : "pending", status)),
+      isAdminList ? renderPartnerInboxCell("მოქმედება", `
+        <div class="row-actions partner-inbox-actions">
+          <button class="mini-button danger" type="button" data-action="deletePartnerInboxMessage" data-value="${escapeAttr(message.id)}">წაშლა</button>
+        </div>
+      `) : "",
+    ].filter(Boolean);
+    return `<tr class="${read || isAdminList ? "" : "partner-inbox-row-unread"}">${cells.join("")}</tr>`;
+  });
+
+  return `
+    <div class="partner-inbox-list">
+      ${renderAppListPanel({
+        title: isAdminList ? "გაგზავნილი შეტყობინებები" : "ჩემი ინბოქსი",
+        badges: [`სულ: ${items.length}`],
+        headers: isAdminList
+          ? ["მიმღები", "შეტყობინება", "თარიღი", "ვადა", "სტატუსი", ""]
+          : ["შეტყობინება", "თარიღი", "ვადა", "სტატუსი"],
+        emptyMessage: "შეტყობინება არ არის",
+        rows,
+      })}
+    </div>
+  `;
+}
+
+
+async function openAdminPartnerInbox() {
+  if (!state.isAdmin) return;
+  const [partners, messages] = await Promise.all([
+    getPartners(),
+    getPartnerInboxMessages(),
+  ]);
+  const partnerOptions = partners.map((partner) => `<option value="${escapeAttr(partner.username)}">${escapeHtml(partnerName(partner))}</option>`).join("");
+  const body = `
+    <div class="partner-inbox-panel">
+      <section class="partner-inbox-compose">
+        <div class="partner-inbox-compose-grid">
+          <label for="partnerInboxTarget">
+            <span>მიმღები</span>
+            <select id="partnerInboxTarget">
+              <option value="">ყველა პარტნიორი</option>
+              ${partnerOptions}
+            </select>
+          </label>
+          <label for="partnerInboxMessage">
+            <span>შეტყობინება</span>
+            <textarea id="partnerInboxMessage" rows="4" maxlength="4000" placeholder="ჩაწერეთ შეტყობინება"></textarea>
+          </label>
+        </div>
+        <p class="form-message" id="partnerInboxAdminMessage" role="alert"></p>
+      </section>
+      ${renderPartnerInboxList(messages, { admin: true })}
+    </div>
+  `;
+  showDialog("პარტნიორების ინბოქსი", body, [
+    { label: "გაგზავნა", variant: "primary", action: sendAdminPartnerInboxMessage },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+async function sendAdminPartnerInboxMessage() {
+  const status = document.getElementById("partnerInboxAdminMessage");
+  const target = document.getElementById("partnerInboxTarget")?.value || "";
+  const message = document.getElementById("partnerInboxMessage")?.value.trim() || "";
+  if (!message) {
+    if (status) status.textContent = "შეტყობინების ტექსტი აუცილებელია.";
+    return;
+  }
+  document.querySelectorAll("#dialogActions button").forEach((button) => {
+    button.disabled = true;
+  });
+  try {
+    await sendPartnerInboxMessage({
+      targetType: target ? "partner" : "all",
+      partnerUsername: target,
+      message,
+    });
+    showToast("შეტყობინება გაიგზავნა.");
+    await openAdminPartnerInbox();
+  } catch (error) {
+    if (status) status.textContent = error.message || STRINGS.serverFailed;
+  } finally {
+    document.querySelectorAll("#dialogActions button").forEach((button) => {
+      button.disabled = false;
+    });
+  }
+}
+
+
+async function openPartnerInbox() {
+  if (!state.isPartner) return;
+  const messages = await getPartnerInboxMessages();
+  const body = `
+    <div class="partner-inbox-panel">
+      ${renderPartnerInboxList(messages)}
+    </div>
+  `;
+  showDialog("ინბოქსი", body, [
+    { label: "გასუფთავება", variant: "danger", action: clearPartnerInbox },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+async function openPartnerInboxMessage(messageId) {
+  const messages = await getPartnerInboxMessages();
+  const message = messages.find((item) => item.id === messageId);
+  if (!message) {
+    showToast("შეტყობინება ვერ მოიძებნა.");
+    return;
+  }
+  if (state.isPartner) {
+    await markPartnerInboxMessageRead(messageId).catch(() => {});
+  }
+  const body = `
+    <article class="partner-inbox-detail">
+      <div class="partner-inbox-detail-meta">
+        <span>${escapeHtml(getPartnerInboxTargetLabel(message))}</span>
+        <strong>${escapeHtml(formatOptionalDateTime(message.createdAt))}</strong>
+        <small>ვადა: ${escapeHtml(getPartnerInboxDaysLeft(message) || "15 დღე")}</small>
+      </div>
+      <p>${escapeHtml(message.message || "").replace(/\n/g, "<br>")}</p>
+    </article>
+  `;
+  showDialog("შეტყობინება", body, [
+    { label: "უკან", variant: "secondary", action: state.isAdmin ? openAdminPartnerInbox : openPartnerInbox },
+  ]);
+}
+
+
+async function clearPartnerInbox() {
+  if (!state.isPartner) return;
+  await clearPartnerInboxMessages();
+  showToast("ინბოქსი გასუფთავდა.");
+  await openPartnerInbox();
+}
+
+
+async function removePartnerInboxMessage(messageId) {
+  if (!state.isAdmin) return;
+  await deletePartnerInboxMessage(messageId);
+  showToast("შეტყობინება წაიშალა.");
+  await openAdminPartnerInbox();
 }
 
 

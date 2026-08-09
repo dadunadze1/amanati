@@ -8,6 +8,7 @@ const STATIC_DEMO_COURIER_USERNAMES = new Set(["courier1", "courier2"]);
 const STATIC_DEMO_COURIER_IDS = new Set(["static-courier-1", "static-courier-2"]);
 const STATIC_DEMO_COURIER_PHONES = new Set(["+995555000001", "+995555000002"]);
 const STATIC_PUSH_EVENT_RETENTION_DAYS = 14;
+const STATIC_PARTNER_INBOX_RETENTION_DAYS = 15;
 const STATIC_AUTO_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let staticRealtimeRefreshTimer = null;
 
@@ -82,6 +83,10 @@ function mergeStaticStores(...stores) {
       ...(merged.adminNotifications && typeof merged.adminNotifications === "object" ? merged.adminNotifications : {}),
       ...(store.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications : {}),
     };
+    const partnerInboxMessages = [
+      ...(Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages : []),
+      ...(Array.isArray(store.settings?.partnerInboxMessages) ? store.settings.partnerInboxMessages : []),
+    ].map(publicStaticPartnerInboxMessage);
 
     return {
       users: mergeStaticRecordsByKey(merged.users, users, getStaticUserKey, resolveStaticUserRecord),
@@ -92,6 +97,7 @@ function mergeStaticStores(...stores) {
       zones: mergeStaticRecordsByKey(merged.zones, Array.isArray(store.zones) ? store.zones : [], getStaticZoneKey),
       financeData: mergeStaticFinanceData(merged.financeData, store.financeData),
       adminNotifications,
+      partnerInboxMessages: mergeStaticRecordsByKey(merged.partnerInboxMessages, partnerInboxMessages, getStaticInboxMessageKey, resolveStaticInboxMessageRecord),
       settings: {
         ...(merged.settings && typeof merged.settings === "object" ? merged.settings : {}),
         ...(store.settings && typeof store.settings === "object" ? store.settings : {}),
@@ -105,6 +111,7 @@ function mergeStaticStores(...stores) {
     zones: [],
     financeData: {},
     adminNotifications: {},
+    partnerInboxMessages: [],
     settings: {},
   });
 }
@@ -121,6 +128,7 @@ function normalizeStaticStore(store) {
     zones: merged.zones,
     financeData: merged.financeData,
     adminNotifications: merged.adminNotifications || {},
+    partnerInboxMessages: merged.partnerInboxMessages || [],
     settings: merged.settings,
   };
 }
@@ -214,6 +222,21 @@ function getStaticParcelKey(parcel) {
 
 function getStaticZoneKey(zone) {
   return String(zone?.id || zone?.name || "").trim().toLowerCase();
+}
+
+function getStaticInboxMessageKey(message) {
+  return String(message?.id || "").trim().toLowerCase() || [
+    message?.targetType || "",
+    normalizeUsername(message?.partnerUsername),
+    message?.createdAt || "",
+    String(message?.message || "").slice(0, 80),
+  ].join("|");
+}
+
+function resolveStaticInboxMessageRecord(current, next) {
+  const currentTime = getStaticRecordTimestamp(current);
+  const nextTime = getStaticRecordTimestamp(next);
+  return nextTime >= currentTime ? { ...current, ...next } : { ...next, ...current };
 }
 
 function mergeStaticFinanceData(baseFinance, nextFinance) {
@@ -518,6 +541,58 @@ function saveStaticFinanceData(financeData) {
   saveStaticBootstrap();
 }
 
+function addStaticDaysIso(value, days) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + Number(days || 0));
+  return date.toISOString();
+}
+
+function publicStaticPartnerInboxMessage(message = {}) {
+  const targetType = message.targetType === "all" ? "all" : "partner";
+  const createdAt = message.createdAt || new Date().toISOString();
+  return {
+    id: message.id || `partner-inbox-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    targetType,
+    partnerUsername: targetType === "all" ? "" : String(message.partnerUsername || ""),
+    partnerId: targetType === "all" ? "" : String(message.partnerId || message.partnerUsername || ""),
+    partnerName: targetType === "all" ? "ყველა პარტნიორი" : String(message.partnerName || message.partnerUsername || ""),
+    message: String(message.message || ""),
+    createdAt,
+    createdBy: String(message.createdBy || ""),
+    expiresAt: message.expiresAt || addStaticDaysIso(createdAt, STATIC_PARTNER_INBOX_RETENTION_DAYS),
+    readBy: Array.isArray(message.readBy) ? message.readBy : [],
+    deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
+  };
+}
+
+function isStaticPartnerInboxExpired(message, referenceDate = new Date()) {
+  const expiresAt = Date.parse(message?.expiresAt || addStaticDaysIso(message?.createdAt, STATIC_PARTNER_INBOX_RETENTION_DAYS));
+  return Number.isFinite(expiresAt) && expiresAt <= referenceDate.getTime();
+}
+
+function pruneStaticPartnerInboxMessages(store, referenceDate = new Date()) {
+  if (!store || typeof store !== "object") return 0;
+  const before = Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages.map(publicStaticPartnerInboxMessage) : [];
+  const active = before.filter((message) => !isStaticPartnerInboxExpired(message, referenceDate));
+  store.partnerInboxMessages = active;
+  return before.length - active.length;
+}
+
+function staticPartnerInboxBelongsTo(message, partner) {
+  if (!message || !partner) return false;
+  if (message.targetType === "all") return true;
+  return Boolean(
+    (message.partnerId && partner.id && String(message.partnerId) === String(partner.id))
+    || normalizeUsername(message.partnerUsername) === normalizeUsername(partner.username)
+  );
+}
+
+function isStaticPartnerInboxHiddenFor(message, username) {
+  const normalized = normalizeUsername(username);
+  return (Array.isArray(message.deletedFor) ? message.deletedFor : []).some((item) => normalizeUsername(item) === normalized);
+}
+
 function addDaysToDateKey(dateKey, days) {
   const date = new Date(`${dateKey}T12:00:00`);
   if (Number.isNaN(date.getTime())) return "";
@@ -605,6 +680,7 @@ function runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate = c
   const beforePartnerCashAdjustments = Array.isArray(financeData.partnerCashAdjustments) ? financeData.partnerCashAdjustments.length : 0;
   const beforePayAdjustments = Array.isArray(financeData.payAdjustments) ? financeData.payAdjustments.length : 0;
   const beforeDailyBalanceLedger = Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger.length : 0;
+  const deletedPartnerInboxMessages = pruneStaticPartnerInboxMessages(store);
 
   store.history = store.history.filter((parcel) => !isStaticRetentionParcelExpired(parcel, isStaticPartnerParcel(parcel) ? partnerOrderCutoffDate : cutoffDate));
   store.parcels = store.parcels.filter((parcel) => {
@@ -635,6 +711,7 @@ function runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate = c
     deletedPartnerCashAdjustments: beforePartnerCashAdjustments - partnerCashAdjustments.length,
     deletedPayAdjustments: beforePayAdjustments - payAdjustments.length,
     deletedDailyBalanceLedger: beforeDailyBalanceLedger - dailyBalanceLedger.length,
+    deletedPartnerInboxMessages,
   };
 }
 
@@ -1004,6 +1081,96 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/partners") {
     return { partners: store.users.filter((user) => user.role === "partner").map(publicStaticUser) };
+  }
+
+  if (method === "GET" && apiPath === "/api/partner-inbox/messages") {
+    pruneStaticPartnerInboxMessages(store);
+    const messages = (Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages : [])
+      .map(publicStaticPartnerInboxMessage)
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    if (state.isAdmin) {
+      const partnerFilter = normalizeUsername(url.searchParams.get("partner") || "");
+      return {
+        messages: messages.filter((message) => !partnerFilter || message.targetType === "all" || normalizeUsername(message.partnerUsername) === partnerFilter),
+      };
+    }
+    if (state.isPartner) {
+      const partner = state.currentUserProfile || {};
+      return {
+        messages: messages
+          .filter((message) => staticPartnerInboxBelongsTo(message, partner))
+          .filter((message) => !isStaticPartnerInboxHiddenFor(message, state.currentUser)),
+      };
+    }
+    return { messages: [] };
+  }
+
+  if (method === "POST" && apiPath === "/api/partner-inbox/messages") {
+    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია პარტნიორებისთვის შეტყობინების გაგზავნა.");
+    const targetType = body.targetType === "all" || !body.partnerUsername ? "all" : "partner";
+    const messageText = String(body.message || "").trim();
+    if (!messageText) throw new Error("შეტყობინების ტექსტი აუცილებელია.");
+    if (messageText.length > 4000) throw new Error("შეტყობინება ძალიან გრძელია.");
+    const partner = targetType === "partner"
+      ? store.users.find((user) => user.role === "partner" && (String(user.id || "") === String(body.partnerId || "") || normalizeUsername(user.username) === normalizeUsername(body.partnerUsername)))
+      : null;
+    if (targetType === "partner" && !partner) throw new Error("პარტნიორი ვერ მოიძებნა.");
+
+    pruneStaticPartnerInboxMessages(store);
+    const now = new Date().toISOString();
+    const message = publicStaticPartnerInboxMessage({
+      id: body.id || `partner-inbox-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      targetType,
+      partnerUsername: partner?.username || "",
+      partnerId: partner?.id || partner?.username || "",
+      partnerName: partner ? (partner.companyName || partner.contactPerson || partner.username) : "ყველა პარტნიორი",
+      message: messageText,
+      createdAt: now,
+      createdBy: state.currentUser || "",
+      expiresAt: addStaticDaysIso(now, STATIC_PARTNER_INBOX_RETENTION_DAYS),
+    });
+    store.partnerInboxMessages = [message, ...(Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages : []).map(publicStaticPartnerInboxMessage)];
+    saveStaticBootstrap();
+    return { message };
+  }
+
+  const staticPartnerInboxMessageMatch = apiPath.match(/^\/api\/partner-inbox\/messages\/([^/]+)$/);
+  if (staticPartnerInboxMessageMatch && method === "POST") {
+    if (!state.isPartner) throw new Error("წვდომა აკრძალულია.");
+    pruneStaticPartnerInboxMessages(store);
+    const id = decodeURIComponent(staticPartnerInboxMessageMatch[1]);
+    const messages = (Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages : []).map(publicStaticPartnerInboxMessage);
+    const message = messages.find((item) => item.id === id);
+    if (!message || !staticPartnerInboxBelongsTo(message, state.currentUserProfile || {})) throw new Error("შეტყობინება ვერ მოიძებნა.");
+    message.readBy = [...new Set([...message.readBy.map(normalizeUsername), normalizeUsername(state.currentUser)])];
+    store.partnerInboxMessages = messages;
+    saveStaticBootstrap();
+    return { message };
+  }
+
+  if (method === "POST" && apiPath === "/api/partner-inbox/clear") {
+    if (!state.isPartner) throw new Error("წვდომა აკრძალულია.");
+    pruneStaticPartnerInboxMessages(store);
+    const normalizedUsername = normalizeUsername(state.currentUser);
+    let hidden = 0;
+    store.partnerInboxMessages = (Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages : []).map(publicStaticPartnerInboxMessage).map((message) => {
+      if (!staticPartnerInboxBelongsTo(message, state.currentUserProfile || {}) || isStaticPartnerInboxHiddenFor(message, state.currentUser)) return message;
+      message.deletedFor = [...new Set([...message.deletedFor.map(normalizeUsername), normalizedUsername])];
+      hidden += 1;
+      return message;
+    });
+    saveStaticBootstrap();
+    return { ok: true, hidden };
+  }
+
+  if (staticPartnerInboxMessageMatch && method === "DELETE") {
+    if (!state.isAdmin) throw new Error("წვდომა აკრძალულია.");
+    const id = decodeURIComponent(staticPartnerInboxMessageMatch[1]);
+    pruneStaticPartnerInboxMessages(store);
+    const before = (Array.isArray(store.partnerInboxMessages) ? store.partnerInboxMessages : []).map(publicStaticPartnerInboxMessage);
+    store.partnerInboxMessages = before.filter((message) => message.id !== id);
+    saveStaticBootstrap();
+    return { ok: true, deleted: before.length - store.partnerInboxMessages.length };
   }
 
   if (method === "GET" && apiPath === "/api/partner-cash-adjustments") {
@@ -1533,6 +1700,33 @@ async function getUsers() {
 async function getPartners() {
   const payload = await api("/api/partners");
   return Array.isArray(payload.partners) ? payload.partners : [];
+}
+
+async function getPartnerInboxMessages(partnerUsername = "") {
+  const query = partnerUsername ? `?partner=${encodeURIComponent(partnerUsername)}` : "";
+  const payload = await api(`/api/partner-inbox/messages${query}`);
+  return Array.isArray(payload.messages) ? payload.messages : [];
+}
+
+async function sendPartnerInboxMessage({ targetType = "all", partnerUsername = "", partnerId = "", message = "" } = {}) {
+  const payload = await api("/api/partner-inbox/messages", {
+    method: "POST",
+    body: { targetType, partnerUsername, partnerId, message },
+  });
+  return payload.message;
+}
+
+async function markPartnerInboxMessageRead(messageId) {
+  const payload = await api(`/api/partner-inbox/messages/${encodeURIComponent(messageId)}`, { method: "POST" });
+  return payload.message;
+}
+
+async function clearPartnerInboxMessages() {
+  return api("/api/partner-inbox/clear", { method: "POST" });
+}
+
+async function deletePartnerInboxMessage(messageId) {
+  return api(`/api/partner-inbox/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" });
 }
 
 async function getPending() {

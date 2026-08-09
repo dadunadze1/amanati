@@ -12777,7 +12777,7 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
     width: var(--app-viewport-width, 100vw) !important;
     max-width: 100vw !important;
     display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 8px !important;
     height: calc(62px + env(safe-area-inset-bottom)) !important;
     min-height: calc(62px + env(safe-area-inset-bottom)) !important;
@@ -13531,5 +13531,206 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 
   .finance-workbench .partner-order-table td {
     grid-template-columns: minmax(72px, 0.38fr) minmax(0, 1fr);
+  }
+}
+
+/* Partner inbox list layout. */
+.partner-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.partner-dashboard-actions--inbox {
+  justify-content: stretch;
+  margin-top: 8px;
+}
+
+.partner-dashboard-actions--inbox .button {
+  width: 100%;
+}
+
+.partner-inbox-panel {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.partner-inbox-compose {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.partner-inbox-compose-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.36fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.partner-inbox-compose label {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.partner-inbox-compose label span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.partner-inbox-compose textarea {
+  min-height: 74px;
+}
+
+.partner-inbox-list .partner-table-wrap {
+  max-height: min(54vh, 520px);
+  overflow: auto;
+}
+
+.partner-inbox-list .partner-order-table {
+  min-width: 760px;
+}
+
+.partner-inbox-list .partner-order-table th,
+.partner-inbox-list .partner-order-table td {
+  padding: 8px 9px;
+  vertical-align: top;
+}
+
+.partner-inbox-open {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+
+.partner-inbox-open strong,
+.partner-inbox-open small,
+.partner-inbox-detail p {
+  overflow-wrap: anywhere;
+}
+
+.partner-inbox-open small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.partner-inbox-row-unread .partner-inbox-open strong {
+  color: var(--primary-strong);
+  font-weight: 950;
+}
+
+.partner-inbox-actions {
+  grid-template-columns: 1fr;
+  margin-top: 0;
+}
+
+.partner-inbox-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.partner-inbox-detail-meta {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.partner-inbox-detail-meta span,
+.partner-inbox-detail-meta small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 780;
+}
+
+.partner-inbox-detail p {
+  margin: 0;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+@media (max-width: 720px) {
+  .partner-inbox-compose-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .partner-inbox-list .partner-table-wrap {
+    max-height: min(58vh, 560px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .partner-inbox-list .partner-order-table,
+  .partner-inbox-list .partner-order-table thead,
+  .partner-inbox-list .partner-order-table tbody,
+  .partner-inbox-list .partner-order-table tr,
+  .partner-inbox-list .partner-order-table th,
+  .partner-inbox-list .partner-order-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .partner-inbox-list .partner-order-table thead {
+    display: none;
+  }
+
+  .partner-inbox-list .partner-order-table tbody {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .partner-inbox-list .partner-order-table tr {
+    padding: 8px;
+    background: #fff;
+    border: 1px solid rgba(226, 232, 240, 0.96);
+    border-radius: 8px;
+  }
+
+  .partner-inbox-list .partner-order-table td {
+    display: grid;
+    grid-template-columns: minmax(78px, 0.38fr) minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    padding: 5px 0;
+    border: 0;
+    font-size: 0.78rem;
+  }
+
+  .partner-inbox-list .partner-order-table td::before {
+    content: attr(data-label);
+    color: #667085;
+    font-size: 0.68rem;
+    font-weight: 850;
+    line-height: 1.1;
+  }
+
+  .partner-inbox-list .partner-order-table td:empty {
+    display: none;
+  }
+
+  .partner-inbox-list .partner-order-table td[data-label="შეტყობინება"],
+  .partner-inbox-list .partner-order-table td[data-label="მოქმედება"] {
+    grid-template-columns: 1fr;
+  }
+
+  .partner-inbox-list .partner-order-table td[data-label="შეტყობინება"]::before,
+  .partner-inbox-list .partner-order-table td[data-label="მოქმედება"]::before {
+    display: block;
   }
 }

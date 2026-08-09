@@ -104,6 +104,7 @@ function renderActions() {
         ["adminCouriers", "კურიერები", "◎", "სია, რეგისტრაცია, ზონები და სტატისტიკა"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
         ["adminPartnersHub", "პარტნიორები", "◫", "პარტნიორები და შეკვეთები"],
+        ["adminPartnerInbox", "ინბოქსი", "✉", "შეტყობინებები პარტნიორებისთვის"],
       ],
     },
     {
@@ -121,6 +122,7 @@ function renderActions() {
   ];
   const partnerActions = [
     ["partnerNewOrder", "ახალი", "+"],
+    ["partnerInbox", "ინბოქსი", "✉"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
@@ -234,6 +236,7 @@ function openAdminPartnersHub() {
       <section class="finance-section finance-flow-grid">
         ${renderAdminHubAction("adminPartners", "პარტნიორები", "◫", "პარტნიორი ანგარიშები და ქეში")}
         ${renderAdminHubAction("adminPartnerOrders", "შეკვეთები", "▣", "პარტნიორის შეკვეთების სია")}
+        ${renderAdminHubAction("adminPartnerInbox", "ინბოქსი", "✉", "შეტყობინებები პარტნიორებისთვის")}
       </section>
     `,
   });
@@ -581,6 +584,7 @@ async function handleAction(action, value, sourceElement) {
     adminDailyBalance: openAdminDailyBalance,
     adminPartners: openPartnerManagement,
     adminPartnerOrders: openAdminPartnerOrders,
+    adminPartnerInbox: openAdminPartnerInbox,
     addParcel: openAdminAddParcel,
     adminCloseDay: openAdminCloseDay,
     parcelHistory: openParcelHistorySearch,
@@ -606,6 +610,9 @@ async function handleAction(action, value, sourceElement) {
     partnerDashboard: renderPartnerDashboard,
     partnerNewOrder: openPartnerNewOrderDialog,
     partnerOrders: openPartnerOrdersDialog,
+    partnerInbox: openPartnerInbox,
+    openPartnerInboxMessage: () => openPartnerInboxMessage(value),
+    deletePartnerInboxMessage: () => removePartnerInboxMessage(value),
     createPartner: openPartnerCreateDialog,
     editPartner: () => openPartnerEditDialog(value),
     togglePartnerStatus: () => togglePartnerStatus(value),
