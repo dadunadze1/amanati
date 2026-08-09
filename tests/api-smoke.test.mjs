@@ -96,7 +96,7 @@ describe("local API smoke flow", () => {
     assert.equal(push.status, 200);
     assert.match(await push.text(), /id="map"/);
 
-    const script = await fetch(`${BASE_URL}/js/app.js?v=21`);
+    const script = await fetch(`${BASE_URL}/js/app.js?v=22`);
     assert.equal(script.status, 200);
     assert.equal(script.headers.get("cache-control"), "public, max-age=31536000, immutable");
   });
@@ -169,6 +169,13 @@ describe("local API smoke flow", () => {
     const today = new Date().toISOString().slice(0, 10);
     const byDate = await api(`/api/parcels/search?dateFrom=${today}&dateTo=${today}`, { token: adminToken });
     assert.ok(byDate.parcels.some((parcel) => parcel.id === createdParcel.id));
+
+    const paged = await api(`/api/parcels/search?status=pending&limit=1&offset=0`, { token: adminToken });
+    assert.equal(paged.parcels.length, 1);
+    assert.equal(paged.total >= 1, true);
+    assert.equal(paged.limit, 1);
+    assert.equal(paged.offset, 0);
+    assert.equal(typeof paged.hasMore, "boolean");
   });
 
   it("allows courier status updates and archive flow", async () => {

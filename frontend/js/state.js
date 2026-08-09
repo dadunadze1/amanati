@@ -35,6 +35,7 @@ const state = {
   lastLocationWatchErrorToastAt: 0,
   firebaseSyncStatus: "unknown",
   lastFirebaseSyncToastAt: 0,
+  clientErrors: [],
   adminPushStatus: "unknown",
   adminPushToken: "",
   adminPushLastError: "",

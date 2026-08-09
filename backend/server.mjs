@@ -832,6 +832,29 @@ function getParcelSearchFilters(url) {
   };
 }
 
+function getPaginationOptions(url) {
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 0), 0), 500);
+  const offset = Math.max(Number(url.searchParams.get("offset") || 0), 0);
+  return {
+    limit: Number.isFinite(limit) ? Math.trunc(limit) : 0,
+    offset: Number.isFinite(offset) ? Math.trunc(offset) : 0,
+  };
+}
+
+function paginatedPayload(key, records, pagination) {
+  if (!pagination.limit) return { [key]: records };
+  const total = records.length;
+  const offset = Math.min(pagination.offset, total);
+  const items = records.slice(offset, offset + pagination.limit);
+  return {
+    [key]: items,
+    total,
+    limit: pagination.limit,
+    offset,
+    hasMore: offset + items.length < total,
+  };
+}
+
 function toDateKey(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -1429,16 +1452,15 @@ async function handleApi(request, response, url) {
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
-    sendJson(response, 200, {
-      parcels: db.parcels
-        .filter((parcel) => {
-          if (parcel.archivedAt || isDeletedParcel(parcel)) return false;
-          if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
-          if (session.role === "admin" && partnerId && parcel.partnerId !== partnerId) return false;
-          return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
-        })
-        .map((parcel) => publicParcel(db, parcel)),
-    });
+    const parcels = db.parcels
+      .filter((parcel) => {
+        if (parcel.archivedAt || isDeletedParcel(parcel)) return false;
+        if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
+        if (session.role === "admin" && partnerId && parcel.partnerId !== partnerId) return false;
+        return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
+      })
+      .map((parcel) => publicParcel(db, parcel));
+    sendJson(response, 200, paginatedPayload("parcels", parcels, getPaginationOptions(url)));
     return;
   }
 
@@ -1732,16 +1754,15 @@ async function handleApi(request, response, url) {
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
-    sendJson(response, 200, {
-      history: db.parcels
-        .filter((parcel) => {
-          if (!parcel.archivedAt) return false;
-          if (isDeletedParcel(parcel)) return false;
-          if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
-          return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
-        })
-        .map((parcel) => publicParcel(db, parcel)),
-    });
+    const history = db.parcels
+      .filter((parcel) => {
+        if (!parcel.archivedAt) return false;
+        if (isDeletedParcel(parcel)) return false;
+        if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
+        return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
+      })
+      .map((parcel) => publicParcel(db, parcel));
+    sendJson(response, 200, paginatedPayload("history", history, getPaginationOptions(url)));
     return;
   }
 
@@ -1754,7 +1775,7 @@ async function handleApi(request, response, url) {
       if (!query) return true;
       return parcelSearchHaystack(db, parcel).includes(query);
     }).filter((parcel) => parcelMatchesSearchFilters(parcel, filters));
-    sendJson(response, 200, { parcels: parcels.map((parcel) => publicParcel(db, parcel)) });
+    sendJson(response, 200, paginatedPayload("parcels", parcels.map((parcel) => publicParcel(db, parcel)), getPaginationOptions(url)));
     return;
   }
 

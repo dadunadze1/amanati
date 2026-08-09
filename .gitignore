@@ -6,3 +6,5 @@ firebase-debug*.log
 backend/data/*.json
 checkpoints/
 GIT/
+playwright-report/
+test-results/

@@ -2,6 +2,10 @@
 
 
 
+const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
+const CLIENT_ERROR_LIMIT = 25;
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=3";
+
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
   [
@@ -14,6 +18,52 @@ function cacheElements() {
     "dialogBody", "dialogActions",
   ].forEach((id) => {
     els[id] = document.getElementById(id);
+  });
+}
+
+
+function recordClientIssue(type, error, meta = {}) {
+  if (typeof state !== "object") return;
+  const issue = {
+    type,
+    message: error?.message || String(error || ""),
+    stack: error?.stack || "",
+    meta,
+    url: window.location.href,
+    user: state.currentUser || "",
+    createdAt: new Date().toISOString(),
+  };
+  state.clientErrors = [issue, ...(state.clientErrors || [])].slice(0, CLIENT_ERROR_LIMIT);
+  try {
+    saveData(CLIENT_ERROR_STORAGE_KEY, state.clientErrors);
+  } catch {
+    // localStorage can be unavailable in private or restricted browser contexts.
+  }
+  console.warn("[monitor]", type, issue);
+}
+
+function initializeErrorMonitoring() {
+  try {
+    state.clientErrors = loadData(CLIENT_ERROR_STORAGE_KEY) || [];
+  } catch {
+    state.clientErrors = [];
+  }
+  window.addEventListener("error", (event) => {
+    recordClientIssue("runtime-error", event.error || event.message, {
+      filename: event.filename || "",
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+    });
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    recordClientIssue("unhandled-rejection", event.reason || "Unhandled promise rejection");
+  });
+}
+
+function registerAppServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register(APP_SERVICE_WORKER_URL, { scope: "./" }).catch((error) => {
+    recordClientIssue("service-worker-register-error", error);
   });
 }
 
@@ -830,6 +880,8 @@ async function logout() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  initializeErrorMonitoring();
+  registerAppServiceWorker();
   cacheElements();
   bindAppViewportVars();
   bindEvents();

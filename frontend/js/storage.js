@@ -2,6 +2,7 @@
 
 const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
+const FIREBASE_STATIC_STORE_SPLIT_KEYS = ["users", "pending", "parcels", "history", "zones", "financeData", "adminNotifications", "settings"];
 const FIREBASE_AUTH_DISABLED_STORAGE_KEY = "deliveryFirebaseAuthDisabled:v1";
 const FIREBASE_AUTH_DISABLED_RETRY_MS = 6 * 60 * 60 * 1000;
 const FIREBASE_SYNC_TOAST_THROTTLE_MS = 60 * 1000;
@@ -79,6 +80,37 @@ function markFirebaseSyncOk() {
   }
 }
 
+function extractFirebaseStaticStore(data = {}) {
+  const legacyStore = data.store && typeof data.store === "object" ? data.store : {};
+  const splitStore = {};
+  let hasSplitStore = false;
+  FIREBASE_STATIC_STORE_SPLIT_KEYS.forEach((key) => {
+    if (data[key] !== undefined) {
+      splitStore[key] = data[key];
+      hasSplitStore = true;
+    }
+  });
+  if (hasSplitStore) return { ...legacyStore, ...splitStore };
+  if (data.store && typeof data.store === "object") return data.store;
+  const fallback = {};
+  FIREBASE_STATIC_STORE_SPLIT_KEYS.forEach((key) => {
+    if (data[key] !== undefined) fallback[key] = data[key];
+  });
+  return Object.keys(fallback).length ? fallback : data;
+}
+
+function buildFirebaseStaticStorePayload(store) {
+  const payload = {
+    store,
+    storeSchemaVersion: 2,
+    storeUpdatedAt: new Date().toISOString(),
+  };
+  FIREBASE_STATIC_STORE_SPLIT_KEYS.forEach((key) => {
+    if (store[key] !== undefined) payload[key] = store[key];
+  });
+  return payload;
+}
+
 async function initializeFirebaseStorage() {
   if (firebaseAuthUnavailable || isFirebaseAuthDisabledLocally()) return null;
   if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
@@ -129,7 +161,7 @@ async function loadFirebaseStaticStore() {
       return null;
     }
     const data = snapshot.data() || {};
-    const store = data.store && typeof data.store === "object" ? data.store : data;
+    const store = extractFirebaseStaticStore(data);
     lastFirebaseStoreJson = JSON.stringify(store);
     console.log("[firebase] static store loaded");
     markFirebaseSyncOk();
@@ -149,12 +181,8 @@ async function saveFirebaseStaticStore(store) {
     const storeJson = JSON.stringify(store);
     if (storeJson && storeJson === lastFirebaseStoreJson) return true;
     lastFirebaseStoreJson = storeJson;
-    const pushFields = store.adminNotifications && typeof store.adminNotifications === "object"
-      ? { adminNotifications: store.adminNotifications }
-      : {};
     await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
-      store,
-      ...pushFields,
+      ...buildFirebaseStaticStorePayload(store),
       updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     console.log("[firebase] static store saved");
@@ -179,7 +207,7 @@ async function startFirebaseStaticStoreListener(onStoreChange) {
       if (snapshot.metadata?.hasPendingWrites) return;
       if (!snapshot.exists) return;
       const data = snapshot.data() || {};
-      const store = data.store && typeof data.store === "object" ? data.store : data;
+      const store = extractFirebaseStaticStore(data);
       const storeJson = JSON.stringify(store);
       if (!storeJson || storeJson === lastFirebaseStoreJson) return;
       lastFirebaseStoreJson = storeJson;

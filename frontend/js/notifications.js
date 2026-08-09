@@ -86,7 +86,7 @@ async function requestAdminPushNotifications(options = {}) {
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=2", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=3", { scope: "./" });
     await registration.update().catch(() => {});
     const subscription = await createAdminStandardWebPushSubscription(registration);
 

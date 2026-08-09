@@ -559,6 +559,28 @@ function getStaticParcelSearchFilters(url) {
   };
 }
 
+function getStaticPaginationOptions(url) {
+  const rawLimit = Number(url.searchParams.get("limit") || 0);
+  const rawOffset = Number(url.searchParams.get("offset") || 0);
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 0), 500) : 0;
+  const offset = Number.isFinite(rawOffset) ? Math.max(Math.trunc(rawOffset), 0) : 0;
+  return { limit, offset };
+}
+
+function staticPaginatedPayload(key, records, pagination) {
+  if (!pagination.limit) return { [key]: records };
+  const total = records.length;
+  const offset = Math.min(pagination.offset, total);
+  const items = records.slice(offset, offset + pagination.limit);
+  return {
+    [key]: items,
+    total,
+    limit: pagination.limit,
+    offset,
+    hasMore: offset + items.length < total,
+  };
+}
+
 function isStaticRetentionParcelExpired(parcel, cutoffDate) {
   const dateKey = getStaticRetentionParcelDateKey(parcel);
   return Boolean(dateKey && cutoffDate && dateKey < cutoffDate);
@@ -1132,39 +1154,36 @@ async function staticApi(path, options = {}) {
   if (method === "GET" && apiPath === "/api/parcels") {
     const courier = url.searchParams.get("courier") || "";
     const partnerId = url.searchParams.get("partnerId") || "";
-    return {
-      parcels: store.parcels
-        .filter((parcel) => {
-          if (parcel.archivedAt || isStaticDeletedParcel(parcel)) return false;
-          if (state.isPartner) return parcel.partnerId === state.currentUserProfile?.id;
-          if (partnerId && parcel.partnerId !== partnerId) return false;
-          return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
-        })
-        .map((parcel) => publicStaticParcel(store, parcel)),
-    };
+    const parcels = store.parcels
+      .filter((parcel) => {
+        if (parcel.archivedAt || isStaticDeletedParcel(parcel)) return false;
+        if (state.isPartner) return parcel.partnerId === state.currentUserProfile?.id;
+        if (partnerId && parcel.partnerId !== partnerId) return false;
+        return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
+      })
+      .map((parcel) => publicStaticParcel(store, parcel));
+    return staticPaginatedPayload("parcels", parcels, getStaticPaginationOptions(url));
   }
 
   if (method === "GET" && apiPath === "/api/history") {
     const courier = url.searchParams.get("courier") || "";
-    return {
-      history: [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)]
-        .filter((parcel) => !isStaticDeletedParcel(parcel))
-        .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
-        .map((parcel) => publicStaticParcel(store, parcel)),
-    };
+    const history = [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)]
+      .filter((parcel) => !isStaticDeletedParcel(parcel))
+      .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
+      .map((parcel) => publicStaticParcel(store, parcel));
+    return staticPaginatedPayload("history", history, getStaticPaginationOptions(url));
   }
 
   if (method === "GET" && apiPath === "/api/parcels/search") {
     const query = String(url.searchParams.get("q") || "").toLowerCase();
     const filters = getStaticParcelSearchFilters(url);
     const records = [...store.parcels, ...store.history];
-    return {
-      parcels: records
-        .filter((parcel) => !isStaticDeletedParcel(parcel))
-        .filter((parcel) => !query || [parcel.fullName, parcel.phone, parcel.address, parcel.courierUsername, parcel.status].some((value) => String(value || "").toLowerCase().includes(query)))
-        .filter((parcel) => staticParcelMatchesSearchFilters(parcel, filters))
-        .map((parcel) => publicStaticParcel(store, parcel)),
-    };
+    const parcels = records
+      .filter((parcel) => !isStaticDeletedParcel(parcel))
+      .filter((parcel) => !query || [parcel.fullName, parcel.phone, parcel.address, parcel.courierUsername, parcel.status].some((value) => String(value || "").toLowerCase().includes(query)))
+      .filter((parcel) => staticParcelMatchesSearchFilters(parcel, filters))
+      .map((parcel) => publicStaticParcel(store, parcel));
+    return staticPaginatedPayload("parcels", parcels, getStaticPaginationOptions(url));
   }
 
   if (method === "GET" && apiPath === "/api/geocode/search") {
@@ -1533,25 +1552,43 @@ async function staticApi(path, options = {}) {
 }
 
 async function api(path, options = {}) {
-  if (isStaticDeploy() && path.startsWith("/api/")) return staticApi(path, options);
+  if (isStaticDeploy() && path.startsWith("/api/")) {
+    try {
+      return await staticApi(path, options);
+    } catch (error) {
+      if (typeof recordClientIssue === "function") recordClientIssue("static-api-error", error, { path, method: options.method || "GET" });
+      throw error;
+    }
+  }
 
   const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (state.authToken) headers.Authorization = `Bearer ${state.authToken}`;
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  const startedAt = performance.now();
 
-  const response = await fetch(path, {
-    method: options.method || "GET",
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload.error || STRINGS.serverFailed);
-    error.status = response.status;
-    error.payload = payload;
+  try {
+    const response = await fetch(path, {
+      method: options.method || "GET",
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+    const payload = await response.json().catch(() => ({}));
+    const durationMs = Math.round(performance.now() - startedAt);
+    if (durationMs > Number(CONFIG.slowRequestWarningMs || 2500)) {
+      if (typeof recordClientIssue === "function") recordClientIssue("slow-api", `${options.method || "GET"} ${path}`, { durationMs, status: response.status });
+    }
+    if (!response.ok) {
+      const error = new Error(payload.error || STRINGS.serverFailed);
+      error.status = response.status;
+      error.payload = payload;
+      if (typeof recordClientIssue === "function") recordClientIssue("api-error", error, { path, status: response.status });
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (!error.status && typeof recordClientIssue === "function") recordClientIssue("network-error", error, { path, method: options.method || "GET" });
     throw error;
   }
-  return payload;
 }
 
 async function getCouriers() {
@@ -1571,20 +1608,30 @@ async function getPending() {
   return (await api("/api/pending")).pending;
 }
 
-async function getPins(username) {
-  const query = username ? `?courier=${encodeURIComponent(username)}` : "";
+async function getPins(username, options = {}) {
+  const params = new URLSearchParams();
+  if (username) params.set("courier", username);
+  ["partnerId", "limit", "offset"].forEach((key) => {
+    if (options[key] !== undefined && options[key] !== null && options[key] !== "") params.set(key, options[key]);
+  });
+  const query = params.toString() ? `?${params.toString()}` : "";
   return (await api(`/api/parcels${query}`)).parcels;
 }
 
-async function getHistory(username) {
-  const query = username ? `?courier=${encodeURIComponent(username)}` : "";
+async function getHistory(username, options = {}) {
+  const params = new URLSearchParams();
+  if (username) params.set("courier", username);
+  ["limit", "offset"].forEach((key) => {
+    if (options[key] !== undefined && options[key] !== null && options[key] !== "") params.set(key, options[key]);
+  });
+  const query = params.toString() ? `?${params.toString()}` : "";
   return (await api(`/api/history${query}`)).history;
 }
 
 async function searchParcels(query, filters = {}) {
   const params = new URLSearchParams();
   params.set("q", query || "");
-  ["status", "dateFrom", "dateTo", "courier", "limit"].forEach((key) => {
+  ["status", "dateFrom", "dateTo", "courier", "limit", "offset"].forEach((key) => {
     if (filters[key]) params.set(key, filters[key]);
   });
   return (await api(`/api/parcels/search?${params.toString()}`)).parcels;
