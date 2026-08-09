@@ -229,7 +229,8 @@ async function renderPartnerDashboard(pins = state.activePins) {
       ${renderPartnerStat("აქტიური შეკვეთები", activeOrders.length)}
       ${renderPartnerStat("ჩაბარებული", deliveredOrders.length)}
       ${renderPartnerStat("ვერ ჩაბარდა", failedOrders.length)}
-      ${renderPartnerStat("სულ ქეში", formatMoney(cash.cashDue))}
+      ${renderPartnerStat("ჩასაბარებელი ქეში", formatMoney(cash.cashDue))}
+      ${renderPartnerStat("მოლოდინში ქეში", formatMoney(cash.pendingCash))}
     </div>
     <section class="partner-panel">
       <div class="partner-panel-head">

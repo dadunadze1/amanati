@@ -60,6 +60,8 @@ const state = {
   financeDate: toDateKey(new Date()),
   financeRangeStart: toDateKey(new Date()),
   financeRangeEnd: toDateKey(new Date()),
+  financeAdminView: "summary",
+  financeAdminSearch: "",
   selectedCourier: null,
   partnerCashAdjustments: [],
   partnerCashAdjustmentsLoaded: false,

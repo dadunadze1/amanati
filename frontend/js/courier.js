@@ -84,7 +84,7 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
         <strong>${escapeHtml(status.label)}</strong>
       </button>
       <div class="courier-day-pill">
-        <span>დღეს</span>
+        <span>დღის ₾</span>
         <strong>${escapeHtml(formatMoney(todayStats.courierPay || 0))}</strong>
       </div>
       <div class="courier-day-pill">
