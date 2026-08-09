@@ -13105,7 +13105,7 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 
 /* Unified finance workbench. */
 .modal-card:has(.finance-workbench) {
-  width: min(1180px, calc(100vw - 24px));
+  width: min(1280px, calc(100vw - 12px));
   padding: 14px;
 }
 
@@ -13377,19 +13377,19 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 
 .finance-workbench .partner-order-table th:last-child,
 .finance-workbench .partner-order-table td:last-child {
-  min-width: 210px;
+  min-width: 280px;
 }
 
 .finance-workbench .partner-order-table td[data-label="გადახდა"] {
-  min-width: 168px;
+  min-width: 190px;
 }
 
 .finance-workbench .row-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(74px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
   justify-content: stretch;
-  gap: 5px;
+  gap: 4px;
   margin-top: 0;
 }
 
@@ -13397,9 +13397,9 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 .finance-workbench .button {
   width: 100%;
   min-width: 0;
-  min-height: 32px !important;
-  padding: 6px 9px !important;
-  font-size: 0.76rem !important;
+  min-height: 28px !important;
+  padding: 5px 6px !important;
+  font-size: 0.68rem !important;
   line-height: 1.12 !important;
   text-align: center;
   white-space: normal;
@@ -13514,7 +13514,7 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   }
 
   .finance-workbench .row-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     justify-content: stretch;
   }
 
