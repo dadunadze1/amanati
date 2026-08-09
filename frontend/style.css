@@ -12871,3 +12871,234 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
     grid-template-columns: 1fr;
   }
 }
+
+/* Compact admin map console: list/table-first dispatch control surface. */
+.modal-overlay.admin-map-dialog .modal-card {
+  width: min(1040px, calc(100vw - 28px)) !important;
+  padding: 14px !important;
+}
+
+.modal-overlay.admin-map-dialog .dialog-body {
+  overflow: hidden !important;
+}
+
+.admin-map-console {
+  height: min(78vh, 760px) !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  gap: 10px !important;
+}
+
+.admin-map-console-top,
+.admin-map-list-shell {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid rgba(208, 213, 221, 0.92);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.admin-map-console-top {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.admin-map-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.admin-map-metric {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 8px;
+}
+
+.admin-map-metric small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-map-metric strong {
+  color: #101828;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.admin-map-filter-row,
+.admin-map-tabs,
+.admin-map-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-map-filter-row {
+  align-items: center;
+}
+
+.admin-map-segment,
+.admin-map-tab {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 10px;
+  color: #344054;
+  background: #fff;
+  border: 1px solid rgba(208, 213, 221, 0.96);
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.admin-map-segment strong {
+  min-width: 22px;
+  padding: 2px 6px;
+  color: #175cd3;
+  background: #eff8ff;
+  border-radius: 999px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.admin-map-segment.is-active,
+.admin-map-tab.is-active {
+  color: #0f172a;
+  background: #eef4ff;
+  border-color: #84adff;
+}
+
+.admin-map-list-shell {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.admin-map-list-toolbar {
+  display: grid;
+  grid-template-columns: auto auto minmax(220px, 1fr);
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.96);
+}
+
+.admin-map-search {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.admin-map-search span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.admin-map-search input {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+
+.admin-map-list {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.admin-map-courier-list,
+.admin-map-pin-list {
+  height: 100%;
+}
+
+.admin-map-table-wrap {
+  height: 100%;
+  overflow: auto;
+}
+
+.admin-map-table {
+  min-width: 760px;
+  margin: 0;
+}
+
+.admin-map-table th,
+.admin-map-table td {
+  vertical-align: middle;
+}
+
+.admin-map-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+}
+
+.admin-map-table tr {
+  transition: background 140ms ease;
+}
+
+.admin-map-table tbody tr:hover,
+.admin-map-table tbody tr.is-active {
+  background: #f8fbff;
+}
+
+.admin-map-table td:first-child:has(input) {
+  width: 42px;
+  text-align: center;
+}
+
+.admin-map-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+
+.admin-map-table .history-status {
+  min-width: 0;
+}
+
+.admin-map-courier-empty {
+  margin: 10px;
+}
+
+@media (max-width: 720px) {
+  .admin-map-console {
+    height: min(78vh, 680px) !important;
+  }
+
+  .admin-map-metric-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-map-list-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .admin-map-tabs,
+  .admin-map-quick-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-map-quick-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

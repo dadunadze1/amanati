@@ -852,50 +852,59 @@ function renderAdminMapPanel() {
   const pins = state.activePins;
   const couriers = state.adminMapCouriers;
   const visiblePins = filterPinsForAdminMap(pins);
+  const scopePins = filterPinsForAdminMap(pins, { ignoreStatus: true });
   const filters = getAdminMapFilters();
-  const visibleCount = visiblePins.length;
+  const view = state.adminMapView === "pins" ? "pins" : "couriers";
   const selectedCount = filters.includeAllCouriers
     ? couriers.length
     : new Set(filters.selectedCouriers.map(normalizeUsername)).size;
+  const statusItems = [
+    { value: "all", label: "ყველა", count: scopePins.length },
+    { value: "pending", label: "პროცესში", count: scopePins.filter((pin) => pin.status === "pending").length },
+    { value: "delivered", label: "ჩაბარებული", count: scopePins.filter((pin) => pin.status === "delivered").length },
+    { value: "failed", label: "ვერ", count: scopePins.filter((pin) => pin.status === "failed").length },
+  ];
   const body = `
-    <div class="admin-map-panel-modern admin-map-dashboard">
-      <section class="admin-map-summary-grid admin-map-fixed-section" aria-label="რუკის შეჯამება">
-        ${renderAdminMapSummaryCard("სულ პინები", pins.length)}
-        ${renderAdminMapSummaryCard("ნაჩვენები", visibleCount)}
-        ${renderAdminMapSummaryCard("კურიერები", couriers.length)}
-        ${renderAdminMapSummaryCard("შერჩეული", selectedCount)}
-        ${renderAdminMapSummaryCard("ჩაბარებული", visiblePins.filter((pin) => pin.status === "delivered").length)}
-        ${renderAdminMapSummaryCard("პროცესში", visiblePins.filter((pin) => pin.status === "pending").length)}
-        ${renderAdminMapSummaryCard("ვერ ჩაბარებული", visiblePins.filter((pin) => pin.status === "failed").length)}
-        ${renderAdminMapSummaryCard("მიუბმელი", visiblePins.filter((pin) => !pin.courierUsername).length)}
-      </section>
-      <section class="admin-map-toolbar admin-map-fixed-section" aria-label="ფილტრები და სწრაფი მოქმედებები">
-        <div class="admin-map-chip-row" aria-label="სწრაფი მოქმედებები">
-          <button class="admin-map-chip ${filters.includeAllCouriers && filters.showUnassigned && filters.status === "all" ? "is-active" : ""}" type="button" data-action="showAllAdminPins">ყველა</button>
-          <button class="admin-map-chip ${!filters.includeAllCouriers && !filters.showUnassigned && !filters.selectedCouriers.length && filters.status === "all" ? "is-active" : ""}" type="button" data-action="hideAllAdminPins">არცერთი</button>
-          <button class="admin-map-chip ${!filters.includeAllCouriers && filters.showUnassigned && !filters.selectedCouriers.length && filters.status === "all" ? "is-active" : ""}" type="button" data-action="showUnassignedAdminPins">მიუბმელი</button>
-          <button class="admin-map-chip ${filters.includeAllCouriers ? "is-active" : ""}" type="button" data-action="adminMapToggleAllCouriers">ყველა კურიერი</button>
+    <div class="admin-map-panel-modern admin-map-dashboard admin-map-console">
+      <section class="admin-map-console-top" aria-label="რუკის კონტროლი">
+        <div class="admin-map-metric-strip" aria-label="რუკის შეჯამება">
+          ${renderAdminMapMetric("სულ", pins.length)}
+          ${renderAdminMapMetric("ნაჩვენები", visiblePins.length)}
+          ${renderAdminMapMetric("კურიერი", `${selectedCount}/${couriers.length}`)}
+          ${renderAdminMapMetric("პროცესში", visiblePins.filter((pin) => pin.status === "pending").length)}
+          ${renderAdminMapMetric("ჩაბარებული", visiblePins.filter((pin) => pin.status === "delivered").length)}
+          ${renderAdminMapMetric("მიუბმელი", visiblePins.filter((pin) => !pin.courierUsername).length)}
         </div>
-        <div class="admin-map-filter-grid" aria-label="სტატუსის ფილტრი">
-          ${["all", "pending", "delivered", "failed"].map((status) => `
-            <button class="admin-map-filter-card ${filters.status === status ? "is-active" : ""}" type="button" data-action="adminMapSetStatus" data-value="${escapeAttr(status)}">
-              <strong>${escapeHtml(status === "all" ? "ყველა სტატუსი" : status === "pending" ? "პროცესში" : status === "delivered" ? "ჩაბარებული" : "ვერ ჩაბარებული")}</strong>
+        <div class="admin-map-filter-row" aria-label="სტატუსის ფილტრი">
+          ${statusItems.map((item) => `
+            <button class="admin-map-segment ${filters.status === item.value ? "is-active" : ""}" type="button" data-action="adminMapSetStatus" data-value="${escapeAttr(item.value)}">
+              <span>${escapeHtml(item.label)}</span>
+              <strong>${escapeHtml(String(item.count))}</strong>
             </button>
           `).join("")}
+          <button class="admin-map-segment ${filters.showUnassigned && !filters.includeAllCouriers && !filters.selectedCouriers.length ? "is-active" : ""}" type="button" data-action="showUnassignedAdminPins">
+            <span>მიუბმელი</span>
+            <strong>${escapeHtml(String(pins.filter((pin) => !pin.courierUsername).length))}</strong>
+          </button>
         </div>
       </section>
-      <section class="admin-map-courier-grid admin-map-scroll-section">
-        <div class="admin-map-courier-grid-head">
-          <div>
-            <strong>კურიერები</strong>
-            <small>მონიშნე კურიერები, რომ რუკაზე მხოლოდ მათი პინები გამოჩნდეს</small>
+      <section class="admin-map-list-shell">
+        <div class="admin-map-list-toolbar">
+          <div class="admin-map-tabs" role="tablist" aria-label="რუკის სია">
+            <button class="admin-map-tab ${view === "couriers" ? "is-active" : ""}" type="button" data-action="adminMapSetView" data-value="couriers">კურიერები</button>
+            <button class="admin-map-tab ${view === "pins" ? "is-active" : ""}" type="button" data-action="adminMapSetView" data-value="pins">ამანათები</button>
           </div>
-          <label class="admin-map-courier-search" for="adminMapCourierSearch">
+          <div class="admin-map-quick-row">
+            <button class="mini-button" type="button" data-action="showAllAdminPins">ყველა</button>
+            <button class="mini-button" type="button" data-action="hideAllAdminPins">არცერთი</button>
+            <button class="mini-button" type="button" data-action="adminMapToggleAllCouriers">ყველა კურიერი</button>
+          </div>
+          <label class="admin-map-courier-search admin-map-search" for="adminMapCourierSearch">
             <span>ძებნა</span>
-            <input id="adminMapCourierSearch" type="search" autocomplete="off" placeholder="სახელი, ლოგინი ან ნომერი" value="${escapeAttr(state.adminMapCourierSearch || "")}">
+            <input id="adminMapCourierSearch" type="search" autocomplete="off" placeholder="${view === "pins" ? "მიმღები, მისამართი, კურიერი" : "სახელი, ლოგინი ან ნომერი"}" value="${escapeAttr(state.adminMapCourierSearch || "")}">
           </label>
         </div>
-        ${renderAdminMapCourierList(couriers, pins)}
+        ${view === "pins" ? renderAdminMapParcelList(visiblePins) : renderAdminMapCourierList(couriers, pins)}
       </section>
     </div>
   `;
@@ -953,7 +962,7 @@ function applyAdminMapFilters() {
 }
 
 
-function filterPinsForAdminMap(pins = state.activePins) {
+function filterPinsForAdminMap(pins = state.activePins, options = {}) {
   if (!state.isAdmin) return pins;
 
   const filters = getAdminMapFilters();
@@ -963,7 +972,7 @@ function filterPinsForAdminMap(pins = state.activePins) {
     const pinStatus = pin.status || "pending";
     const hasCourier = Boolean(pin.courierUsername);
 
-    if (filters.status !== "all" && pinStatus !== filters.status) return false;
+    if (!options.ignoreStatus && filters.status !== "all" && pinStatus !== filters.status) return false;
     if (!hasCourier) return Boolean(filters.showUnassigned);
     if (filters.includeAllCouriers) return true;
     if (!selected.size) return false;
@@ -982,7 +991,7 @@ function renderAdminMapCourierList(couriers, pins) {
     const normalized = normalizeUsername(courier.username);
     const isActive = filters.includeAllCouriers || selected.has(normalized);
     return `
-      <tr class="admin-map-courier-card ${isActive ? "is-active" : ""}" data-courier-search="${escapeAttr(getAdminMapCourierSearchText(courier))}" tabindex="0">
+      <tr class="admin-map-courier-card admin-map-searchable-row ${isActive ? "is-active" : ""}" data-admin-map-search="${escapeAttr(getAdminMapCourierSearchText(courier))}" tabindex="0">
         <td><input type="checkbox" name="adminMapCourierFilter" value="${escapeAttr(courier.username)}" ${isActive ? "checked" : ""}></td>
         <td>${renderAppTableText(userDisplayName(courier), `${courier.username}${courier.phone ? ` / ${courier.phone}` : ""}`)}</td>
         <td>${escapeHtml(String(stats.total))}</td>
@@ -994,31 +1003,78 @@ function renderAdminMapCourierList(couriers, pins) {
   });
 
   return `
-    <div class="admin-map-courier-list admin-map-courier-list--table">
-      ${renderAppListPanel({
-        title: "კურიერების ფილტრი",
-        badges: [`კურიერი: ${couriers.length}`],
-        headers: ["", "კურიერი", "აქტიური", "პროცესში", "ჩაბარებული", "ვერ ჩაბარებული"],
-        emptyMessage: "კურიერი ჯერ არ არის.",
-        rows: [
-          `
+    <div class="admin-map-list admin-map-courier-list">
+      <div class="partner-table-wrap admin-map-table-wrap">
+        <table class="partner-order-table admin-map-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>კურიერი</th>
+              <th>აქტიური</th>
+              <th>პროცესში</th>
+              <th>ჩაბარებული</th>
+              <th>ვერ</th>
+            </tr>
+          </thead>
+          <tbody>
             <tr class="admin-map-courier-toggle admin-map-courier-toggle-all ${filters.includeAllCouriers ? "is-active" : ""}" tabindex="0">
               <td><input id="adminMapAllCouriersToggle" type="checkbox" ${filters.includeAllCouriers ? "checked" : ""}></td>
               <td>${renderAppTableText("ყველა კურიერი", allCourierUsernames.length ? "ყველა კურიერის პინი გამოჩნდება" : "კურიერი არ არის")}</td>
               <td colspan="4">${renderAppStatusBadge(filters.includeAllCouriers ? "delivered" : "pending", filters.includeAllCouriers ? "ჩართულია" : "გამორთულია")}</td>
             </tr>
-          `,
-          `
             <tr class="admin-map-courier-toggle admin-map-courier-toggle-unassigned ${filters.showUnassigned ? "is-active" : ""}" tabindex="0">
               <td><input id="adminMapUnassignedToggle" type="checkbox" ${filters.showUnassigned ? "checked" : ""}></td>
               <td>${renderAppTableText("მიუბმელი", "მხოლოდ მიუბმელი პინები")}</td>
               <td colspan="4">${renderAppStatusBadge(filters.showUnassigned ? "delivered" : "pending", filters.showUnassigned ? "ჩართულია" : "გამორთულია")}</td>
             </tr>
-          `,
-          ...courierRows,
-        ],
-      })}
+            ${courierRows.join("") || `<tr><td colspan="6">კურიერი ჯერ არ არის.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
       <p class="history-empty admin-map-courier-empty" hidden>კურიერი ვერ მოიძებნა.</p>
+    </div>
+  `;
+}
+
+
+function renderAdminMapParcelList(pins) {
+  const sortedPins = [...pins].sort((a, b) => {
+    const statusDiff = getStatusSortValue(a.status) - getStatusSortValue(b.status);
+    if (statusDiff) return statusDiff;
+    return String(a.fullName || "").localeCompare(String(b.fullName || ""), "ka");
+  });
+  const rows = sortedPins.map((pin) => {
+    const address = typeof getParcelAddress === "function" ? getParcelAddress(pin) : (pin.address || pin.fullAddress || STRINGS.addressMissing);
+    return `
+      <tr class="admin-map-pin-row admin-map-searchable-row" data-admin-map-search="${escapeAttr(getAdminMapPinSearchText(pin, address))}">
+        <td>${renderAppTableText(pin.fullName || "უსახელო", pin.phone || "ტელეფონი არ არის")}</td>
+        <td>${escapeHtml(address || STRINGS.addressMissing)}</td>
+        <td>${renderAppTableText(parcelCourierDisplayName(pin), pin.courierUsername || "მიუბმელი")}</td>
+        <td>${renderAppStatusBadge(pin.status, getStatusLabel(pin.status))}</td>
+        <td>${escapeHtml(formatMoney(getPaymentAmount(pin)))}</td>
+        <td><button class="mini-button" type="button" data-action="focusAdminPin" data-value="${escapeAttr(pin.id)}">რუკა</button></td>
+      </tr>
+    `;
+  });
+
+  return `
+    <div class="admin-map-list admin-map-pin-list">
+      <div class="partner-table-wrap admin-map-table-wrap">
+        <table class="partner-order-table admin-map-table">
+          <thead>
+            <tr>
+              <th>მიმღები</th>
+              <th>მისამართი</th>
+              <th>კურიერი</th>
+              <th>სტატუსი</th>
+              <th>ქეში</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows.join("") || `<tr><td colspan="6">ამ ფილტრში ამანათი არ არის.</td></tr>`}</tbody>
+        </table>
+      </div>
+      <p class="history-empty admin-map-courier-empty" hidden>ჩანაწერი ვერ მოიძებნა.</p>
     </div>
   `;
 }
@@ -1035,6 +1091,22 @@ function getAdminMapCourierSearchText(courier) {
 }
 
 
+function getAdminMapPinSearchText(pin, address = "") {
+  return normalizeAdminMapCourierSearch([
+    pin.id,
+    pin.fullName,
+    pin.phone,
+    address,
+    pin.address,
+    pin.fullAddress,
+    pin.courierUsername,
+    parcelCourierDisplayName(pin),
+    pin.partnerName,
+    getStatusLabel(pin.status),
+  ].filter(Boolean).join(" "));
+}
+
+
 function normalizeAdminMapCourierSearch(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -1042,12 +1114,12 @@ function normalizeAdminMapCourierSearch(value) {
 
 function applyAdminMapCourierSearch() {
   const query = normalizeAdminMapCourierSearch(state.adminMapCourierSearch);
-  const cards = [...document.querySelectorAll(".admin-map-courier-card[data-courier-search]")];
+  const rows = [...document.querySelectorAll(".admin-map-searchable-row[data-admin-map-search]")];
   let visibleCount = 0;
 
-  cards.forEach((card) => {
-    const isVisible = !query || (card.dataset.courierSearch || "").includes(query);
-    card.hidden = !isVisible;
+  rows.forEach((row) => {
+    const isVisible = !query || (row.dataset.adminMapSearch || "").includes(query);
+    row.hidden = !isVisible;
     if (isVisible) visibleCount += 1;
   });
 
@@ -1063,6 +1135,16 @@ function renderAdminMapCardMetrics(stats) {
       <span><b>${stats.pending}</b><small>პროცესში</small></span>
       <span><b>${stats.delivered}</b><small>ჩაბარებული</small></span>
       <span><b>${stats.failed}</b><small>ვერ ჩაბარებული</small></span>
+    </span>
+  `;
+}
+
+
+function renderAdminMapMetric(label, value) {
+  return `
+    <span class="admin-map-metric">
+      <small>${escapeHtml(label)}</small>
+      <strong>${escapeHtml(value)}</strong>
     </span>
   `;
 }
@@ -1167,6 +1249,12 @@ function adminMapToggleCourier(username) {
 function adminMapSetStatus(status) {
   if (!["all", "pending", "delivered", "failed"].includes(status)) return;
   setAdminMapFilters({ status });
+  refreshAdminMapPanel();
+}
+
+
+function adminMapSetView(view) {
+  state.adminMapView = view === "pins" ? "pins" : "couriers";
   refreshAdminMapPanel();
 }
 

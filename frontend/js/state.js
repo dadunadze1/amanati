@@ -18,6 +18,7 @@ const state = {
     showUnassigned: true,
     status: "all",
   },
+  adminMapView: "couriers",
   adminMapCourierSearch: "",
   currentPosition: { lat: CONFIG.center[0], lng: CONFIG.center[1] },
   hasCurrentPosition: false,

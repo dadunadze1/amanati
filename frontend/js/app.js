@@ -642,6 +642,7 @@ async function handleAction(action, value, sourceElement) {
     resetPayAdjustment: () => resetPayAdjustment(value),
     assignSelectedPins: assignSelectedPins,
     adminMapSetStatus: () => adminMapSetStatus(value),
+    adminMapSetView: () => adminMapSetView(value),
     adminMapToggleAllCouriers,
     adminMapToggleUnassigned,
     showAllAdminPins,
