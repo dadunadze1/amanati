@@ -529,6 +529,36 @@ function getStaticRetentionParcelDateKey(parcel) {
   return normalizeDateKey(parcel?.archivedAt || parcel?.completedAt || parcel?.deliveredAt || parcel?.failedAt || parcel?.updatedAt || parcel?.createdAt);
 }
 
+function getStaticParcelSearchDateKeys(parcel) {
+  return [parcel?.createdAt, parcel?.assignedAt, parcel?.completedAt, parcel?.deliveredAt, parcel?.failedAt, parcel?.updatedAt, parcel?.archivedAt]
+    .map(normalizeDateKey)
+    .filter(Boolean);
+}
+
+function staticParcelMatchesDateSearchFilter(parcel, dateFrom, dateTo) {
+  const start = normalizeDateKey(dateFrom);
+  const end = normalizeDateKey(dateTo);
+  if (!start && !end) return true;
+  const rangeStart = start && end ? (start <= end ? start : end) : (start || end);
+  const rangeEnd = start && end ? (start <= end ? end : start) : (end || start);
+  return getStaticParcelSearchDateKeys(parcel).some((dateKey) => dateKey >= rangeStart && dateKey <= rangeEnd);
+}
+
+function staticParcelMatchesSearchFilters(parcel, filters = {}) {
+  if (filters.status && parcel?.status !== filters.status) return false;
+  if (filters.courier && normalizeUsername(parcel?.courierUsername) !== normalizeUsername(filters.courier)) return false;
+  return staticParcelMatchesDateSearchFilter(parcel, filters.dateFrom, filters.dateTo);
+}
+
+function getStaticParcelSearchFilters(url) {
+  return {
+    status: String(url.searchParams.get("status") || "").trim(),
+    courier: String(url.searchParams.get("courier") || "").trim(),
+    dateFrom: String(url.searchParams.get("dateFrom") || "").trim(),
+    dateTo: String(url.searchParams.get("dateTo") || "").trim(),
+  };
+}
+
 function isStaticRetentionParcelExpired(parcel, cutoffDate) {
   const dateKey = getStaticRetentionParcelDateKey(parcel);
   return Boolean(dateKey && cutoffDate && dateKey < cutoffDate);
@@ -1126,11 +1156,13 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/parcels/search") {
     const query = String(url.searchParams.get("q") || "").toLowerCase();
+    const filters = getStaticParcelSearchFilters(url);
     const records = [...store.parcels, ...store.history];
     return {
       parcels: records
         .filter((parcel) => !isStaticDeletedParcel(parcel))
         .filter((parcel) => !query || [parcel.fullName, parcel.phone, parcel.address, parcel.courierUsername, parcel.status].some((value) => String(value || "").toLowerCase().includes(query)))
+        .filter((parcel) => staticParcelMatchesSearchFilters(parcel, filters))
         .map((parcel) => publicStaticParcel(store, parcel)),
     };
   }
@@ -1549,8 +1581,13 @@ async function getHistory(username) {
   return (await api(`/api/history${query}`)).history;
 }
 
-async function searchParcels(query) {
-  return (await api(`/api/parcels/search?q=${encodeURIComponent(query || "")}`)).parcels;
+async function searchParcels(query, filters = {}) {
+  const params = new URLSearchParams();
+  params.set("q", query || "");
+  ["status", "dateFrom", "dateTo", "courier", "limit"].forEach((key) => {
+    if (filters[key]) params.set(key, filters[key]);
+  });
+  return (await api(`/api/parcels/search?${params.toString()}`)).parcels;
 }
 
 async function deleteParcel(parcelId, reason = "", expectedUpdatedAt = "") {

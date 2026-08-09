@@ -30,10 +30,10 @@ async function refreshPins() {
 
 async function refreshPinsOnce() {
   const selectedPinId = state.selectedPinId;
-  clearAdminMapPins();
-  state.activePins = [];
 
   if (!state.currentUser || !state.map) {
+    clearAdminMapPins();
+    state.activePins = [];
     hideSelectedParcelCard();
     await renderCourierStatsCard([]);
     await renderAdminDashboard([]);

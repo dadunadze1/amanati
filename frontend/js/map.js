@@ -13,6 +13,7 @@ const LOGIN_VIEWPORT_ENFORCE_DELAYS = [0, 80, 220, 520, 1000, 1600];
 
 async function initializeMap() {
   state.markers = [];
+  state.mapPinRenderSignature = "";
 
   if (!window.L) {
     showDialog("რუკა ვერ ჩაიტვირთა", `<p>რუკის ბიბლიოთეკა ვერ ჩაიტვირთა.</p>`, [
@@ -164,13 +165,50 @@ function bindMapResizeInvalidation() {
 
 
 function renderParcelMarkers(pins) {
-  getClusteredPinGroups(pins).forEach((group) => {
+  const visiblePins = Array.isArray(pins) ? pins : [];
+  const signature = getMapPinRenderSignature(visiblePins);
+  if (signature && signature === state.mapPinRenderSignature) return;
+  clearParcelOverlays();
+  state.mapPinRenderSignature = signature;
+
+  getClusteredPinGroups(visiblePins).forEach((group) => {
     if (group.length > 1) {
       renderPinCluster(group);
       return;
     }
     renderSinglePinMarker(group[0]);
   });
+}
+
+
+function getMapPinRenderSignature(pins) {
+  const expandedLabels = Array.isArray(state.expandedPinLabels)
+    ? state.expandedPinLabels.join(",")
+    : "";
+  const zoom = state.map ? getMapZoom() : "";
+  const role = state.isAdmin ? "admin" : state.isPartner ? "partner" : "courier";
+  return [
+    role,
+    zoom,
+    state.selectedPinId || "",
+    expandedLabels,
+    pins.map((pin) => [
+      pin?.id || "",
+      Number(pin?.lat ?? pin?.latitude ?? 0).toFixed(6),
+      Number(pin?.lng ?? pin?.longitude ?? 0).toFixed(6),
+      pin?.status || "",
+      pin?.locationAccuracy || "",
+      pin?.courierUsername || "",
+      pin?.partnerId || "",
+      pin?.fullName || "",
+      pin?.phone || "",
+      pin?.address || pin?.fullAddress || "",
+      getPaymentAmount(pin),
+      pin?.updatedAt || "",
+      pin?.archivedAt || "",
+      pin?.deletedAt || "",
+    ].join("~")).join("|"),
+  ].join("||");
 }
 
 
@@ -384,7 +422,6 @@ function collapseDeliveredPinLabels() {
 
 function rerenderCurrentMapPins() {
   if (!state.map) return;
-  clearAdminMapPins();
   const visiblePins = typeof getVisiblePinsForCurrentRole === "function"
     ? getVisiblePinsForCurrentRole(state.activePins)
     : state.activePins;
@@ -484,6 +521,7 @@ function addParcelOverlay(overlay) {
 function clearParcelOverlays() {
   (state.markers || []).forEach(clearMapObject);
   state.markers = [];
+  state.mapPinRenderSignature = "";
 }
 
 

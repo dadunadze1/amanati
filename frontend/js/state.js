@@ -3,6 +3,7 @@
 const state = {
   map: null,
   markers: null,
+  mapPinRenderSignature: "",
   mapViewportResetPending: false,
   mapViewportResetToken: 0,
   currentUser: null,

@@ -796,6 +796,42 @@ function parcelSearchHaystack(db, parcel) {
   return values.filter(Boolean).join(" ").toLowerCase();
 }
 
+function getParcelSearchDateKeys(parcel) {
+  return [
+    parcel.createdAt,
+    parcel.assignedAt,
+    parcel.completedAt,
+    parcel.deliveredAt,
+    parcel.failedAt,
+    parcel.updatedAt,
+    parcel.archivedAt,
+  ].map(toDateKey).filter(Boolean);
+}
+
+function parcelMatchesDateSearchFilter(parcel, dateFrom, dateTo) {
+  const start = toDateKey(dateFrom);
+  const end = toDateKey(dateTo);
+  if (!start && !end) return true;
+  const rangeStart = start && end ? (start <= end ? start : end) : (start || end);
+  const rangeEnd = start && end ? (start <= end ? end : start) : (end || start);
+  return getParcelSearchDateKeys(parcel).some((dateKey) => dateKey >= rangeStart && dateKey <= rangeEnd);
+}
+
+function parcelMatchesSearchFilters(parcel, filters = {}) {
+  if (filters.status && parcel.status !== filters.status) return false;
+  if (filters.courier && normalizeUsername(parcel.courierUsername) !== normalizeUsername(filters.courier)) return false;
+  return parcelMatchesDateSearchFilter(parcel, filters.dateFrom, filters.dateTo);
+}
+
+function getParcelSearchFilters(url) {
+  return {
+    status: String(url.searchParams.get("status") || "").trim(),
+    courier: String(url.searchParams.get("courier") || "").trim(),
+    dateFrom: String(url.searchParams.get("dateFrom") || "").trim(),
+    dateTo: String(url.searchParams.get("dateTo") || "").trim(),
+  };
+}
+
 function toDateKey(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -1712,11 +1748,12 @@ async function handleApi(request, response, url) {
   if (method === "GET" && path === "/api/parcels/search") {
     requireAdmin(request);
     const query = String(url.searchParams.get("q") || "").trim().toLowerCase();
+    const filters = getParcelSearchFilters(url);
     const parcels = db.parcels.filter((parcel) => {
       if (isDeletedParcel(parcel)) return false;
       if (!query) return true;
       return parcelSearchHaystack(db, parcel).includes(query);
-    });
+    }).filter((parcel) => parcelMatchesSearchFilters(parcel, filters));
     sendJson(response, 200, { parcels: parcels.map((parcel) => publicParcel(db, parcel)) });
     return;
   }
@@ -1752,9 +1789,17 @@ async function handleStatic(request, response, url) {
   }
   response.writeHead(200, {
     "Content-Type": contentTypes.get(extname(contentPath)) || "application/octet-stream",
-    "Cache-Control": "no-store",
+    "Cache-Control": getStaticCacheControl(contentPath, url),
   });
   response.end(content);
+}
+
+function getStaticCacheControl(filePath, url) {
+  const extension = extname(filePath);
+  if (extension === ".html") return "no-store";
+  if ([".js", ".css"].includes(extension) && url.search) return "public, max-age=31536000, immutable";
+  if ([".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"].includes(extension)) return "public, max-age=604800";
+  return "no-store";
 }
 
 function isPushAppShellRoute(pathname) {

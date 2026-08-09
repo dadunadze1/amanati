@@ -76,7 +76,7 @@ async function searchParcelHistory() {
   if (message) message.textContent = "";
   if (results) results.innerHTML = "<p class=\"history-empty\">ისტორია იტვირთება...</p>";
   try {
-    const parcels = (await searchParcels(query))
+    const parcels = (await searchParcels(query, { status, dateFrom, dateTo, courier }))
       .filter((parcel) => parcelMatchesHistoryFilters(parcel, { status, dateFrom, dateTo, courier }))
       .sort(sortParcelHistoryRecords);
     state.historySearchResults = parcels;
