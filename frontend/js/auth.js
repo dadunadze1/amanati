@@ -116,6 +116,11 @@ function completeLogin(payload) {
         console.warn("Push initialization failed", error);
       });
     }
+    if (typeof openInitialPushRouteIfNeeded === "function") {
+      openInitialPushRouteIfNeeded().catch((error) => {
+        console.warn("Initial push route failed", error);
+      });
+    }
     scheduleMapInvalidateSize(0);
     scheduleMapInvalidateSize(120);
     scheduleMidnightRefresh();

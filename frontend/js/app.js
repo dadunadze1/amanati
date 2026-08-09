@@ -104,7 +104,6 @@ function renderActions() {
         ["adminCouriers", "კურიერები", "◎", "სია, რეგისტრაცია, ზონები და სტატისტიკა"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
         ["adminPartnersHub", "პარტნიორები", "◫", "პარტნიორები და შეკვეთები"],
-        ["adminPartnerInbox", "ფოსტა", "✉", "წერილები და ფუშები"],
       ],
     },
     {
@@ -113,6 +112,7 @@ function renderActions() {
         state.adminDashboardHidden
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
+        ["pushInbox", "ფუშები", "✉", "გაგზავნილი შეტყობინებები"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
@@ -121,7 +121,6 @@ function renderActions() {
   ];
   const partnerActions = [
     ["partnerNewOrder", "ახალი", "+"],
-    ["partnerInbox", "ინბოქსი", "✉"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
@@ -235,7 +234,6 @@ function openAdminPartnersHub() {
       <section class="finance-section finance-flow-grid">
         ${renderAdminHubAction("adminPartners", "პარტნიორები", "◫", "პარტნიორი ანგარიშები და ქეში")}
         ${renderAdminHubAction("adminPartnerOrders", "შეკვეთები", "▣", "პარტნიორის შეკვეთების სია")}
-        ${renderAdminHubAction("adminPartnerInbox", "ფოსტა", "✉", "წერილები და ფუშები")}
       </section>
     `,
   });
@@ -562,6 +560,32 @@ function closeAdminPinContext() {
 }
 
 
+function getInitialPushRouteIntent() {
+  const parts = [];
+  try {
+    parts.push(...decodeURIComponent(window.location.pathname || "").split("/"));
+  } catch {
+    parts.push(...String(window.location.pathname || "").split("/"));
+  }
+  parts.push(String(window.location.hash || "").replace(/^#\/?/, ""));
+  const queryView = new URLSearchParams(window.location.search || "").get("view") || "";
+  if (queryView) parts.push(queryView);
+
+  const route = parts
+    .map((part) => String(part || "").trim().toLowerCase())
+    .filter(Boolean)
+    .filter((part) => !["amanati", "frontend", "index.html"].includes(part))
+    .pop() || "";
+  return ["push", "pushes", "notifications", "notification", "ფუში", "ფუშები"].includes(route);
+}
+
+
+async function openInitialPushRouteIfNeeded() {
+  if (!state.isAdmin || !state.currentUser || !getInitialPushRouteIntent()) return;
+  await openPushInboxDialog();
+}
+
+
 async function handleAction(action, value, sourceElement) {
   closeActions();
   closeAdminPinContextForAction(action);
@@ -570,7 +594,7 @@ async function handleAction(action, value, sourceElement) {
     pending: openPendingRequests,
     adminRegister: openAdminRegisterDialog,
     adminStats: openAdminStatsUsers,
-    pushInbox: () => openAdminPartnerInbox("push"),
+    pushInbox: openPushInboxDialog,
     liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
     adminParcels: openAdminParcelsHub,
@@ -583,8 +607,6 @@ async function handleAction(action, value, sourceElement) {
     adminDailyBalance: openAdminDailyBalance,
     adminPartners: openPartnerManagement,
     adminPartnerOrders: openAdminPartnerOrders,
-    adminPartnerInbox: openAdminPartnerInbox,
-    adminPartnerInboxTab: () => openAdminPartnerInbox(value),
     addParcel: openAdminAddParcel,
     adminCloseDay: openAdminCloseDay,
     parcelHistory: openParcelHistorySearch,
@@ -610,11 +632,6 @@ async function handleAction(action, value, sourceElement) {
     partnerDashboard: renderPartnerDashboard,
     partnerNewOrder: openPartnerNewOrderDialog,
     partnerOrders: openPartnerOrdersDialog,
-    partnerInbox: openPartnerInbox,
-    openPartnerInboxMessage: () => openPartnerInboxMessage(value),
-    sendAdminPartnerInboxMessage,
-    clearPartnerInbox,
-    deletePartnerInboxMessage: () => removePartnerInboxMessage(value),
     createPartner: openPartnerCreateDialog,
     editPartner: () => openPartnerEditDialog(value),
     togglePartnerStatus: () => togglePartnerStatus(value),

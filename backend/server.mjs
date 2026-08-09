@@ -45,7 +45,6 @@ const DEFAULT_TARIFFS = {
 };
 const DATA_RETENTION_MONTHS = 8;
 const PARTNER_ORDER_RETENTION_MONTHS = 1;
-const PARTNER_INBOX_RETENTION_DAYS = 15;
 
 // Zone configuration lives here so future boundary changes are one small edit.
 // Polygon points are [lat, lng] and are checked with a standard point-in-polygon test.
@@ -268,66 +267,6 @@ function getDailyBalanceLedger(db) {
 function setDailyBalanceLedger(db, entries) {
   db.settings = db.settings && typeof db.settings === "object" ? db.settings : {};
   db.settings.dailyBalanceLedger = Array.isArray(entries) ? entries : [];
-}
-
-function getPartnerInboxMessages(db) {
-  const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
-  return Array.isArray(settings.partnerInboxMessages) ? settings.partnerInboxMessages : [];
-}
-
-function setPartnerInboxMessages(db, messages) {
-  db.settings = db.settings && typeof db.settings === "object" ? db.settings : {};
-  db.settings.partnerInboxMessages = Array.isArray(messages) ? messages : [];
-}
-
-function addDaysIso(value, days) {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() + Number(days || 0));
-  return date.toISOString();
-}
-
-function isPartnerInboxExpired(message, referenceDate = new Date()) {
-  const expiresAt = Date.parse(message?.expiresAt || addDaysIso(message?.createdAt, PARTNER_INBOX_RETENTION_DAYS));
-  return Number.isFinite(expiresAt) && expiresAt <= referenceDate.getTime();
-}
-
-function publicPartnerInboxMessage(message) {
-  const targetType = message.targetType === "all" ? "all" : "partner";
-  return {
-    id: message.id || "",
-    targetType,
-    partnerUsername: targetType === "all" ? "" : message.partnerUsername || "",
-    partnerId: targetType === "all" ? "" : message.partnerId || "",
-    partnerName: targetType === "all" ? "ყველა პარტნიორი" : message.partnerName || message.partnerUsername || "",
-    message: message.message || "",
-    createdAt: message.createdAt || "",
-    createdBy: message.createdBy || "",
-    expiresAt: message.expiresAt || addDaysIso(message.createdAt, PARTNER_INBOX_RETENTION_DAYS),
-    readBy: Array.isArray(message.readBy) ? message.readBy : [],
-    deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
-  };
-}
-
-function prunePartnerInboxMessages(db, referenceDate = new Date()) {
-  const before = getPartnerInboxMessages(db).map(publicPartnerInboxMessage);
-  const active = before.filter((message) => !isPartnerInboxExpired(message, referenceDate));
-  setPartnerInboxMessages(db, active);
-  return before.length - active.length;
-}
-
-function partnerInboxMessageBelongsTo(message, partner) {
-  if (!message || !partner) return false;
-  if (message.targetType === "all") return true;
-  return Boolean(
-    (message.partnerId && partner.id && String(message.partnerId) === String(partner.id))
-    || normalizeUsername(message.partnerUsername) === normalizeUsername(partner.username)
-  );
-}
-
-function isPartnerInboxMessageHiddenFor(message, username) {
-  const normalized = normalizeUsername(username);
-  return (Array.isArray(message.deletedFor) ? message.deletedFor : []).some((item) => normalizeUsername(item) === normalized);
 }
 
 function cleanTariffMoney(value, fallback = 0) {
@@ -1158,115 +1097,6 @@ async function handleApi(request, response, url) {
     return;
   }
 
-  if (method === "GET" && path === "/api/partner-inbox/messages") {
-    const session = requireSession(request);
-    prunePartnerInboxMessages(db);
-    const messages = getPartnerInboxMessages(db).map(publicPartnerInboxMessage);
-    if (session.role === "admin") {
-      const partnerFilter = normalizeUsername(url.searchParams.get("partner") || "");
-      sendJson(response, 200, {
-        messages: messages
-          .filter((message) => !partnerFilter || message.targetType === "all" || normalizeUsername(message.partnerUsername) === partnerFilter)
-          .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
-      });
-      return;
-    }
-    if (session.role === "partner") {
-      const partner = findUser(db, session.username);
-      sendJson(response, 200, {
-        messages: messages
-          .filter((message) => partnerInboxMessageBelongsTo(message, partner))
-          .filter((message) => !isPartnerInboxMessageHiddenFor(message, session.username))
-          .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
-      });
-      return;
-    }
-    sendJson(response, 200, { messages: [] });
-    return;
-  }
-
-  if (method === "POST" && path === "/api/partner-inbox/messages") {
-    const session = requireAdmin(request);
-    const body = await readJsonBody(request);
-    const targetType = body.targetType === "all" || !body.partnerUsername ? "all" : "partner";
-    const messageText = String(body.message || "").trim();
-    if (!messageText) throw httpError(400, "შეტყობინების ტექსტი აუცილებელია.");
-    if (messageText.length > 4000) throw httpError(400, "შეტყობინება ძალიან გრძელია.");
-
-    const partner = targetType === "partner" ? findPartnerByIdOrUsername(db, body.partnerId || body.partnerUsername) : null;
-    if (targetType === "partner" && !partner) throw httpError(404, "პარტნიორი ვერ მოიძებნა.");
-
-    prunePartnerInboxMessages(db);
-    const now = new Date().toISOString();
-    const message = publicPartnerInboxMessage({
-      id: body.id || randomBytes(12).toString("hex"),
-      targetType,
-      partnerUsername: partner?.username || "",
-      partnerId: partner ? partnerCashIdentity(partner) : "",
-      partnerName: partner ? partnerDisplayName(partner) : "ყველა პარტნიორი",
-      message: messageText,
-      createdAt: now,
-      createdBy: session.username,
-      expiresAt: addDaysIso(now, PARTNER_INBOX_RETENTION_DAYS),
-      readBy: [],
-      deletedFor: [],
-    });
-    setPartnerInboxMessages(db, [message, ...getPartnerInboxMessages(db).map(publicPartnerInboxMessage)]);
-    await writeDb(db);
-    sendJson(response, 201, { message });
-    return;
-  }
-
-  const partnerInboxMessageMatch = path.match(/^\/api\/partner-inbox\/messages\/([^/]+)$/);
-  if (partnerInboxMessageMatch && method === "POST") {
-    const session = requireSession(request);
-    if (session.role !== "partner") throw httpError(403, "წვდომა აკრძალულია.");
-    prunePartnerInboxMessages(db);
-    const id = decodeURIComponent(partnerInboxMessageMatch[1]);
-    const messages = getPartnerInboxMessages(db).map(publicPartnerInboxMessage);
-    const message = messages.find((item) => item.id === id);
-    const partner = findUser(db, session.username);
-    if (!message || !partnerInboxMessageBelongsTo(message, partner)) throw httpError(404, "შეტყობინება ვერ მოიძებნა.");
-    const readBy = new Set(message.readBy.map(normalizeUsername));
-    readBy.add(normalizeUsername(session.username));
-    message.readBy = [...readBy];
-    setPartnerInboxMessages(db, messages);
-    await writeDb(db);
-    sendJson(response, 200, { message });
-    return;
-  }
-
-  if (method === "POST" && path === "/api/partner-inbox/clear") {
-    const session = requireSession(request);
-    if (session.role !== "partner") throw httpError(403, "წვდომა აკრძალულია.");
-    prunePartnerInboxMessages(db);
-    const partner = findUser(db, session.username);
-    const normalizedUsername = normalizeUsername(session.username);
-    let hidden = 0;
-    const messages = getPartnerInboxMessages(db).map(publicPartnerInboxMessage).map((message) => {
-      if (!partnerInboxMessageBelongsTo(message, partner) || isPartnerInboxMessageHiddenFor(message, session.username)) return message;
-      message.deletedFor = [...new Set([...message.deletedFor.map(normalizeUsername), normalizedUsername])];
-      hidden += 1;
-      return message;
-    });
-    setPartnerInboxMessages(db, messages);
-    await writeDb(db);
-    sendJson(response, 200, { ok: true, hidden });
-    return;
-  }
-
-  if (partnerInboxMessageMatch && method === "DELETE") {
-    requireAdmin(request);
-    const id = decodeURIComponent(partnerInboxMessageMatch[1]);
-    prunePartnerInboxMessages(db);
-    const before = getPartnerInboxMessages(db).map(publicPartnerInboxMessage);
-    const messages = before.filter((message) => message.id !== id);
-    setPartnerInboxMessages(db, messages);
-    await writeDb(db);
-    sendJson(response, 200, { ok: true, deleted: before.length - messages.length });
-    return;
-  }
-
   if (method === "GET" && path === "/api/partner-cash-adjustments") {
     const session = requireSession(request);
     const adjustments = getPartnerCashAdjustments(db).map(publicPartnerCashAdjustment);
@@ -1831,7 +1661,6 @@ async function handleApi(request, response, url) {
 
     const beforeParcels = db.parcels.length;
     const beforePartnerCashAdjustments = getPartnerCashAdjustments(db).length;
-    const deletedPartnerInboxMessages = prunePartnerInboxMessages(db);
     db.parcels = db.parcels.filter((parcel) => {
       if (!parcel.archivedAt) return true;
       const retentionCutoff = isPartnerParcel(parcel) && partnerOrderCutoffDate ? partnerOrderCutoffDate : cutoffDate;
@@ -1853,7 +1682,6 @@ async function handleApi(request, response, url) {
       deletedParcels: beforeParcels - db.parcels.length,
       deletedCashAdjustments: 0,
       deletedPartnerCashAdjustments: beforePartnerCashAdjustments - getPartnerCashAdjustments(db).length,
-      deletedPartnerInboxMessages,
       deletedPayAdjustments: 0,
       cutoffDate,
       retentionMonths: db.settings.retentionMonths,
@@ -1913,12 +1741,26 @@ async function handleStatic(request, response, url) {
     return;
   }
 
-  const content = await readFile(filePath);
+  let content;
+  let contentPath = filePath;
+  try {
+    content = await readFile(filePath);
+  } catch (error) {
+    if (error.code !== "ENOENT" || !isPushAppShellRoute(url.pathname)) throw error;
+    contentPath = resolve(frontendRoot, "index.html");
+    content = await readFile(contentPath);
+  }
   response.writeHead(200, {
-    "Content-Type": contentTypes.get(extname(filePath)) || "application/octet-stream",
+    "Content-Type": contentTypes.get(extname(contentPath)) || "application/octet-stream",
     "Cache-Control": "no-store",
   });
   response.end(content);
+}
+
+function isPushAppShellRoute(pathname) {
+  const routePath = String(pathname || "").replace(/\/+$/, "");
+  const route = routePath.split("/").filter(Boolean).pop() || "";
+  return ["push", "pushes", "notifications", "notification", "ფუში", "ფუშები"].includes(route.toLowerCase());
 }
 
 const server = createServer(async (request, response) => {

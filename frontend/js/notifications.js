@@ -10,7 +10,6 @@ const PUSH_NOTIFICATION_TITLE_PREFIXES = {
   created: "🛵",
   assigned: "🛵",
   failed: "🚨",
-  message: "✉",
 };
 
 function canUseAdminPush() {
@@ -472,40 +471,6 @@ function buildParcelAssignedNotification(parcel, courierUsername) {
     pageUrl: "./",
     eventKey: `${parcel.id || "parcel"}-assigned-${courierUsername || parcel.courierUsername || "courier"}`,
   };
-}
-
-
-function buildPartnerInboxNotification(message = {}) {
-  const targetType = message.targetType === "all" ? "all" : "partner";
-  const partnerId = targetType === "all" ? "" : String(message.partnerId || message.partnerUsername || "").trim();
-  const partnerUsername = targetType === "all" ? "" : String(message.partnerUsername || "").trim();
-  const createdAt = message.createdAt || new Date().toISOString();
-  return {
-    type: "partner_inbox",
-    status: "message",
-    recipientRoles: ["partner"],
-    title: formatPushNotificationTitle("message", "თქვენ გაქვთ ახალი წერილი"),
-    body: getPartnerInboxPushBody(message),
-    parcelId: "",
-    address: "",
-    fullName: "",
-    failureReason: "",
-    partnerId,
-    partnerUsername,
-    partnerName: String(message.partnerName || "").trim(),
-    courierUsername: "",
-    createdBy: state.currentUser || "",
-    createdByRole: state.currentUserProfile?.role || "",
-    pageUrl: "./",
-    eventKey: `${message.id || "partner-inbox"}-message-${createdAt}`,
-  };
-}
-
-
-function getPartnerInboxPushBody(message = {}) {
-  const text = String(message.message || "").replace(/\s+/g, " ").trim();
-  if (!text) return "ადმინის შეტყობინება";
-  return text.length > 120 ? `${text.slice(0, 120)}...` : text;
 }
 
 function formatPushNotificationTitle(status, title) {
