@@ -612,6 +612,8 @@ async function handleAction(action, value, sourceElement) {
     partnerOrders: openPartnerOrdersDialog,
     partnerInbox: openPartnerInbox,
     openPartnerInboxMessage: () => openPartnerInboxMessage(value),
+    sendAdminPartnerInboxMessage,
+    clearPartnerInbox,
     deletePartnerInboxMessage: () => removePartnerInboxMessage(value),
     createPartner: openPartnerCreateDialog,
     editPartner: () => openPartnerEditDialog(value),

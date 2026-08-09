@@ -430,7 +430,7 @@ async function savePartnerOrder() {
 function getPartnerInboxSnippet(message = {}) {
   const text = String(message.message || "").replace(/\s+/g, " ").trim();
   if (!text) return "ცარიელი შეტყობინება";
-  return text.length > 96 ? `${text.slice(0, 96)}...` : text;
+  return text.length > 78 ? `${text.slice(0, 78)}...` : text;
 }
 
 
@@ -477,11 +477,12 @@ function renderPartnerInboxList(messages, options = {}) {
       renderPartnerInboxCell("თარიღი", escapeHtml(formatOptionalDateTime(message.createdAt))),
       renderPartnerInboxCell("ვადა", escapeHtml(getPartnerInboxDaysLeft(message) || "15 დღე")),
       renderPartnerInboxCell("სტატუსი", renderAppStatusBadge(read || isAdminList ? "delivered" : "pending", status)),
-      isAdminList ? renderPartnerInboxCell("მოქმედება", `
+      renderPartnerInboxCell("მოქმედება", `
         <div class="row-actions partner-inbox-actions">
-          <button class="mini-button danger" type="button" data-action="deletePartnerInboxMessage" data-value="${escapeAttr(message.id)}">წაშლა</button>
+          <button class="mini-button" type="button" data-action="openPartnerInboxMessage" data-value="${escapeAttr(message.id)}">გახსნა</button>
+          ${isAdminList ? `<button class="mini-button danger" type="button" data-action="deletePartnerInboxMessage" data-value="${escapeAttr(message.id)}">წაშლა</button>` : ""}
         </div>
-      `) : "",
+      `),
     ].filter(Boolean);
     return `<tr class="${read || isAdminList ? "" : "partner-inbox-row-unread"}">${cells.join("")}</tr>`;
   });
@@ -492,8 +493,8 @@ function renderPartnerInboxList(messages, options = {}) {
         title: isAdminList ? "გაგზავნილი შეტყობინებები" : "ჩემი ინბოქსი",
         badges: [`სულ: ${items.length}`],
         headers: isAdminList
-          ? ["მიმღები", "შეტყობინება", "თარიღი", "ვადა", "სტატუსი", ""]
-          : ["შეტყობინება", "თარიღი", "ვადა", "სტატუსი"],
+          ? ["მიმღები", "შეტყობინება", "თარიღი", "ვადა", "სტატუსი", "მოქმედება"]
+          : ["შეტყობინება", "თარიღი", "ვადა", "სტატუსი", "მოქმედება"],
         emptyMessage: "შეტყობინება არ არის",
         rows,
       })}
@@ -512,6 +513,10 @@ async function openAdminPartnerInbox() {
   const body = `
     <div class="partner-inbox-panel">
       <section class="partner-inbox-compose">
+        <div class="partner-inbox-compose-head">
+          <strong>ახალი შეტყობინება</strong>
+          <button class="button primary partner-inbox-send-button" type="button" data-action="sendAdminPartnerInboxMessage">გაგზავნა</button>
+        </div>
         <div class="partner-inbox-compose-grid">
           <label for="partnerInboxTarget">
             <span>მიმღები</span>
@@ -531,7 +536,6 @@ async function openAdminPartnerInbox() {
     </div>
   `;
   showDialog("პარტნიორების ინბოქსი", body, [
-    { label: "გაგზავნა", variant: "primary", action: sendAdminPartnerInboxMessage },
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
 }
@@ -545,7 +549,7 @@ async function sendAdminPartnerInboxMessage() {
     if (status) status.textContent = "შეტყობინების ტექსტი აუცილებელია.";
     return;
   }
-  document.querySelectorAll("#dialogActions button").forEach((button) => {
+  document.querySelectorAll("#dialogActions button, .partner-inbox-send-button").forEach((button) => {
     button.disabled = true;
   });
   try {
@@ -559,7 +563,7 @@ async function sendAdminPartnerInboxMessage() {
   } catch (error) {
     if (status) status.textContent = error.message || STRINGS.serverFailed;
   } finally {
-    document.querySelectorAll("#dialogActions button").forEach((button) => {
+    document.querySelectorAll("#dialogActions button, .partner-inbox-send-button").forEach((button) => {
       button.disabled = false;
     });
   }
@@ -571,11 +575,14 @@ async function openPartnerInbox() {
   const messages = await getPartnerInboxMessages();
   const body = `
     <div class="partner-inbox-panel">
+      <div class="partner-inbox-toolbar">
+        <span>შეტყობინებები ავტომატურად იშლება 15 დღეში</span>
+        <button class="mini-button danger" type="button" data-action="clearPartnerInbox">გასუფთავება</button>
+      </div>
       ${renderPartnerInboxList(messages)}
     </div>
   `;
   showDialog("ინბოქსი", body, [
-    { label: "გასუფთავება", variant: "danger", action: clearPartnerInbox },
     { label: "დახურვა", variant: "secondary", action: closeDialog },
   ]);
 }
