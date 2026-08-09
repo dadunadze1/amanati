@@ -786,7 +786,7 @@ function bindDateRangeToolbar({ startId, endId, applySelector, onApply }) {
 
 
 function renderFinanceListPanel({ title = "", badges = [], headers = [], rows = [] }) {
-  return renderAppListPanel({ title, badges, headers, rows });
+  return `<div class="finance-list-panel">${renderAppListPanel({ title, badges, headers, rows })}</div>`;
 }
 
 
@@ -797,6 +797,11 @@ function renderFinanceTableText(title, subtitle = "") {
 
 function renderFinanceTableAction(action, label, value = "", className = "mini-button") {
   return `<button class="${escapeAttr(className)}" type="button" data-action="${escapeAttr(action)}"${value ? ` data-value="${escapeAttr(value)}"` : ""}>${escapeHtml(label)}</button>`;
+}
+
+
+function renderFinanceCell(label, content, className = "") {
+  return `<td ${className ? `class="${escapeAttr(className)}" ` : ""}data-label="${escapeAttr(label)}">${content}</td>`;
 }
 
 
@@ -1006,52 +1011,52 @@ function renderFinanceAdminSummary(report) {
     rows: [
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["ქეში", "კურიერი", totals.totalCourierCash]))}">
-          <td>${renderFinanceTableText("კურიერების ქეში", "კურიერმა კომპანიას უნდა ჩააბაროს")}</td>
-          <td>${escapeHtml(formatMoney(totals.totalCourierCash))}</td>
-          <td><span class="history-status status-pending">ჩასაბარებელი</span></td>
-          <td>COD თანხა, რომელიც კურიერებზეა მიბმული არჩეულ პერიოდში</td>
-          <td><button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="couriers">გაშლა</button></td>
+          ${renderFinanceCell("განყოფილება", renderFinanceTableText("კურიერების ქეში", "კურიერმა კომპანიას უნდა ჩააბაროს"))}
+          ${renderFinanceCell("თანხა", escapeHtml(formatMoney(totals.totalCourierCash)))}
+          ${renderFinanceCell("სტატუსი", `<span class="history-status status-pending">ჩასაბარებელი</span>`)}
+          ${renderFinanceCell("აღწერა", "COD თანხა, რომელიც კურიერებზეა მიბმული არჩეულ პერიოდში")}
+          ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="couriers">გაშლა</button>`)}
         </tr>
       `,
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["ანაზღაურება", "კურიერი", totals.totalCourierPay]))}">
-          <td>${renderFinanceTableText("კურიერის ანაზღაურება", "კომპანიამ კურიერებს უნდა გადაუხადოს")}</td>
-          <td>${escapeHtml(formatMoney(totals.totalCourierPay))}</td>
-          <td><span class="history-status status-delivered">გადასახდელი</span></td>
-          <td>საბაზისო ანაზღაურება ${escapeHtml(formatMoney(totals.courierBasePay))}, კორექტირება ${escapeHtml(formatAdjustmentDisplay(totals.courierAdjustments))}</td>
-          <td><button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="couriers">გაშლა</button></td>
+          ${renderFinanceCell("განყოფილება", renderFinanceTableText("კურიერის ანაზღაურება", "კომპანიამ კურიერებს უნდა გადაუხადოს"))}
+          ${renderFinanceCell("თანხა", escapeHtml(formatMoney(totals.totalCourierPay)))}
+          ${renderFinanceCell("სტატუსი", `<span class="history-status status-delivered">გადასახდელი</span>`)}
+          ${renderFinanceCell("აღწერა", `საბაზისო ანაზღაურება ${escapeHtml(formatMoney(totals.courierBasePay))}, კორექტირება ${escapeHtml(formatAdjustmentDisplay(totals.courierAdjustments))}`)}
+          ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="couriers">გაშლა</button>`)}
         </tr>
       `,
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["პარტნიორი", "ქეში", totals.partnerCashDue]))}">
-          <td>${renderFinanceTableText("პარტნიორის ქეში", "ობიექტების კომპანიისთვის მისაცემი ქეში")}</td>
-          <td>${escapeHtml(formatMoney(totals.partnerCashDue))}</td>
-          <td><span class="history-status status-pending">ჩასაბარებელი</span></td>
-          <td>ჩაბარებული ${escapeHtml(formatMoney(totals.partnerBaseCash))}, მოლოდინში ${escapeHtml(formatMoney(totals.partnerPendingCash))}</td>
-          <td><button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="partners">გაშლა</button></td>
+          ${renderFinanceCell("განყოფილება", renderFinanceTableText("პარტნიორის ქეში", "ობიექტების კომპანიისთვის მისაცემი ქეში"))}
+          ${renderFinanceCell("თანხა", escapeHtml(formatMoney(totals.partnerCashDue)))}
+          ${renderFinanceCell("სტატუსი", `<span class="history-status status-pending">ჩასაბარებელი</span>`)}
+          ${renderFinanceCell("აღწერა", `ჩაბარებული ${escapeHtml(formatMoney(totals.partnerBaseCash))}, მოლოდინში ${escapeHtml(formatMoney(totals.partnerPendingCash))}`)}
+          ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="partners">გაშლა</button>`)}
         </tr>
       `,
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["მოგება", "მიტანა", totals.adjustedProfit]))}">
-          <td>${renderFinanceTableText("კომპანიის მოგება", "მიტანის თანხა - კურიერის საბოლოო ანაზღაურება")}</td>
-          <td>${escapeHtml(formatMoney(totals.adjustedProfit))}</td>
-          <td><span class="history-status status-delivered">მოგება</span></td>
-          <td>მიტანის ჯამი ${escapeHtml(formatMoney(totals.deliveryFees))}; პარტნიორის COD მოგებაში არ შედის</td>
-          <td><button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="orders">შეკვეთები</button></td>
+          ${renderFinanceCell("განყოფილება", renderFinanceTableText("კომპანიის მოგება", "მიტანის თანხა - კურიერის საბოლოო ანაზღაურება"))}
+          ${renderFinanceCell("თანხა", escapeHtml(formatMoney(totals.adjustedProfit)))}
+          ${renderFinanceCell("სტატუსი", `<span class="history-status status-delivered">მოგება</span>`)}
+          ${renderFinanceCell("აღწერა", `მიტანის ჯამი ${escapeHtml(formatMoney(totals.deliveryFees))}; პარტნიორის COD მოგებაში არ შედის`)}
+          ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="orders">შეკვეთები</button>`)}
         </tr>
       `,
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["დღის დახურვა", report.closablePins.length]))}">
-          <td>${renderFinanceTableText("დღის დახურვა", "დასრულებული შეკვეთების ისტორიაში გადატანა")}</td>
-          <td>${escapeHtml(String(report.closablePins.length))}</td>
-          <td><span class="history-status status-delivered">დასახური</span></td>
-          <td>ჩაბარებული შეკვეთები archive-ში გადავა; პროცესში დარჩენილი არ დაიხურება</td>
-          <td><button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="close">გაშლა</button></td>
+          ${renderFinanceCell("განყოფილება", renderFinanceTableText("დღის დახურვა", "დასრულებული შეკვეთების ისტორიაში გადატანა"))}
+          ${renderFinanceCell("რაოდენობა", escapeHtml(String(report.closablePins.length)))}
+          ${renderFinanceCell("სტატუსი", `<span class="history-status status-delivered">დასახური</span>`)}
+          ${renderFinanceCell("აღწერა", "ჩაბარებული შეკვეთები archive-ში გადავა; პროცესში დარჩენილი არ დაიხურება")}
+          ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="close">გაშლა</button>`)}
         </tr>
       `,
     ],
   });
-  return `${content}${renderFinanceAnalyticsSection(report.records)}`;
+  return content;
 }
 
 
@@ -1062,20 +1067,20 @@ function renderFinanceAdminCouriers(report) {
     ]))
     .map(({ courier, summary }) => `
       <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([userDisplayName(courier), courier.username, summary.cashReceived, summary.finalPay]))}">
-        <td>${renderFinanceTableText(userDisplayName(courier), courier.username)}</td>
-        <td>${escapeHtml(formatMoney(summary.cashReceived))}</td>
-        <td>${escapeHtml(formatMoney(summary.finalPay))}</td>
-        <td>${escapeHtml(formatMoney(summary.basePay))}</td>
-        <td>${escapeHtml(`${getAdjustmentDirectionLabel(summary.adjustmentTotal)}: ${formatAdjustmentDisplay(summary.adjustmentTotal)}`)}</td>
-        <td>${renderAppStatusBadge("delivered", String(summary.delivered))}</td>
-        <td>${renderDailyBalancePaidControl("courier", report.range, courier.username, userDisplayName(courier), summary.finalPay, summary.delivered, report.ledger)}</td>
-        <td>
+        ${renderFinanceCell("კურიერი", renderFinanceTableText(userDisplayName(courier), courier.username))}
+        ${renderFinanceCell("ჩასაბარებელი ქეში", escapeHtml(formatMoney(summary.cashReceived)))}
+        ${renderFinanceCell("საბოლოო ანაზღაურება", escapeHtml(formatMoney(summary.finalPay)))}
+        ${renderFinanceCell("საბაზისო", escapeHtml(formatMoney(summary.basePay)))}
+        ${renderFinanceCell("კორექტირება", escapeHtml(`${getAdjustmentDirectionLabel(summary.adjustmentTotal)}: ${formatAdjustmentDisplay(summary.adjustmentTotal)}`))}
+        ${renderFinanceCell("ჩაბარებული", renderAppStatusBadge("delivered", String(summary.delivered)))}
+        ${renderFinanceCell("გადახდა", renderDailyBalancePaidControl("courier", report.range, courier.username, userDisplayName(courier), summary.finalPay, summary.delivered, report.ledger))}
+        ${renderFinanceCell("მოქმედება", `
           <div class="row-actions">
             ${renderFinanceTableAction("openFinanceCourier", "დეტალურად", courier.username)}
             ${renderFinanceTableAction("adjustCourierCash", "ქეში", courier.username)}
             ${renderFinanceTableAction("adjustCourierPay", "ანაზღაურება", courier.username)}
           </div>
-        </td>
+        `)}
       </tr>
     `);
 
@@ -1099,14 +1104,14 @@ function renderFinanceAdminPartners(report) {
     ]))
     .map(({ partner, summary }) => `
       <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, partner.contactPerson, partner.phone, summary.cashDue]))}">
-        <td>${renderFinanceTableText(partnerName(partner), partner.username || partner.id || "")}</td>
-        <td>${escapeHtml(formatMoney(summary.cashDue))}</td>
-        <td>${escapeHtml(formatMoney(summary.baseCash))}</td>
-        <td>${escapeHtml(formatMoney(summary.pendingCash))}</td>
-        <td>${escapeHtml(`${getAdjustmentDirectionLabel(summary.adjustmentTotal)}: ${formatAdjustmentDisplay(summary.adjustmentTotal)}`)}</td>
-        <td>${renderAppStatusBadge(summary.cashDue > 0 ? "pending" : "delivered", summary.cashDue > 0 ? "ჩასაბარებელი" : "დახურული")}</td>
-        <td>${renderDailyBalancePaidControl("partner", report.range, partner.username || partner.id, partnerName(partner), summary.cashDue, summary.deliveredOrders.length, report.ledger, { partnerId: partner.id || "", partnerUsername: partner.username || "" })}</td>
-        <td>${renderFinanceTableAction("adjustPartnerCash", "გასწორება", partner.username, "mini-button finance-button-primary")}</td>
+        ${renderFinanceCell("პარტნიორი", renderFinanceTableText(partnerName(partner), partner.username || partner.id || ""))}
+        ${renderFinanceCell("ბალანსი", escapeHtml(formatMoney(summary.cashDue)))}
+        ${renderFinanceCell("ჩაბარებული ქეში", escapeHtml(formatMoney(summary.baseCash)))}
+        ${renderFinanceCell("მოლოდინში", escapeHtml(formatMoney(summary.pendingCash)))}
+        ${renderFinanceCell("კორექტირება", escapeHtml(`${getAdjustmentDirectionLabel(summary.adjustmentTotal)}: ${formatAdjustmentDisplay(summary.adjustmentTotal)}`))}
+        ${renderFinanceCell("სტატუსი", renderAppStatusBadge(summary.cashDue > 0 ? "pending" : "delivered", summary.cashDue > 0 ? "ჩასაბარებელი" : "დახურული"))}
+        ${renderFinanceCell("გადახდა", renderDailyBalancePaidControl("partner", report.range, partner.username || partner.id, partnerName(partner), summary.cashDue, summary.deliveredOrders.length, report.ledger, { partnerId: partner.id || "", partnerUsername: partner.username || "" }))}
+        ${renderFinanceCell("მოქმედება", renderFinanceTableAction("adjustPartnerCash", "გასწორება", partner.username, "mini-button finance-button-primary"))}
       </tr>
     `);
 
@@ -1131,14 +1136,14 @@ function renderFinanceAdminOrders(report) {
     .sort((a, b) => String(getParcelStatsDateKey(b)).localeCompare(String(getParcelStatsDateKey(a))))
     .map((order) => `
       <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([order.fullName, order.phone, order.courierUsername, orderPartnerName(order)]))}">
-        <td>${renderFinanceTableText(order.fullName || "უსახელო", order.phone || "ტელეფონი არ არის")}</td>
-        <td>${renderFinanceTableText(orderPartnerName(order), order.partnerUsername || order.partnerId || "პირადი")}</td>
-        <td>${renderFinanceTableText(order.courierName || order.courierUsername || "მიუბმელი", order.courierUsername || "")}</td>
-        <td>${escapeHtml(formatMoney(getPaymentAmount(order)))}</td>
-        <td>${escapeHtml(formatMoney(getDeliveryTotal(order)))}</td>
-        <td>${escapeHtml(formatMoney(getCourierPay(order)))}</td>
-        <td>${escapeHtml(formatMoney(getAdminProfit(order)))}</td>
-        <td>${escapeHtml(getParcelStatsDateKey(order))}</td>
+        ${renderFinanceCell("მიმღები", renderFinanceTableText(order.fullName || "უსახელო", order.phone || "ტელეფონი არ არის"))}
+        ${renderFinanceCell("პარტნიორი", renderFinanceTableText(orderPartnerName(order), order.partnerUsername || order.partnerId || "პირადი"))}
+        ${renderFinanceCell("კურიერი", renderFinanceTableText(order.courierName || order.courierUsername || "მიუბმელი", order.courierUsername || ""))}
+        ${renderFinanceCell("COD", escapeHtml(formatMoney(getPaymentAmount(order))))}
+        ${renderFinanceCell("მიტანა", escapeHtml(formatMoney(getDeliveryTotal(order))))}
+        ${renderFinanceCell("კურიერი", escapeHtml(formatMoney(getCourierPay(order))))}
+        ${renderFinanceCell("მოგება", escapeHtml(formatMoney(getAdminProfit(order))))}
+        ${renderFinanceCell("თარიღი", escapeHtml(getParcelStatsDateKey(order)))}
       </tr>
     `);
 
@@ -1162,13 +1167,13 @@ function renderFinanceAdminAdjustments(report) {
     ]))
     .map((adjustment) => `
       <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([adjustment.financeTypeLabel, adjustment.ownerLabel, adjustment.note]))}">
-        <td>${renderFinanceTableText(adjustment.financeTypeLabel, adjustment.ownerLabel || "უცნობი")}</td>
-        <td>${escapeHtml(formatMoney(Math.abs(getAdjustmentSignedAmount(adjustment))))}</td>
-        <td>${renderAppStatusBadge(getAdjustmentSignedAmount(adjustment) >= 0 ? "delivered" : "pending", getAdjustmentSignedAmount(adjustment) >= 0 ? "მიმატება" : "ჩამოკლება")}</td>
-        <td>${escapeHtml(formatMoney(adjustment.targetAmount || 0))}</td>
-        <td>${escapeHtml(formatDateRangeLabel(adjustment.startDate || adjustment.dateKey, adjustment.endDate || adjustment.dateKey))}</td>
-        <td>${escapeHtml(formatOptionalDateTime(getAdjustmentTimestamp(adjustment)))}</td>
-        <td>${escapeHtml(adjustment.note || "")}</td>
+        ${renderFinanceCell("ტიპი", renderFinanceTableText(adjustment.financeTypeLabel, adjustment.ownerLabel || "უცნობი"))}
+        ${renderFinanceCell("თანხა", escapeHtml(formatMoney(Math.abs(getAdjustmentSignedAmount(adjustment)))))}
+        ${renderFinanceCell("მოქმედება", renderAppStatusBadge(getAdjustmentSignedAmount(adjustment) >= 0 ? "delivered" : "pending", getAdjustmentSignedAmount(adjustment) >= 0 ? "მიმატება" : "ჩამოკლება"))}
+        ${renderFinanceCell("ახალი ნაშთი", escapeHtml(formatMoney(adjustment.targetAmount || 0)))}
+        ${renderFinanceCell("პერიოდი", escapeHtml(formatDateRangeLabel(adjustment.startDate || adjustment.dateKey, adjustment.endDate || adjustment.dateKey)))}
+        ${renderFinanceCell("დრო", escapeHtml(formatOptionalDateTime(getAdjustmentTimestamp(adjustment))))}
+        ${renderFinanceCell("შენიშვნა", escapeHtml(adjustment.note || ""))}
       </tr>
     `);
 
@@ -1191,12 +1196,12 @@ function renderFinanceAdminClose(report) {
     .filter(({ summary }) => summary.delivered || summary.failed || summary.pending)
     .map(({ courier, summary }) => `
       <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([userDisplayName(courier), courier.username]))}">
-        <td>${renderFinanceTableText(userDisplayName(courier), courier.username)}</td>
-        <td>${renderAppStatusBadge("delivered", String(summary.delivered))}</td>
-        <td>${renderAppStatusBadge("failed", String(summary.failed))}</td>
-        <td>${renderAppStatusBadge("pending", String(summary.pending))}</td>
-        <td>${escapeHtml(formatMoney(summary.cashReceived))}</td>
-        <td>${escapeHtml(formatMoney(summary.finalPay))}</td>
+        ${renderFinanceCell("კურიერი", renderFinanceTableText(userDisplayName(courier), courier.username))}
+        ${renderFinanceCell("ჩაბარებული", renderAppStatusBadge("delivered", String(summary.delivered)))}
+        ${renderFinanceCell("ვერ", renderAppStatusBadge("failed", String(summary.failed)))}
+        ${renderFinanceCell("პროცესში", renderAppStatusBadge("pending", String(summary.pending)))}
+        ${renderFinanceCell("ქეში", escapeHtml(formatMoney(summary.cashReceived)))}
+        ${renderFinanceCell("ანაზღაურება", escapeHtml(formatMoney(summary.finalPay)))}
       </tr>
     `);
 
@@ -1299,14 +1304,13 @@ async function openFinanceDashboard() {
   state.financeAdminView = getFinanceAdminView(state.financeAdminView);
   const report = await getFinanceAdminReport();
   const filters = renderFinanceAdminFilters(report, state.financeAdminView);
-  const summary = renderFinanceAdminMetrics(report);
   const content = `
     <div class="finance-workbench">
       ${renderFinanceAdminContent(report, state.financeAdminView)}
       <p class="history-empty finance-workbench-empty" hidden>ჩანაწერი ვერ მოიძებნა.</p>
     </div>
   `;
-  const body = renderFinanceModalLayout({ filters, summary, content });
+  const body = renderFinanceModalLayout({ filters, content });
   showDialog("ფინანსები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
   bindFinanceDashboardEvents(report);
 }
