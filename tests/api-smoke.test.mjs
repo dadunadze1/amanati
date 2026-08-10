@@ -12,8 +12,10 @@ const DB_FILE = join(tmpdir(), `delivery-company-smoke-${process.pid}.json`);
 let serverProcess;
 let adminToken = "";
 let courierToken = "";
+let partnerToken = "";
 let courierUsername = "";
 let createdParcel;
+let volumeParcel;
 
 async function request(path, options = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -140,6 +142,28 @@ describe("local API smoke flow", () => {
     courierToken = login.token;
     assert.ok(courierToken);
 
+    const partnerUsername = `partner-${Date.now()}`;
+    const partner = await api("/api/partners", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        username: partnerUsername,
+        password: "pass123",
+        companyName: "Smoke Partner",
+        contactPerson: "Partner Contact",
+        phone: "555000222",
+      },
+    });
+    assert.equal(partner.partner.username, partnerUsername);
+
+    const partnerLogin = await api("/api/login", {
+      method: "POST",
+      body: { username: partnerUsername, password: "pass123" },
+    });
+    partnerToken = partnerLogin.token;
+    const partnerTariffs = await api("/api/tariffs", { token: partnerToken });
+    assert.equal(partnerTariffs.tariffs.volume_5_10.partnerPrice, 10);
+
     const created = await api("/api/parcels", {
       method: "POST",
       token: adminToken,
@@ -176,6 +200,36 @@ describe("local API smoke flow", () => {
     assert.equal(paged.limit, 1);
     assert.equal(paged.offset, 0);
     assert.equal(typeof paged.hasMore, "boolean");
+
+    const volumeCreated = await api("/api/parcels", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        courierUsername,
+        partnerId: partner.partner.id,
+        city: "Tbilisi",
+        address: "Smoke Volume Street 12",
+        fullAddress: "Tbilisi, Smoke Volume Street 12",
+        fullName: "Volume Recipient",
+        phone: "555123456",
+        paymentAmount: 0,
+        lat: 41.7151,
+        lng: 44.8271,
+        tariffId: "volume_5_10",
+      },
+    });
+    assert.equal(volumeCreated.parcel.tariffId, "volume_5_10");
+    assert.equal(volumeCreated.parcel.partnerName, "Smoke Partner");
+
+    const volumeDelivered = await api(`/api/parcels/${volumeCreated.parcel.id}/status`, {
+      method: "PATCH",
+      token: courierToken,
+      body: { status: "delivered", expectedUpdatedAt: volumeCreated.parcel.updatedAt },
+    });
+    volumeParcel = volumeDelivered.parcel;
+    assert.equal(volumeParcel.deliveryTotalPrice, 10);
+    assert.equal(volumeParcel.courierPay, 3.5);
+    assert.equal(volumeParcel.adminProfit, 6.5);
   });
 
   it("allows courier status updates and archive flow", async () => {

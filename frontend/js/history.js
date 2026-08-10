@@ -122,6 +122,7 @@ function buildParcelHistoryCsv(parcels) {
     "მიმღები",
     "ტელეფონი",
     "მისამართი",
+    "პარტნიორი",
     "სტატუსი",
     "კურიერის ლოგინი",
     "კურიერი",
@@ -142,6 +143,7 @@ function buildParcelHistoryCsv(parcels) {
     item.fullName || "",
     item.phone || "",
     getParcelExportAddress(item),
+    orderPartnerName(item),
     getStatusLabel(item.status),
     item.courierUsername || "მიუბმელი",
     parcelCourierDisplayName(item),
@@ -431,6 +433,7 @@ async function renderParcelHistoryTable(parcels) {
             <th>ID</th>
             <th>მიმღები</th>
             <th>მისამართი</th>
+            <th>პარტნიორი</th>
             <th>კურიერი</th>
             <th>სტატუსი</th>
             <th>ქეში</th>
@@ -461,6 +464,9 @@ async function renderParcelHistoryTableRow(item) {
       <td>
         <strong>${escapeHtml(address || STRINGS.addressMissing)}</strong>
         ${item.status === "failed" && failureReason ? `<small>მიზეზი: ${escapeHtml(failureReason)}</small>` : ""}
+      </td>
+      <td>
+        <span class="partner-tag">${escapeHtml(orderPartnerName(item))}</span>
       </td>
       <td>
         <strong>${escapeHtml(parcelCourierDisplayName(item))}</strong>
@@ -501,6 +507,7 @@ async function renderParcelHistoryCard(item) {
         ${historyDetail("კურიერის ლოგინი", item.courierUsername || "მიუბმელი")}
         ${historyDetail("კურიერი", parcelCourierDisplayName(item))}
         ${historyDetail("კურიერის ტელეფონი", parcelCourierPhone(item) || "არ არის")}
+        ${historyDetail("პარტნიორი", orderPartnerName(item))}
         ${historyDetail("შექმნა", formatOptionalDateTime(item.createdAt))}
         ${historyDetail("მიბმა", formatOptionalDateTime(item.assignedAt))}
         ${historyDetail("სტატუსის ცვლილება", formatOptionalDateTime(statusChangedAt))}

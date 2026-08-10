@@ -84,6 +84,30 @@ test("admin app shell keeps the map and opens the push list", async ({ page }) =
   await expect(page.locator("#dialogBody")).not.toContainText("ინბოქსი");
 });
 
+test("admin tariff settings expose volume and express prices", async ({ page }) => {
+  await page.goto("/");
+
+  if (await page.locator("#setupModal.active").isVisible()) {
+    await page.locator("#setupUsername").fill("admin");
+    await page.locator("#setupPassword").fill("pass123");
+    await page.locator("#setupForm button[type='submit']").click();
+  } else {
+    await page.locator("#loginUsername").fill("admin");
+    await page.locator("#loginPassword").fill("pass123");
+    await page.locator("#loginForm button[type='submit']").click();
+  }
+
+  await expect(page.locator("#setupModal")).not.toHaveClass(/active/);
+  await page.evaluate(() => window.openTariffSettingsDialog());
+
+  await expect(page.locator("#dialogModal")).toHaveClass(/active/);
+  await expect(page.locator("#dialogTitle")).toContainText("ტარიფები");
+  await expect(page.locator("#dialogBody")).toContainText("5 კგ-მდე");
+  await expect(page.locator("#dialogBody")).toContainText("5-10 კგ");
+  await expect(page.locator("#dialogBody")).toContainText("10-15 კგ");
+  await expect(page.locator("#dialogBody")).toContainText("ექსპრეს დელივერი");
+});
+
 test("push deep link serves the same map app shell", async ({ page }) => {
   await page.goto("/push");
 

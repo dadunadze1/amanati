@@ -10,6 +10,10 @@ const CONFIG = {
   defaultTariffs: {
     city: { id: "city", label: "თბილისი", partnerPrice: 6, courierPay: 3.5 },
     suburbs: { id: "suburbs", label: "შემოგარენი", partnerPrice: 8, courierPay: 5.5 },
+    volume_u5: { id: "volume_u5", label: "5 კგ-მდე", partnerPrice: 8, courierPay: 3.5 },
+    volume_5_10: { id: "volume_5_10", label: "5-10 კგ", partnerPrice: 10, courierPay: 3.5 },
+    volume_10_15: { id: "volume_10_15", label: "10-15 კგ", partnerPrice: 12, courierPay: 3.5 },
+    express: { id: "express", label: "ექსპრეს დელივერი", partnerPrice: 10, courierPay: 3.5 },
   },
   useZonesApi: false,
   useUserZoneApi: true,

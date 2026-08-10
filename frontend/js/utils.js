@@ -286,25 +286,65 @@ function hasMoneyValue(value) {
 function getDefaultTariffSettings() {
   const defaults = CONFIG.defaultTariffs || {};
   return {
-    city: {
-      id: "city",
-      label: "თბილისი",
-      partnerPrice: safeMoney(defaults.city?.partnerPrice ?? CONFIG.deliveryTotalPrice),
-      courierPay: safeMoney(defaults.city?.courierPay ?? CONFIG.courierDeliveryPay),
-    },
-    suburbs: {
-      id: "suburbs",
-      label: "შემოგარენი",
-      partnerPrice: safeMoney(defaults.suburbs?.partnerPrice ?? 8),
-      courierPay: safeMoney(defaults.suburbs?.courierPay ?? 5.5),
-    },
+    city: normalizeDefaultTariffRow(defaults.city, { id: "city", label: "თბილისი", partnerPrice: CONFIG.deliveryTotalPrice, courierPay: CONFIG.courierDeliveryPay }),
+    suburbs: normalizeDefaultTariffRow(defaults.suburbs, { id: "suburbs", label: "შემოგარენი", partnerPrice: 8, courierPay: 5.5 }),
+    volume_u5: normalizeDefaultTariffRow(defaults.volume_u5, { id: "volume_u5", label: "5 კგ-მდე", partnerPrice: 8, courierPay: CONFIG.courierDeliveryPay }),
+    volume_5_10: normalizeDefaultTariffRow(defaults.volume_5_10, { id: "volume_5_10", label: "5-10 კგ", partnerPrice: 10, courierPay: CONFIG.courierDeliveryPay }),
+    volume_10_15: normalizeDefaultTariffRow(defaults.volume_10_15, { id: "volume_10_15", label: "10-15 კგ", partnerPrice: 12, courierPay: CONFIG.courierDeliveryPay }),
+    express: normalizeDefaultTariffRow(defaults.express, { id: "express", label: "ექსპრეს დელივერი", partnerPrice: 10, courierPay: CONFIG.courierDeliveryPay }),
   };
+}
+
+
+function normalizeDefaultTariffRow(row = {}, fallback) {
+  return {
+    id: fallback.id,
+    label: row?.label || fallback.label,
+    partnerPrice: safeMoney(row?.partnerPrice ?? fallback.partnerPrice),
+    courierPay: safeMoney(row?.courierPay ?? fallback.courierPay),
+  };
+}
+
+
+function getKnownTariffIds() {
+  return Object.keys(getDefaultTariffSettings());
+}
+
+
+function isKnownTariffId(value) {
+  return getKnownTariffIds().includes(String(value || "").trim());
+}
+
+
+function isVolumeTariffId(value) {
+  return String(value || "").startsWith("volume_");
+}
+
+
+function isExpressTariffId(value) {
+  return String(value || "") === "express";
+}
+
+
+function getTbilisiHour(date = new Date()) {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tbilisi",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date).find((part) => part.type === "hour")?.value;
+  return Number(hour);
+}
+
+
+function isExpressDeliveryAvailable(date = new Date()) {
+  const hour = getTbilisiHour(date);
+  return Number.isFinite(hour) && hour >= 14;
 }
 
 
 function getParcelTariffId(parcel = {}) {
   const explicit = String(parcel.tariffId || parcel.tariffType || parcel.deliveryTariffId || "").trim();
-  if (["city", "suburbs"].includes(explicit)) return explicit;
+  if (isKnownTariffId(explicit)) return explicit;
   return parcel.zoneId ? "city" : "suburbs";
 }
 

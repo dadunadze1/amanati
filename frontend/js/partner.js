@@ -193,6 +193,28 @@ async function getPartnerOrderRecords(partner = null) {
 }
 
 
+function getPartnerCashManagementRange() {
+  const today = toDateKey(new Date());
+  return normalizeDateRange(state.partnerCashRangeStart || today, state.partnerCashRangeEnd || state.partnerCashRangeStart || today);
+}
+
+
+function setPartnerCashManagementRange(start, end) {
+  const range = normalizeDateRange(start, end);
+  state.partnerCashRangeStart = range.start;
+  state.partnerCashRangeEnd = range.end;
+  return range;
+}
+
+
+function calculatePartnerCashForRange(partner, records, range = getPartnerCashManagementRange()) {
+  if (typeof calculatePartnerCashSummaryForRange === "function") {
+    return calculatePartnerCashSummaryForRange(partner, records, range.start, range.end);
+  }
+  return calculatePartnerCashSummary(partner, records);
+}
+
+
 async function renderPartnerDashboard(pins = state.activePins) {
   if (!els.partnerDashboard) return;
   if (!state.isPartner || !state.currentUser) {
@@ -341,7 +363,8 @@ async function openPartnerOrdersDialog() {
 }
 
 
-function openPartnerNewOrderDialog() {
+async function openPartnerNewOrderDialog() {
+  const tariffs = await fetchTariffSettings();
   const body = `
     <form id="partnerOrderForm" class="partner-form partner-order-form">
       <section class="partner-order-section">
@@ -359,6 +382,9 @@ function openPartnerNewOrderDialog() {
         <div class="partner-form-field">
           <label for="partnerOrderCash">ქეში</label>
           <input id="partnerOrderCash" type="text" inputmode="decimal" autocomplete="off" value="0">
+        </div>
+        <div class="partner-form-field partner-form-field--wide">
+          ${renderParcelTariffSelect("partnerOrderTariff", tariffs)}
         </div>
       </section>
       <p class="form-message" id="partnerOrderMessage" role="alert"></p>
@@ -384,6 +410,7 @@ async function savePartnerOrder() {
   const fullName = document.getElementById("partnerOrderName")?.value.trim();
   const phone = document.getElementById("partnerOrderPhone")?.value.trim();
   const paymentAmount = parsePaymentAmount(document.getElementById("partnerOrderCash")?.value);
+  const selectedTariffId = document.getElementById("partnerOrderTariff")?.value || "";
   if (!city || !street || !fullName || !phone) {
     if (message) message.textContent = STRINGS.emptyFields;
     return;
@@ -402,7 +429,7 @@ async function savePartnerOrder() {
   const detectedTariffId = typeof getAddressDirectoryTariffIdFromAddress === "function"
     ? getAddressDirectoryTariffIdFromAddress(address || rawAddress)
     : "";
-  const tariffId = detectedTariffId || addressParts.tariffId || "";
+  const tariffId = selectedTariffId || detectedTariffId || addressParts.tariffId || "";
 
   try {
     const payload = await api("/api/parcels", {
@@ -426,6 +453,7 @@ async function savePartnerOrder() {
 
 async function openPartnerManagement() {
   const partners = await getPartners();
+  const range = getPartnerCashManagementRange();
   const [records] = await Promise.all([
     getAllPartnerCashRecords(),
     loadPartnerCashAdjustments(),
@@ -435,30 +463,46 @@ async function openPartnerManagement() {
     <div class="partner-panel-head">
       <h2>პარტნიორები</h2>
       <div class="partner-filter-row">
+        <label class="partner-cash-date-field" for="partnerCashDateFrom">
+          <span>დან</span>
+          <input id="partnerCashDateFrom" type="date" value="${escapeAttr(range.start)}">
+        </label>
+        <label class="partner-cash-date-field" for="partnerCashDateTo">
+          <span>მდე</span>
+          <input id="partnerCashDateTo" type="date" value="${escapeAttr(range.end)}">
+        </label>
+        <button class="button secondary" id="partnerCashRangeApply" type="button">ფილტრი</button>
         <button class="button secondary" type="button" data-action="adminPartnerOrders">შეკვეთები</button>
         <button class="button primary" type="button" data-action="createPartner">დამატება</button>
       </div>
     </div>
-    ${renderPartnerTable(partners)}
+    ${renderPartnerTable(partners, range)}
   `;
   showDialog("პარტნიორები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
-}
-
-
-function renderPartnerTable(partners) {
-  return renderAppListPanel({
-    title: "პარტნიორების სია",
-    badges: [`სულ: ${partners.length}`],
-    headers: ["პარტნიორი", "ქეში", "მოლოდინი", "კორექტირება", "კონტაქტი", "სტატუსი", ""],
-    emptyMessage: "პარტნიორი ჯერ არ არის",
-    rows: partners.map(renderPartnerCard),
+  document.getElementById("partnerCashRangeApply")?.addEventListener("click", async () => {
+    setPartnerCashManagementRange(
+      document.getElementById("partnerCashDateFrom")?.value,
+      document.getElementById("partnerCashDateTo")?.value,
+    );
+    await openPartnerManagement();
   });
 }
 
 
-function renderPartnerCard(partner) {
+function renderPartnerTable(partners, range = getPartnerCashManagementRange()) {
+  return renderAppListPanel({
+    title: "პარტნიორების სია",
+    badges: [`სულ: ${partners.length}`, `პერიოდი: ${formatDateRangeLabel(range.start, range.end)}`],
+    headers: ["პარტნიორი", "ქეში", "მოლოდინი", "კორექტირება", "კონტაქტი", "სტატუსი", ""],
+    emptyMessage: "პარტნიორი ჯერ არ არის",
+    rows: partners.map((partner) => renderPartnerCard(partner, range)),
+  });
+}
+
+
+function renderPartnerCard(partner, range = getPartnerCashManagementRange()) {
   const active = partner.status === "active";
-  const cash = calculatePartnerCashSummary(partner, state.partnerCashRecords || []);
+  const cash = calculatePartnerCashForRange(partner, state.partnerCashRecords || [], range);
   return `
     <tr>
       <td>${renderAppTableText(partnerName(partner), partner.username)}</td>
@@ -489,7 +533,8 @@ async function openPartnerCashAdjustmentDialog(username) {
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
 
-  const summary = calculatePartnerCashSummary(partner, records);
+  const range = getPartnerCashManagementRange();
+  const summary = calculatePartnerCashForRange(partner, records, range);
   const content = `
     <div class="finance-card finance-mini-card finance-section stats-card">
       <strong>${escapeHtml(partnerName(partner))}</strong>
@@ -565,7 +610,8 @@ async function addPartnerCashAdjustment(username, amount, mode = "subtract") {
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
 
-  const summary = calculatePartnerCashSummary(partner, records);
+  const range = getPartnerCashManagementRange();
+  const summary = calculatePartnerCashForRange(partner, records, range);
   const rawCashDue = safeMoney(summary.baseCash + summary.adjustmentTotal);
   const { correctionAmount, mode: appliedMode, nextAmount, nextDelta } = calculateAdjustmentDelta(summary.cashDue, amount, mode, rawCashDue);
   if (Math.abs(nextDelta) < 0.005) return;
@@ -583,8 +629,10 @@ async function addPartnerCashAdjustment(username, amount, mode = "subtract") {
     correctionMode: appliedMode,
     type: nextDelta < 0 ? "negative" : "positive",
     category: "partnerCash",
-    dateKey: toDateKey(new Date()),
-    date: toDateKey(new Date()),
+    dateKey: range.start,
+    date: range.start,
+    startDate: range.start,
+    endDate: range.end,
     note: "პარტნიორის ქეშის კორექტირება",
     timestamp: now,
     createdAt: now,
@@ -601,7 +649,8 @@ async function zeroPartnerCashAdjustment(username) {
   ]);
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
-  const summary = calculatePartnerCashSummary(partner, records);
+  const range = getPartnerCashManagementRange();
+  const summary = calculatePartnerCashForRange(partner, records, range);
   await addPartnerCashAdjustment(username, summary.cashDue);
 }
 

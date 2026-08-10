@@ -731,6 +731,14 @@ body.auth-loading .app-shell {
   margin-top: 6px;
 }
 
+.parcel-tariff-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .tariff-profit-preview {
   display: flex;
   align-items: center;
@@ -12863,6 +12871,23 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 
 .partner-order-details .partner-form-field:first-child {
   grid-column: 1 / -1;
+}
+
+.partner-form-field--wide {
+  grid-column: 1 / -1;
+}
+
+.partner-cash-date-field {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  min-width: 132px;
+}
+
+.partner-cash-date-field input {
+  min-height: 36px;
 }
 
 @media (max-width: 640px) {

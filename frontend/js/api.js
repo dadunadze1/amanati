@@ -175,6 +175,16 @@ function resolveStaticUserRecord(current, next) {
 }
 
 function resolveStaticParcelRecord(current, next) {
+  if (current?.archivedAt || next?.archivedAt) {
+    const archived = current?.archivedAt ? current : next;
+    const active = archived === current ? next : current;
+    const merged = { ...active, ...archived };
+    ["deletedAt", "archivedAt", "deliveredAt", "completedAt", "failedAt", "updatedAt", "assignedAt", "createdAt"].forEach((field) => {
+      merged[field] = archived[field] || active[field] || "";
+    });
+    if (archived.status === "delivered" || active.status === "delivered") merged.status = "delivered";
+    return normalizeStaticParcelFinance(merged);
+  }
   const currentTime = getStaticRecordTimestamp(current);
   const nextTime = getStaticRecordTimestamp(next);
   const primary = nextTime >= currentTime ? next : current;
@@ -257,6 +267,10 @@ function getStaticDefaultTariffs() {
   return {
     city: normalizeStaticTariffItem(defaults.city, { id: "city", label: "თბილისი", partnerPrice: 6, courierPay: 3.5 }),
     suburbs: normalizeStaticTariffItem(defaults.suburbs, { id: "suburbs", label: "შემოგარენი", partnerPrice: 8, courierPay: 5.5 }),
+    volume_u5: normalizeStaticTariffItem(defaults.volume_u5, { id: "volume_u5", label: "5 კგ-მდე", partnerPrice: 8, courierPay: 3.5 }),
+    volume_5_10: normalizeStaticTariffItem(defaults.volume_5_10, { id: "volume_5_10", label: "5-10 კგ", partnerPrice: 10, courierPay: 3.5 }),
+    volume_10_15: normalizeStaticTariffItem(defaults.volume_10_15, { id: "volume_10_15", label: "10-15 კგ", partnerPrice: 12, courierPay: 3.5 }),
+    express: normalizeStaticTariffItem(defaults.express, { id: "express", label: "ექსპრეს დელივერი", partnerPrice: 10, courierPay: 3.5 }),
   };
 }
 
@@ -276,10 +290,10 @@ function normalizeStaticTariffItem(input = {}, fallback) {
 function normalizeStaticTariffSettings(settings = {}) {
   const values = settings.tariffs && typeof settings.tariffs === "object" ? settings.tariffs : settings;
   const defaults = getStaticDefaultTariffs();
-  return {
-    city: normalizeStaticTariffItem(values.city, defaults.city),
-    suburbs: normalizeStaticTariffItem(values.suburbs, defaults.suburbs),
-  };
+  return Object.keys(defaults).reduce((normalized, id) => {
+    normalized[id] = normalizeStaticTariffItem(values[id], defaults[id]);
+    return normalized;
+  }, {});
 }
 
 function getStaticTariffSettings(store = loadStaticBootstrap.cache) {
@@ -288,17 +302,34 @@ function getStaticTariffSettings(store = loadStaticBootstrap.cache) {
 
 function getStaticParcelTariffId(parcel = {}) {
   const explicit = String(parcel.tariffId || parcel.tariffType || parcel.deliveryTariffId || "").trim();
-  if (["city", "suburbs"].includes(explicit)) return explicit;
+  if (Object.prototype.hasOwnProperty.call(getStaticDefaultTariffs(), explicit)) return explicit;
   return parcel.zoneId ? "city" : "suburbs";
+}
+
+function cleanStaticParcelTariffId(value) {
+  const tariffId = String(value || "").trim();
+  return Object.prototype.hasOwnProperty.call(getStaticDefaultTariffs(), tariffId) ? tariffId : "";
+}
+
+function assertStaticParcelTariffAllowed(tariffId) {
+  if (tariffId === "express" && typeof isExpressDeliveryAvailable === "function" && !isExpressDeliveryAvailable()) {
+    throw new Error("ექსპრეს დელივერი ხელმისაწვდომია 14:00-ის შემდეგ.");
+  }
 }
 
 function getStaticParcelFinanceSnapshot(parcel = {}, store = loadStaticBootstrap.cache) {
   const tariffs = getStaticTariffSettings(store);
   const tariffId = getStaticParcelTariffId(parcel);
   const tariff = tariffs[tariffId] || tariffs.city;
-  const deliveryTotalPrice = hasStaticMoneyValue(parcel.deliveryTotalPrice) ? getStaticMoney(parcel.deliveryTotalPrice) : tariff.partnerPrice;
-  const courierPay = hasStaticMoneyValue(parcel.courierPay) ? getStaticMoney(parcel.courierPay) : tariff.courierPay;
-  const adminProfit = hasStaticMoneyValue(parcel.adminProfit) ? getStaticMoney(parcel.adminProfit) : getStaticMoney(Math.max(0, deliveryTotalPrice - courierPay));
+  const hasFinanceSnapshot = hasStaticMoneyValue(parcel.deliveryTotalPrice)
+    && (
+      getStaticMoney(parcel.deliveryTotalPrice) > 0
+      || getStaticMoney(parcel.courierPay) > 0
+      || getStaticMoney(parcel.adminProfit) > 0
+    );
+  const deliveryTotalPrice = hasFinanceSnapshot ? getStaticMoney(parcel.deliveryTotalPrice) : tariff.partnerPrice;
+  const courierPay = hasFinanceSnapshot ? getStaticMoney(parcel.courierPay) : tariff.courierPay;
+  const adminProfit = hasFinanceSnapshot && hasStaticMoneyValue(parcel.adminProfit) ? getStaticMoney(parcel.adminProfit) : getStaticMoney(Math.max(0, deliveryTotalPrice - courierPay));
   return {
     tariffId,
     tariffLabel: tariff.label,
@@ -618,10 +649,13 @@ function archiveStaticCompletedParcels(store) {
     moved += 1;
   });
 
-  if (!moved) return 0;
-  store.parcels = nextParcels;
   store.history = mergeStaticRecordsByKey([], nextHistory, getStaticParcelKey, resolveStaticParcelRecord);
-  return moved;
+  const archivedKeys = new Set(store.history.map(getStaticParcelKey).filter(Boolean));
+  const filteredParcels = nextParcels.filter((parcel) => !archivedKeys.has(getStaticParcelKey(parcel)));
+  const removedDuplicates = nextParcels.length - filteredParcels.length;
+  if (!moved && !removedDuplicates) return 0;
+  store.parcels = filteredParcels;
+  return moved + removedDuplicates;
 }
 
 function pruneStaticPushEvents(store, referenceDate = new Date()) {
@@ -1137,7 +1171,7 @@ async function staticApi(path, options = {}) {
   if (method === "GET" && apiPath === "/api/zones") return { zones: store.zones };
 
   if (method === "GET" && apiPath === "/api/tariffs") {
-    if (!state.isAdmin) throw new Error("მხოლოდ ადმინს შეუძლია ტარიფების ნახვა.");
+    if (!state.isAdmin && !state.isPartner) throw new Error("წვდომა აკრძალულია.");
     return { tariffs: getStaticTariffSettings(store) };
   }
 
@@ -1167,7 +1201,7 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/history") {
     const courier = url.searchParams.get("courier") || "";
-    const history = [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)]
+    const history = mergeStaticRecordsByKey([], [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)], getStaticParcelKey, resolveStaticParcelRecord)
       .filter((parcel) => !isStaticDeletedParcel(parcel))
       .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
       .map((parcel) => publicStaticParcel(store, parcel));
@@ -1352,7 +1386,9 @@ async function staticApi(path, options = {}) {
       ? await applyAutoAssignByZone({ lat: latValue, lng: lngValue, courierUsername: body.courierUsername || "" })
       : {};
     const assignedCourierUsername = body.courierUsername || assignment.courierUsername || "";
-    const tariffId = ["city", "suburbs"].includes(String(body.tariffId || body.tariffType || "")) ? String(body.tariffId || body.tariffType) : (body.zoneId || assignment.zoneId ? "city" : "suburbs");
+    const explicitTariffId = cleanStaticParcelTariffId(body.tariffId || body.tariffType || body.deliveryTariffId);
+    assertStaticParcelTariffAllowed(explicitTariffId);
+    const tariffId = explicitTariffId || (body.zoneId || assignment.zoneId ? "city" : "suburbs");
     const tariff = getStaticTariffSettings(store)[tariffId] || getStaticTariffSettings(store).city;
     const parcel = {
       id: `parcel-${Date.now()}`,
@@ -1384,6 +1420,9 @@ async function staticApi(path, options = {}) {
       zoneName: body.zoneName || assignment.zoneName || "",
       tariffId,
       tariffLabel: tariff.label,
+      volumeTariffId: typeof isVolumeTariffId === "function" && isVolumeTariffId(tariffId) ? tariffId : "",
+      expressDelivery: tariffId === "express",
+      deliveryServiceType: tariffId === "express" ? "express" : typeof isVolumeTariffId === "function" && isVolumeTariffId(tariffId) ? "volume" : "standard",
       autoAssigned: Boolean(assignment.autoAssigned || body.autoAssigned),
       status: "pending",
       createdAt: now,

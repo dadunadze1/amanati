@@ -316,6 +316,7 @@ async function openParcelDetailsDialog() {
   const previewAddress = getPendingAddressPreviewLabel();
   const couriers = state.isAdmin ? await getCouriers() : [];
   const partners = state.isAdmin ? await getPartners().catch(() => []) : [];
+  const tariffs = await fetchTariffSettings();
   const photoDraft = state.photoParcelDraft || {};
   const courierOptions = couriers.map((user) => `<option value="${escapeAttr(user.username)}" ${state.selectedCourier === user.username ? "selected" : ""}>${escapeHtml(userDisplayName(user))}</option>`).join("");
   const partnerOptions = partners
@@ -341,6 +342,7 @@ async function openParcelDetailsDialog() {
     <input id="parcelPhone" type="tel" autocomplete="tel" value="${escapeAttr(photoDraft.phone || "")}">
     <label for="parcelPaymentAmount">ქეში</label>
     <input id="parcelPaymentAmount" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(photoDraft.paymentAmount ?? 0)}">
+    ${renderParcelTariffSelect("parcelTariff", tariffs, photoDraft.tariffId || "")}
     ${photoDraft.rawText ? `
       <div class="parcel-photo-draft">
         <strong>ფოტოდან ამოკითხული ტექსტი</strong>
@@ -416,7 +418,8 @@ async function saveParcel() {
   const detectedTariffId = typeof getAddressDirectoryTariffIdFromAddress === "function"
     ? getAddressDirectoryTariffIdFromAddress(address)
     : "";
-  const tariffId = detectedTariffId || state.pendingTariffId || "";
+  const selectedTariffId = document.getElementById("parcelTariff")?.value || "";
+  const tariffId = selectedTariffId || detectedTariffId || state.pendingTariffId || "";
 
   let payload;
   try {
@@ -1291,6 +1294,10 @@ function renderSelectedParcelCard() {
       </section>
       <section class="nearest-detail-section">
         <h3>თანხა</h3>
+        <div class="nearest-detail">
+          <span>ტარიფი</span>
+          <strong>${escapeHtml(pin.tariffLabel || getFallbackTariff(pin).label)}</strong>
+        </div>
         <div class="nearest-detail">
           <span>ქეში</span>
           <strong>${payment > 0 ? escapeHtml(formatMoney(payment)) : "ქეში არ არის"}</strong>

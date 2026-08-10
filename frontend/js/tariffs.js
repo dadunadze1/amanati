@@ -1,9 +1,15 @@
 "use strict";
 
 const TARIFF_FIELDS = [
-  { id: "city", title: "თბილისი", description: "ცენტრის და თბილისის ზონების შეკვეთები" },
+  { id: "city", title: "თბილისი", description: "სტანდარტული ქალაქის შეკვეთები" },
   { id: "suburbs", title: "შემოგარენი", description: "თბილისის გარეთ ან ზონის გარეშე შეკვეთები" },
+  { id: "volume_u5", title: "5 კგ-მდე", description: "მოცულობითი შეკვეთა 5 კგ-მდე" },
+  { id: "volume_5_10", title: "5-10 კგ", description: "მოცულობითი შეკვეთა 5-დან 10 კგ-მდე" },
+  { id: "volume_10_15", title: "10-15 კგ", description: "მოცულობითი შეკვეთა 10-დან 15 კგ-მდე" },
+  { id: "express", title: "ექსპრეს დელივერი", description: "ხელმისაწვდომია 14:00-ის შემდეგ" },
 ];
+
+const PARCEL_SERVICE_TARIFF_IDS = ["volume_u5", "volume_5_10", "volume_10_15", "express"];
 
 async function fetchTariffSettings() {
   try {
@@ -18,10 +24,10 @@ async function fetchTariffSettings() {
 
 function normalizeTariffSettings(tariffs = {}) {
   const defaults = getDefaultTariffSettings();
-  return {
-    city: normalizeTariffRow(tariffs.city, defaults.city),
-    suburbs: normalizeTariffRow(tariffs.suburbs, defaults.suburbs),
-  };
+  return TARIFF_FIELDS.reduce((settings, field) => {
+    settings[field.id] = normalizeTariffRow(tariffs[field.id], defaults[field.id]);
+    return settings;
+  }, {});
 }
 
 
@@ -36,6 +42,34 @@ function normalizeTariffRow(row = {}, fallback) {
     courierPay,
     companyProfit: safeMoney(Math.max(0, partnerPrice - courierPay)),
   };
+}
+
+
+function getParcelServiceTariffOptions(tariffs = getDefaultTariffSettings()) {
+  const normalized = normalizeTariffSettings(tariffs);
+  return PARCEL_SERVICE_TARIFF_IDS.map((id) => normalized[id]).filter(Boolean);
+}
+
+
+function renderParcelTariffSelect(inputId, tariffs = getDefaultTariffSettings(), selectedId = "") {
+  const normalized = normalizeTariffSettings(tariffs);
+  const standardPrice = normalized.city?.partnerPrice ?? CONFIG.deliveryTotalPrice;
+  const expressAvailable = isExpressDeliveryAvailable();
+  const options = [
+    `<option value="" ${selectedId ? "" : "selected"}>სტანდარტული (${escapeHtml(formatMoney(standardPrice))})</option>`,
+    ...getParcelServiceTariffOptions(normalized).map((tariff) => {
+      const disabled = tariff.id === "express" && !expressAvailable ? " disabled" : "";
+      const selected = selectedId === tariff.id && !disabled ? " selected" : "";
+      return `<option value="${escapeAttr(tariff.id)}"${selected}${disabled}>${escapeHtml(tariff.label)} (${escapeHtml(formatMoney(tariff.partnerPrice))})</option>`;
+    }),
+  ].join("");
+  return `
+    <label for="${escapeAttr(inputId)}">მიტანის ტარიფი</label>
+    <select id="${escapeAttr(inputId)}" data-parcel-tariff-select>
+      ${options}
+    </select>
+    <small class="parcel-tariff-hint">${expressAvailable ? "ექსპრესი აქტიურია." : "ექსპრესი გააქტიურდება 14:00-ის შემდეგ."}</small>
+  `;
 }
 
 

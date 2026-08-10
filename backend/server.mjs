@@ -42,6 +42,10 @@ const FINANCE = {
 const DEFAULT_TARIFFS = {
   city: { id: "city", label: "თბილისი", partnerPrice: 6, courierPay: 3.5 },
   suburbs: { id: "suburbs", label: "შემოგარენი", partnerPrice: 8, courierPay: 5.5 },
+  volume_u5: { id: "volume_u5", label: "5 კგ-მდე", partnerPrice: 8, courierPay: 3.5 },
+  volume_5_10: { id: "volume_5_10", label: "5-10 კგ", partnerPrice: 10, courierPay: 3.5 },
+  volume_10_15: { id: "volume_10_15", label: "10-15 კგ", partnerPrice: 12, courierPay: 3.5 },
+  express: { id: "express", label: "ექსპრეს დელივერი", partnerPrice: 10, courierPay: 3.5 },
 };
 const DATA_RETENTION_MONTHS = 8;
 const PARTNER_ORDER_RETENTION_MONTHS = 1;
@@ -293,10 +297,10 @@ function normalizeTariffItem(input = {}, fallback = DEFAULT_TARIFFS.city) {
 
 function normalizeTariffSettings(settings = {}) {
   const tariffs = settings.tariffs && typeof settings.tariffs === "object" ? settings.tariffs : settings;
-  return {
-    city: normalizeTariffItem(tariffs.city, DEFAULT_TARIFFS.city),
-    suburbs: normalizeTariffItem(tariffs.suburbs, DEFAULT_TARIFFS.suburbs),
-  };
+  return Object.keys(DEFAULT_TARIFFS).reduce((normalized, id) => {
+    normalized[id] = normalizeTariffItem(tariffs[id], DEFAULT_TARIFFS[id]);
+    return normalized;
+  }, {});
 }
 
 function getTariffSettings(db) {
@@ -318,8 +322,41 @@ function hasStoredMoney(value) {
 
 function getParcelTariffId(parcel = {}) {
   const explicit = String(parcel.tariffId || parcel.tariffType || parcel.deliveryTariffId || "").trim();
-  if (["city", "suburbs"].includes(explicit)) return explicit;
+  if (Object.prototype.hasOwnProperty.call(DEFAULT_TARIFFS, explicit)) return explicit;
   return parcel.zoneId ? "city" : "suburbs";
+}
+
+function cleanParcelTariffId(value) {
+  const tariffId = String(value || "").trim();
+  return Object.prototype.hasOwnProperty.call(DEFAULT_TARIFFS, tariffId) ? tariffId : "";
+}
+
+function isExpressTariffId(tariffId) {
+  return tariffId === "express";
+}
+
+function isVolumeTariffId(tariffId) {
+  return String(tariffId || "").startsWith("volume_");
+}
+
+function getTbilisiHour(date = new Date()) {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tbilisi",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date).find((part) => part.type === "hour")?.value;
+  return Number(hour);
+}
+
+function isExpressDeliveryAvailable(date = new Date()) {
+  const hour = getTbilisiHour(date);
+  return Number.isFinite(hour) && hour >= 14;
+}
+
+function assertParcelTariffAllowed(tariffId, date = new Date()) {
+  if (isExpressTariffId(tariffId) && !isExpressDeliveryAvailable(date)) {
+    throw httpError(400, "ექსპრეს დელივერი ხელმისაწვდომია 14:00-ის შემდეგ.");
+  }
 }
 
 function getParcelTariff(db, parcel = {}) {
@@ -329,9 +366,15 @@ function getParcelTariff(db, parcel = {}) {
 
 function getParcelFinanceSnapshot(db, parcel = {}) {
   const tariff = getParcelTariff(db, parcel);
-  const deliveryTotalPrice = hasStoredMoney(parcel.deliveryTotalPrice) ? storedMoney(parcel.deliveryTotalPrice) : tariff.partnerPrice;
-  const courierPay = hasStoredMoney(parcel.courierPay) ? storedMoney(parcel.courierPay) : tariff.courierPay;
-  const adminProfit = hasStoredMoney(parcel.adminProfit) ? storedMoney(parcel.adminProfit) : storedMoney(Math.max(0, deliveryTotalPrice - courierPay));
+  const hasFinanceSnapshot = hasStoredMoney(parcel.deliveryTotalPrice)
+    && (
+      storedMoney(parcel.deliveryTotalPrice) > 0
+      || storedMoney(parcel.courierPay) > 0
+      || storedMoney(parcel.adminProfit) > 0
+    );
+  const deliveryTotalPrice = hasFinanceSnapshot ? storedMoney(parcel.deliveryTotalPrice) : tariff.partnerPrice;
+  const courierPay = hasFinanceSnapshot ? storedMoney(parcel.courierPay) : tariff.courierPay;
+  const adminProfit = hasFinanceSnapshot && hasStoredMoney(parcel.adminProfit) ? storedMoney(parcel.adminProfit) : storedMoney(Math.max(0, deliveryTotalPrice - courierPay));
   return {
     tariffId: getParcelTariffId(parcel),
     tariffLabel: tariff.label,
@@ -1126,7 +1169,8 @@ async function handleApi(request, response, url) {
   }
 
   if (method === "GET" && path === "/api/tariffs") {
-    requireAdmin(request);
+    const session = requireSession(request);
+    if (!["admin", "partner"].includes(session.role)) throw httpError(403, "წვდომა აკრძალულია.");
     sendJson(response, 200, { tariffs: getTariffSettings(db) });
     return;
   }
@@ -1515,7 +1559,9 @@ async function handleApi(request, response, url) {
     }
 
     const now = new Date().toISOString();
-    const tariffId = ["city", "suburbs"].includes(String(body.tariffId || body.tariffType || "")) ? String(body.tariffId || body.tariffType) : detectedZone ? "city" : "suburbs";
+    const explicitTariffId = cleanParcelTariffId(body.tariffId || body.tariffType || body.deliveryTariffId);
+    assertParcelTariffAllowed(explicitTariffId, new Date(now));
+    const tariffId = explicitTariffId || (detectedZone ? "city" : "suburbs");
     const tariff = getTariffSettings(db)[tariffId] || getTariffSettings(db).city;
     const locationAccuracy = hasCoords
       ? session.role === "partner" ? "approximate" : String(body.locationAccuracy || "confirmed")
@@ -1550,11 +1596,14 @@ async function handleApi(request, response, url) {
       paymentAmount,
       cashAmount: paymentAmount,
       codAmount: paymentAmount,
-      deliveryTotalPrice: 0,
-      courierPay: 0,
-      adminProfit: 0,
+      deliveryTotalPrice: "",
+      courierPay: "",
+      adminProfit: "",
       tariffId,
       tariffLabel: tariff.label,
+      volumeTariffId: isVolumeTariffId(tariffId) ? tariffId : "",
+      expressDelivery: isExpressTariffId(tariffId),
+      deliveryServiceType: isExpressTariffId(tariffId) ? "express" : isVolumeTariffId(tariffId) ? "volume" : "standard",
       zoneId: detectedZone?.id || "",
       zoneName: detectedZone?.name || "",
       autoAssigned,
