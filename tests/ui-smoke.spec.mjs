@@ -62,6 +62,23 @@ test.beforeEach(async ({ page }) => {
   await installLeafletMock(page);
 });
 
+async function ensureAdminSession(page) {
+  if (await page.locator("#setupModal.active").isVisible()) {
+    await page.locator("#setupUsername").fill("admin");
+    await page.locator("#setupPassword").fill("pass123");
+    await page.locator("#setupForm button[type='submit']").click();
+    await expect(page.locator("#setupModal")).not.toHaveClass(/active/);
+    return;
+  }
+
+  if (await page.locator("#authModal.active").isVisible()) {
+    await page.locator("#loginUsername").fill("admin");
+    await page.locator("#loginPassword").fill("pass123");
+    await page.locator("#loginForm button[type='submit']").click();
+    await expect(page.locator("#authModal")).not.toHaveClass(/active/);
+  }
+}
+
 test("admin app shell keeps the map and opens the push list", async ({ page }) => {
   await page.goto("/");
 
@@ -87,17 +104,7 @@ test("admin app shell keeps the map and opens the push list", async ({ page }) =
 test("admin tariff settings expose volume and express prices", async ({ page }) => {
   await page.goto("/");
 
-  if (await page.locator("#setupModal.active").isVisible()) {
-    await page.locator("#setupUsername").fill("admin");
-    await page.locator("#setupPassword").fill("pass123");
-    await page.locator("#setupForm button[type='submit']").click();
-  } else {
-    await page.locator("#loginUsername").fill("admin");
-    await page.locator("#loginPassword").fill("pass123");
-    await page.locator("#loginForm button[type='submit']").click();
-  }
-
-  await expect(page.locator("#setupModal")).not.toHaveClass(/active/);
+  await ensureAdminSession(page);
   await page.evaluate(() => window.openTariffSettingsDialog());
 
   await expect(page.locator("#dialogModal")).toHaveClass(/active/);
@@ -106,6 +113,46 @@ test("admin tariff settings expose volume and express prices", async ({ page }) 
   await expect(page.locator("#dialogBody")).toContainText("5-10 კგ");
   await expect(page.locator("#dialogBody")).toContainText("10-15 კგ");
   await expect(page.locator("#dialogBody")).toContainText("ექსპრეს დელივერი");
+});
+
+test("admin partner management uses a tall scrollable list", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const batchId = Date.now();
+  await page.evaluate(async ({ batchId }) => {
+    for (let index = 0; index < 10; index += 1) {
+      const response = await fetch("/api/partners", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${state.authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: `partner-ui-${batchId}-${index}@test.local`,
+          password: "pass123",
+          companyName: `Partner UI ${index + 1}`,
+          contactPerson: `Contact ${index + 1}`,
+          phone: `55520${String(index).padStart(4, "0")}`,
+        }),
+      });
+      if (!response.ok) throw new Error(`partner-create-${index}`);
+    }
+  }, { batchId });
+
+  await page.evaluate(() => window.openPartnerManagement());
+
+  await expect(page.locator("#dialogModal")).toHaveClass(/active/);
+  await expect(page.locator(".partner-management-screen")).toBeVisible();
+  await expect(page.locator(".partner-management-table tbody tr")).toHaveCount(10);
+
+  const metrics = await page.locator(".partner-management-list").evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(metrics.clientHeight).toBeGreaterThan(300);
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
 });
 
 test("push deep link serves the same map app shell", async ({ page }) => {

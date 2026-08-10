@@ -460,23 +460,28 @@ async function openPartnerManagement() {
   ]);
   state.partnerCashRecords = records;
   const body = `
-    <div class="partner-panel-head">
-      <h2>პარტნიორები</h2>
-      <div class="partner-filter-row">
-        <label class="partner-cash-date-field" for="partnerCashDateFrom">
-          <span>დან</span>
-          <input id="partnerCashDateFrom" type="date" value="${escapeAttr(range.start)}">
-        </label>
-        <label class="partner-cash-date-field" for="partnerCashDateTo">
-          <span>მდე</span>
-          <input id="partnerCashDateTo" type="date" value="${escapeAttr(range.end)}">
-        </label>
-        <button class="button secondary" id="partnerCashRangeApply" type="button">ფილტრი</button>
-        <button class="button secondary" type="button" data-action="adminPartnerOrders">შეკვეთები</button>
-        <button class="button primary" type="button" data-action="createPartner">დამატება</button>
+    <section class="partner-management-screen">
+      <div class="partner-management-toolbar">
+        <div class="partner-management-title">
+          <strong>პარტნიორების სია</strong>
+          <span>${escapeHtml(`სულ: ${partners.length} / პერიოდი: ${formatDateRangeLabel(range.start, range.end)}`)}</span>
+        </div>
+        <div class="partner-filter-row partner-management-filters">
+          <label class="partner-cash-date-field" for="partnerCashDateFrom">
+            <span>დან</span>
+            <input id="partnerCashDateFrom" type="date" value="${escapeAttr(range.start)}">
+          </label>
+          <label class="partner-cash-date-field" for="partnerCashDateTo">
+            <span>მდე</span>
+            <input id="partnerCashDateTo" type="date" value="${escapeAttr(range.end)}">
+          </label>
+          <button class="button secondary" id="partnerCashRangeApply" type="button">ფილტრი</button>
+          <button class="button secondary" type="button" data-action="adminPartnerOrders">შეკვეთები</button>
+          <button class="button primary" type="button" data-action="createPartner">დამატება</button>
+        </div>
       </div>
-    </div>
-    ${renderPartnerTable(partners, range)}
+      ${renderPartnerTable(partners, range)}
+    </section>
   `;
   showDialog("პარტნიორები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
   document.getElementById("partnerCashRangeApply")?.addEventListener("click", async () => {
@@ -490,13 +495,20 @@ async function openPartnerManagement() {
 
 
 function renderPartnerTable(partners, range = getPartnerCashManagementRange()) {
-  return renderAppListPanel({
-    title: "პარტნიორების სია",
-    badges: [`სულ: ${partners.length}`, `პერიოდი: ${formatDateRangeLabel(range.start, range.end)}`],
-    headers: ["პარტნიორი", "ქეში", "მოლოდინი", "კორექტირება", "კონტაქტი", "სტატუსი", ""],
-    emptyMessage: "პარტნიორი ჯერ არ არის",
-    rows: partners.map((partner) => renderPartnerCard(partner, range)),
-  });
+  const headers = ["პარტნიორი", "ქეში", "მოლოდინი", "კორექტირება", "კონტაქტი", "სტატუსი", ""];
+  const rows = partners.map((partner) => renderPartnerCard(partner, range)).filter(Boolean);
+  return `
+    <div class="partner-table-wrap partner-management-list">
+      <table class="partner-order-table partner-management-table">
+        <thead>
+          <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.join("") : `<tr><td colspan="${headers.length}">პარტნიორი ჯერ არ არის</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 
@@ -505,13 +517,13 @@ function renderPartnerCard(partner, range = getPartnerCashManagementRange()) {
   const cash = calculatePartnerCashForRange(partner, state.partnerCashRecords || [], range);
   return `
     <tr>
-      <td>${renderAppTableText(partnerName(partner), partner.username)}</td>
-      <td>${escapeHtml(formatMoney(cash.cashDue))}</td>
-      <td>${escapeHtml(formatMoney(cash.pendingCash))}</td>
-      <td>${renderAppTableText(formatAdjustmentDisplay(cash.adjustmentTotal), getAdjustmentDirectionLabel(cash.adjustmentTotal))}</td>
-      <td>${renderAppTableText(partner.contactPerson || "არ არის", partner.phone || "არ არის")}</td>
-      <td>${renderAppStatusBadge(active ? "delivered" : "failed", active ? "აქტიური" : "არააქტიური")}</td>
-      <td>
+      <td data-label="პარტნიორი">${renderAppTableText(partnerName(partner), partner.username)}</td>
+      <td data-label="ქეში">${escapeHtml(formatMoney(cash.cashDue))}</td>
+      <td data-label="მოლოდინი">${escapeHtml(formatMoney(cash.pendingCash))}</td>
+      <td data-label="კორექტირება">${renderAppTableText(formatAdjustmentDisplay(cash.adjustmentTotal), getAdjustmentDirectionLabel(cash.adjustmentTotal))}</td>
+      <td data-label="კონტაქტი">${renderAppTableText(partner.contactPerson || "არ არის", partner.phone || "არ არის")}</td>
+      <td data-label="სტატუსი">${renderAppStatusBadge(active ? "delivered" : "failed", active ? "აქტიური" : "არააქტიური")}</td>
+      <td data-label="მოქმედება">
         <div class="row-actions admin-user-actions">
           <button class="mini-button" type="button" data-action="adjustPartnerCash" data-value="${escapeAttr(partner.username)}">ქეში</button>
           <button class="mini-button" type="button" data-action="editPartner" data-value="${escapeAttr(partner.username)}">რედაქტირება</button>
