@@ -115,6 +115,102 @@ test("admin tariff settings expose volume and express prices", async ({ page }) 
   await expect(page.locator("#dialogBody")).toContainText("ექსპრეს დელივერი");
 });
 
+test("finance dashboard lists partner service balances", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const batchId = Date.now();
+  const result = await page.evaluate(async ({ batchId }) => {
+    const adminToken = state.authToken;
+    const apiRequest = async (path, options = {}) => {
+      const response = await fetch(path, {
+        method: options.method || "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${options.token || adminToken}`,
+          "Content-Type": "application/json",
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      if (!response.ok) throw new Error(`${options.method || "GET"} ${path} ${response.status}`);
+      return response.json();
+    };
+
+    const courierUsername = `finance-courier-${batchId}`;
+    await apiRequest("/api/users", {
+      method: "POST",
+      body: {
+        username: courierUsername,
+        password: "pass123",
+        role: "courier",
+        firstName: "Finance",
+        lastName: "Courier",
+        phone: "555330001",
+      },
+    });
+    const courierLogin = await apiRequest("/api/login", {
+      method: "POST",
+      token: "",
+      body: { username: courierUsername, password: "pass123" },
+    });
+
+    const createPartner = (suffix) => apiRequest("/api/partners", {
+      method: "POST",
+      body: {
+        username: `finance-partner-${suffix}-${batchId}@test.local`,
+        password: "pass123",
+        companyName: `Finance Partner ${suffix}`,
+        contactPerson: `Contact ${suffix}`,
+        phone: suffix === "cod" ? "555330002" : "555330003",
+      },
+    });
+    const partnerCod = await createPartner("cod");
+    const partnerNoCod = await createPartner("nocod");
+
+    const createParcel = (partner, paymentAmount, fullName) => apiRequest("/api/parcels", {
+      method: "POST",
+      body: {
+        courierUsername,
+        partnerId: partner.partner.id,
+        city: "Tbilisi",
+        address: `${fullName} Street 12`,
+        fullAddress: `Tbilisi, ${fullName} Street 12`,
+        fullName,
+        phone: "555123456",
+        paymentAmount,
+        lat: 41.7151,
+        lng: 44.8271,
+        tariffId: "volume_5_10",
+      },
+    });
+    const codParcel = await createParcel(partnerCod, 100, "COD Recipient");
+    const noCodParcel = await createParcel(partnerNoCod, 0, "No COD Recipient");
+
+    const deliver = (parcel) => apiRequest(`/api/parcels/${parcel.parcel.id}/status`, {
+      method: "PATCH",
+      token: courierLogin.token,
+      body: { status: "delivered", expectedUpdatedAt: parcel.parcel.updatedAt },
+    });
+    await deliver(codParcel);
+    await deliver(noCodParcel);
+
+    await window.openFinanceDashboard();
+    return {
+      partnerCodName: partnerCod.partner.companyName,
+      partnerNoCodName: partnerNoCod.partner.companyName,
+    };
+  }, { batchId });
+
+  await expect(page.locator("#dialogModal")).toHaveClass(/active/);
+  await expect(page.locator("[data-daily-balance-export]")).toBeVisible();
+  await page.locator(".finance-admin-tabs [data-finance-dashboard-tab='partners']").click();
+
+  await expect(page.locator("#dialogBody")).toContainText(result.partnerCodName);
+  await expect(page.locator("#dialogBody")).toContainText(result.partnerNoCodName);
+  await expect(page.locator("#dialogBody")).toContainText("90.00");
+  await expect(page.locator("#dialogBody")).toContainText("10.00");
+});
+
 test("admin partner management uses a tall scrollable list", async ({ page }) => {
   await page.goto("/");
   await ensureAdminSession(page);
@@ -145,7 +241,7 @@ test("admin partner management uses a tall scrollable list", async ({ page }) =>
 
   await expect(page.locator("#dialogModal")).toHaveClass(/active/);
   await expect(page.locator(".partner-management-screen")).toBeVisible();
-  await expect(page.locator(".partner-management-table tbody tr")).toHaveCount(10);
+  await expect.poll(async () => page.locator(".partner-management-table tbody tr").count()).toBeGreaterThanOrEqual(10);
 
   const metrics = await page.locator(".partner-management-list").evaluate((element) => ({
     clientHeight: element.clientHeight,

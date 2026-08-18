@@ -13720,3 +13720,18 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
     grid-template-columns: minmax(72px, 0.38fr) minmax(0, 1fr);
   }
 }
+
+.finance-workbench .partner-order-table {
+  min-width: 1040px;
+}
+
+.finance-workbench .partner-order-table td[data-label="ნეტო"],
+.finance-workbench .partner-order-table td[data-label="პარტნიორის ნეტო"] {
+  font-weight: 850;
+}
+
+@media (max-width: 720px) {
+  .finance-workbench .partner-order-table {
+    min-width: 0;
+  }
+}

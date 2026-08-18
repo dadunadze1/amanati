@@ -125,8 +125,13 @@ function calculatePartnerCashSummary(partner, records = []) {
   const totalCash = safeMoney(cashOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const baseCash = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
   const pendingCash = safeMoney(pendingCashOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
+  const serviceFees = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPartnerOrderServiceFee(order), 0));
+  const pendingServiceFees = safeMoney(pendingOrders.reduce((sum, order) => sum + getPartnerOrderServiceFee(order), 0));
   const adjustmentTotal = safeMoney(getPartnerCashAdjustments(partner).reduce((sum, adjustment) => sum + getAdjustmentSignedAmount(adjustment), 0));
-  const correctedTotalCash = Math.max(0, safeMoney(baseCash + adjustmentTotal));
+  const netBalance = safeMoney(baseCash + adjustmentTotal - serviceFees);
+  const partnerReturnDue = Math.max(0, netBalance);
+  const partnerPaymentDue = Math.max(0, safeMoney(-netBalance));
+  const correctedTotalCash = partnerReturnDue;
   return {
     orders,
     deliveredOrders,
@@ -136,9 +141,22 @@ function calculatePartnerCashSummary(partner, records = []) {
     correctedTotalCash,
     baseCash,
     pendingCash,
+    serviceFees,
+    pendingServiceFees,
     adjustmentTotal,
-    cashDue: Math.max(0, safeMoney(baseCash + adjustmentTotal)),
+    netBalance,
+    partnerReturnDue,
+    partnerPaymentDue,
+    cashDue: partnerReturnDue,
   };
+}
+
+
+function getPartnerOrderServiceFee(order) {
+  if (!order) return 0;
+  if (order.status === "delivered") return getDeliveryTotal(order);
+  if (typeof hasMoneyValue === "function" && hasMoneyValue(order.deliveryTotalPrice)) return safeMoney(order.deliveryTotalPrice);
+  return safeMoney(getFallbackTariff(order).partnerPrice);
 }
 
 
