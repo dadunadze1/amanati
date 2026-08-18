@@ -199,6 +199,7 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
     return {
       partnerCodName: partnerCod.partner.companyName,
       partnerNoCodName: partnerNoCod.partner.companyName,
+      partnerNoCodUsername: partnerNoCod.partner.username,
       partnerUnusedName: partnerUnused.partner.companyName,
     };
   }, { batchId });
@@ -212,6 +213,19 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   await expect(page.locator("#dialogBody")).not.toContainText(result.partnerUnusedName);
   await expect(page.locator("#dialogBody")).toContainText("90.00");
   await expect(page.locator("#dialogBody")).toContainText("10.00");
+
+  const resetSummary = await page.evaluate(async ({ username }) => {
+    await window.resetPartnerCashAdjustment(username);
+    await window.loadPartnerCashAdjustments();
+    const partners = await window.getPartners();
+    const records = await window.getAllPartnerCashRecords();
+    const partner = partners.find((item) => item.username === username);
+    return window.calculatePartnerCashForRange(partner, records, window.getPartnerCashManagementRange());
+  }, { username: result.partnerNoCodUsername });
+
+  expect(resetSummary.serviceFees).toBe(10);
+  expect(resetSummary.netBalance).toBe(0);
+  expect(resetSummary.partnerPaymentDue).toBe(0);
 });
 
 test("admin partner management uses a tall scrollable list", async ({ page }) => {

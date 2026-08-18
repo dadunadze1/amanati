@@ -642,8 +642,31 @@ async function addPartnerCashAdjustment(username, amount, mode = "subtract") {
 
   const range = getPartnerCashManagementRange();
   const summary = calculatePartnerCashForRange(partner, records, range);
-  const rawCashDue = safeMoney(summary.baseCash + summary.adjustmentTotal);
-  const { correctionAmount, mode: appliedMode, nextAmount, nextDelta } = calculateAdjustmentDelta(summary.cashDue, amount, mode, rawCashDue);
+  const normalizedAmount = Math.max(0, safeMoney(amount));
+  if (normalizedAmount <= 0) return;
+
+  const currentReturnDue = Math.max(0, safeMoney(summary.netBalance));
+  if (mode !== "add" && currentReturnDue <= 0) return;
+
+  const appliedMode = mode === "add" ? "add" : "subtract";
+  const correctionAmount = appliedMode === "add" ? normalizedAmount : Math.min(normalizedAmount, currentReturnDue);
+  const nextAmount = appliedMode === "add"
+    ? safeMoney(currentReturnDue + correctionAmount)
+    : Math.max(0, safeMoney(currentReturnDue - correctionAmount));
+  const nextDelta = safeMoney(nextAmount - summary.netBalance);
+  if (Math.abs(nextDelta) < 0.005) return;
+
+  await savePartnerCashBalanceAdjustment(partner, range, {
+    nextDelta,
+    targetAmount: nextAmount,
+    correctionAmount,
+    correctionMode: appliedMode,
+  });
+}
+
+
+async function savePartnerCashBalanceAdjustment(partner, range, options = {}) {
+  const nextDelta = safeMoney(options.nextDelta);
   if (Math.abs(nextDelta) < 0.005) return;
 
   const now = new Date().toISOString();
@@ -654,9 +677,9 @@ async function addPartnerCashAdjustment(username, amount, mode = "subtract") {
     partnerId: partnerCashIdentity(partner),
     amount: nextDelta,
     delta: nextDelta,
-    targetAmount: nextAmount,
-    correctionAmount,
-    correctionMode: appliedMode,
+    targetAmount: safeMoney(options.targetAmount),
+    correctionAmount: Math.max(0, safeMoney(options.correctionAmount)),
+    correctionMode: options.correctionMode === "add" ? "add" : "subtract",
     type: nextDelta < 0 ? "negative" : "positive",
     category: "partnerCash",
     dateKey: range.start,
@@ -681,7 +704,14 @@ async function zeroPartnerCashAdjustment(username) {
   if (!partner) return;
   const range = getPartnerCashManagementRange();
   const summary = calculatePartnerCashForRange(partner, records, range);
-  await addPartnerCashAdjustment(username, summary.cashDue);
+  const currentNetBalance = safeMoney(summary.netBalance);
+  if (Math.abs(currentNetBalance) < 0.005) return;
+  await savePartnerCashBalanceAdjustment(partner, range, {
+    nextDelta: safeMoney(-currentNetBalance),
+    targetAmount: 0,
+    correctionAmount: Math.abs(currentNetBalance),
+    correctionMode: currentNetBalance > 0 ? "subtract" : "add",
+  });
 }
 
 
