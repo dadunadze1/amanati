@@ -166,6 +166,7 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
     });
     const partnerCod = await createPartner("cod");
     const partnerNoCod = await createPartner("nocod");
+    const partnerUnused = await createPartner("unused");
 
     const createParcel = (partner, paymentAmount, fullName) => apiRequest("/api/parcels", {
       method: "POST",
@@ -198,6 +199,7 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
     return {
       partnerCodName: partnerCod.partner.companyName,
       partnerNoCodName: partnerNoCod.partner.companyName,
+      partnerUnusedName: partnerUnused.partner.companyName,
     };
   }, { batchId });
 
@@ -207,6 +209,7 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
 
   await expect(page.locator("#dialogBody")).toContainText(result.partnerCodName);
   await expect(page.locator("#dialogBody")).toContainText(result.partnerNoCodName);
+  await expect(page.locator("#dialogBody")).not.toContainText(result.partnerUnusedName);
   await expect(page.locator("#dialogBody")).toContainText("90.00");
   await expect(page.locator("#dialogBody")).toContainText("10.00");
 });

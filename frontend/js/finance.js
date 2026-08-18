@@ -458,6 +458,11 @@ function calculatePartnerCashSummaryForRange(partner, records = [], startDate, e
 }
 
 
+function partnerSummaryHasOrders(summary) {
+  return Array.isArray(summary?.orders) && summary.orders.length > 0;
+}
+
+
 function normalizeDailyBalanceEntry(entry = {}) {
   const now = new Date().toISOString();
   const type = ["courier", "partner", "snapshot"].includes(entry.type) ? entry.type : "snapshot";
@@ -896,7 +901,7 @@ async function getFinanceAdminReport() {
   const partnerSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
     partner,
     summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end),
-  }));
+  })).filter(({ summary }) => partnerSummaryHasOrders(summary));
   const totalCourierCash = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.cashReceived, 0));
   const totalCourierPay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
   const courierBasePay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.basePay, 0));
@@ -983,27 +988,33 @@ function renderFinanceAdminFilters(report, activeView) {
   const yesterday = addDaysToDateKey(today, -1);
   return `
     <div class="finance-workbench-head">
-      <div class="finance-toolbar finance-range-toolbar finance-workbench-range">
-        <label>
-          <span>საწყისი</span>
-          <input class="finance-input" id="financeDashboardStartDate" type="date" value="${escapeAttr(report.range.start)}" aria-label="საწყისი თარიღი">
+      <div class="finance-workbench-topline">
+        <div class="finance-toolbar finance-range-toolbar finance-workbench-range">
+          <label>
+            <span>საწყისი</span>
+            <input class="finance-input" id="financeDashboardStartDate" type="date" value="${escapeAttr(report.range.start)}" aria-label="საწყისი თარიღი">
+          </label>
+          <label>
+            <span>დასასრული</span>
+            <input class="finance-input" id="financeDashboardEndDate" type="date" value="${escapeAttr(report.range.end)}" aria-label="დასრულების თარიღი">
+          </label>
+          <button class="mini-button finance-button-primary" type="button" data-finance-dashboard-apply>ნახვა</button>
+        </div>
+        <label class="finance-admin-search">
+          <span>ძებნა</span>
+          <input class="finance-input" id="financeAdminSearch" type="search" autocomplete="off" value="${escapeAttr(state.financeAdminSearch || "")}" placeholder="კურიერი, პარტნიორი, მიმღები, თანხა">
         </label>
-        <label>
-          <span>დასასრული</span>
-          <input class="finance-input" id="financeDashboardEndDate" type="date" value="${escapeAttr(report.range.end)}" aria-label="დასრულების თარიღი">
-        </label>
-        <button class="mini-button finance-button-primary" type="button" data-finance-dashboard-apply>ნახვა</button>
-        <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(today)}|${escapeAttr(today)}">დღეს</button>
-        <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(yesterday)}|${escapeAttr(yesterday)}">გუშინ</button>
-        <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(addDaysToDateKey(today, -6))}|${escapeAttr(today)}">7 დღე</button>
-        <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(today.slice(0, 8) + "01")}|${escapeAttr(today)}">თვე</button>
-        <button class="mini-button" type="button" data-daily-balance-export>CSV</button>
       </div>
-      ${renderFinanceAdminTabs(activeView)}
-      <label class="finance-admin-search">
-        <span>ძებნა</span>
-        <input class="finance-input" id="financeAdminSearch" type="search" autocomplete="off" value="${escapeAttr(state.financeAdminSearch || "")}" placeholder="კურიერი, პარტნიორი, მიმღები, თანხა">
-      </label>
+      <div class="finance-workbench-controls">
+        <div class="finance-workbench-quick" aria-label="სწრაფი პერიოდი">
+          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(today)}|${escapeAttr(today)}">დღეს</button>
+          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(yesterday)}|${escapeAttr(yesterday)}">გუშინ</button>
+          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(addDaysToDateKey(today, -6))}|${escapeAttr(today)}">7 დღე</button>
+          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(today.slice(0, 8) + "01")}|${escapeAttr(today)}">თვე</button>
+          <button class="mini-button" type="button" data-daily-balance-export>CSV</button>
+        </div>
+        ${renderFinanceAdminTabs(activeView)}
+      </div>
     </div>
   `;
 }
@@ -1028,7 +1039,7 @@ function renderFinanceAdminSummary(report) {
     title: "ფინანსური სია",
     badges: [
       `კურიერი: ${report.couriers.length}`,
-      `პარტნიორი: ${report.partners.length}`,
+      `პარტნიორი: ${report.partnerSummaries.length}`,
       `ჩაბარებული: ${totals.delivered}`,
       `პერიოდი: ${formatDateRangeLabel(report.range.start, report.range.end)}`,
     ],
@@ -1394,7 +1405,7 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
   const partnerSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
     partner,
     summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end),
-  }));
+  })).filter(({ summary }) => partnerSummaryHasOrders(summary));
   const daySummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
   const deliveredOrders = daySummary.deliveredRecords || [];
   const totalCourierPay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
