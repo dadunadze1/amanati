@@ -224,6 +224,7 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   }, { username: result.partnerNoCodUsername });
 
   expect(resetSummary.serviceFees).toBe(10);
+  expect(resetSummary.outstandingServiceFees).toBe(0);
   expect(resetSummary.netBalance).toBe(0);
   expect(resetSummary.partnerPaymentDue).toBe(0);
 });
