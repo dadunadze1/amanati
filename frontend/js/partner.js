@@ -131,6 +131,7 @@ function calculatePartnerCashSummary(partner, records = []) {
   const netBalance = safeMoney(baseCash + adjustmentTotal - serviceFees);
   const partnerReturnDue = Math.max(0, netBalance);
   const partnerPaymentDue = Math.max(0, safeMoney(-netBalance));
+  const outstandingCash = partnerReturnDue;
   const outstandingServiceFees = partnerPaymentDue;
   const correctedTotalCash = partnerReturnDue;
   return {
@@ -141,6 +142,7 @@ function calculatePartnerCashSummary(partner, records = []) {
     totalCash,
     correctedTotalCash,
     baseCash,
+    outstandingCash,
     pendingCash,
     serviceFees,
     outstandingServiceFees,

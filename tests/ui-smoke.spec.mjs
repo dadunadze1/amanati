@@ -198,6 +198,7 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
     await window.openFinanceDashboard();
     return {
       partnerCodName: partnerCod.partner.companyName,
+      partnerCodUsername: partnerCod.partner.username,
       partnerNoCodName: partnerNoCod.partner.companyName,
       partnerNoCodUsername: partnerNoCod.partner.username,
       partnerUnusedName: partnerUnused.partner.companyName,
@@ -227,6 +228,20 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   expect(resetSummary.outstandingServiceFees).toBe(0);
   expect(resetSummary.netBalance).toBe(0);
   expect(resetSummary.partnerPaymentDue).toBe(0);
+
+  const resetCodSummary = await page.evaluate(async ({ username }) => {
+    await window.resetPartnerCashAdjustment(username);
+    await window.loadPartnerCashAdjustments();
+    const partners = await window.getPartners();
+    const records = await window.getAllPartnerCashRecords();
+    const partner = partners.find((item) => item.username === username);
+    return window.calculatePartnerCashForRange(partner, records, window.getPartnerCashManagementRange());
+  }, { username: result.partnerCodUsername });
+
+  expect(resetCodSummary.baseCash).toBe(100);
+  expect(resetCodSummary.outstandingCash).toBe(0);
+  expect(resetCodSummary.netBalance).toBe(0);
+  expect(resetCodSummary.partnerReturnDue).toBe(0);
 });
 
 test("admin partner management uses a tall scrollable list", async ({ page }) => {

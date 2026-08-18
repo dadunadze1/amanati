@@ -413,6 +413,7 @@ function calculatePartnerCashSummaryForRange(partner, records = [], startDate, e
       deliveredOrders: [],
       pendingOrders: [],
       baseCash: 0,
+      outstandingCash: 0,
       pendingCash: 0,
       serviceFees: 0,
       outstandingServiceFees: 0,
@@ -440,6 +441,7 @@ function calculatePartnerCashSummaryForRange(partner, records = [], startDate, e
   const netBalance = safeMoney(baseCash + adjustmentTotal - serviceFees);
   const partnerReturnDue = Math.max(0, netBalance);
   const partnerPaymentDue = Math.max(0, safeMoney(-netBalance));
+  const outstandingCash = partnerReturnDue;
   const outstandingServiceFees = partnerPaymentDue;
 
   return {
@@ -448,6 +450,7 @@ function calculatePartnerCashSummaryForRange(partner, records = [], startDate, e
     pendingOrders,
     adjustments,
     baseCash,
+    outstandingCash,
     pendingCash,
     serviceFees,
     outstandingServiceFees,
@@ -915,7 +918,7 @@ async function getFinanceAdminReport() {
   const partnerPaymentDue = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.partnerPaymentDue, 0));
   const partnerNetBalance = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.netBalance, 0));
   const partnerPendingCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.pendingCash, 0));
-  const partnerBaseCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.baseCash, 0));
+  const partnerBaseCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + (item.summary.outstandingCash ?? item.summary.baseCash), 0));
   const partnerAdjustments = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
   const paidCourierTotal = safeMoney(courierSummaries.reduce((sum, item) => (
     sum + (findDailyBalanceEntry(ledger, "courier", range, item.courier.username)?.amount || 0)
@@ -1139,9 +1142,10 @@ function renderFinanceAdminPartners(report) {
   const rows = report.partnerSummaries
     .filter(({ partner, summary }) => financeMatchesSearch([
       partnerName(partner), partner.username, partner.contactPerson, partner.phone,
-      summary.baseCash, summary.outstandingServiceFees, summary.partnerReturnDue, summary.partnerPaymentDue, summary.netBalance,
+      summary.outstandingCash, summary.outstandingServiceFees, summary.partnerReturnDue, summary.partnerPaymentDue, summary.netBalance,
     ]))
     .map(({ partner, summary }) => {
+      const codBalance = summary.outstandingCash ?? summary.baseCash;
       const serviceFeeBalance = summary.outstandingServiceFees ?? summary.serviceFees;
       const settlementAmount = Math.max(summary.partnerReturnDue, summary.partnerPaymentDue);
       const statusLabel = summary.partnerPaymentDue > 0
@@ -1150,9 +1154,9 @@ function renderFinanceAdminPartners(report) {
           ? "გადასარიცხი"
           : "დახურული";
       return `
-      <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, partner.contactPerson, partner.phone, summary.baseCash, serviceFeeBalance, summary.netBalance]))}">
+      <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, partner.contactPerson, partner.phone, codBalance, serviceFeeBalance, summary.netBalance]))}">
         ${renderFinanceCell("პარტნიორი", renderFinanceTableText(partnerName(partner), partner.username || partner.id || ""))}
-        ${renderFinanceCell("COD", escapeHtml(formatMoney(summary.baseCash)))}
+        ${renderFinanceCell("COD", escapeHtml(formatMoney(codBalance)))}
         ${renderFinanceCell("მომსახურება", escapeHtml(formatMoney(serviceFeeBalance)))}
         ${renderFinanceCell("დასაბრუნებელი", escapeHtml(formatMoney(summary.partnerReturnDue)))}
         ${renderFinanceCell("გადასახდელი", escapeHtml(formatMoney(summary.partnerPaymentDue)))}
@@ -1416,7 +1420,7 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
   const courierBasePay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.basePay, 0));
   const courierAdjustments = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
   const totalPartnerCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.partnerReturnDue, 0));
-  const partnerBaseCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.baseCash, 0));
+  const partnerBaseCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + (item.summary.outstandingCash ?? item.summary.baseCash), 0));
   const partnerServiceFees = safeMoney(partnerSummaries.reduce((sum, item) => sum + (item.summary.outstandingServiceFees ?? item.summary.serviceFees), 0));
   const partnerPaymentDue = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.partnerPaymentDue, 0));
   const partnerNetBalance = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.netBalance, 0));
@@ -1516,7 +1520,7 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
       <span>${escapeHtml(partnerName(partner))}</span>
       <small>ჩაბარებული: ${escapeHtml(String(partnerSummary.deliveredOrders.length))}</small>
       <strong>${escapeHtml(formatMoney(partnerSummary.netBalance))}</strong>
-      <small>COD: ${escapeHtml(formatMoney(partnerSummary.baseCash))} · მომსახურება: ${escapeHtml(formatMoney(partnerSummary.outstandingServiceFees ?? partnerSummary.serviceFees))}</small>
+      <small>COD: ${escapeHtml(formatMoney(partnerSummary.outstandingCash ?? partnerSummary.baseCash))} · მომსახურება: ${escapeHtml(formatMoney(partnerSummary.outstandingServiceFees ?? partnerSummary.serviceFees))}</small>
       <small>დასაბრუნებელი: ${escapeHtml(formatMoney(partnerSummary.partnerReturnDue))} · გადასახდელი: ${escapeHtml(formatMoney(partnerSummary.partnerPaymentDue))}</small>
       <small>${escapeHtml(getAdjustmentDirectionLabel(partnerSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(partnerSummary.adjustmentTotal))}</small>
       <small>მოლოდინში: ${escapeHtml(formatMoney(partnerSummary.pendingCash))}</small>
@@ -1748,7 +1752,7 @@ function exportAdminDailyBalanceCsv(report) {
       "partner",
       partnerName(partner),
       summary.deliveredOrders.length,
-      summary.baseCash,
+      summary.outstandingCash ?? summary.baseCash,
       summary.outstandingServiceFees ?? summary.serviceFees,
       summary.partnerReturnDue,
       summary.partnerPaymentDue,
