@@ -992,6 +992,14 @@ function renderFinanceAdminTabs(activeView) {
 function renderFinanceAdminFilters(report, activeView) {
   const today = toDateKey(new Date());
   const yesterday = addDaysToDateKey(today, -1);
+  const quickRanges = [
+    { label: "დღეს", value: `${today}|${today}` },
+    { label: "გუშინ", value: `${yesterday}|${yesterday}` },
+    { label: "7 დღე", value: `${addDaysToDateKey(today, -6)}|${today}` },
+    { label: "თვე", value: `${today.slice(0, 8) + "01"}|${today}` },
+    { label: "CSV", value: "export" },
+  ];
+  const currentRangeValue = `${report.range.start}|${report.range.end}`;
   return `
     <div class="finance-workbench-head">
       <div class="finance-workbench-topline">
@@ -1006,20 +1014,25 @@ function renderFinanceAdminFilters(report, activeView) {
           </label>
           <button class="mini-button finance-button-primary" type="button" data-finance-dashboard-apply>ნახვა</button>
         </div>
-        <label class="finance-admin-search">
-          <span>ძებნა</span>
-          <input class="finance-input" id="financeAdminSearch" type="search" autocomplete="off" value="${escapeAttr(state.financeAdminSearch || "")}" placeholder="კურიერი, პარტნიორი, მიმღები, თანხა">
-        </label>
-      </div>
-      <div class="finance-workbench-controls">
-        <div class="finance-workbench-quick" aria-label="სწრაფი პერიოდი">
-          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(today)}|${escapeAttr(today)}">დღეს</button>
-          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(yesterday)}|${escapeAttr(yesterday)}">გუშინ</button>
-          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(addDaysToDateKey(today, -6))}|${escapeAttr(today)}">7 დღე</button>
-          <button class="mini-button" type="button" data-finance-dashboard-range="${escapeAttr(today.slice(0, 8) + "01")}|${escapeAttr(today)}">თვე</button>
-          <button class="mini-button" type="button" data-daily-balance-export>CSV</button>
+        <div class="finance-workbench-selects">
+          <label class="finance-workbench-select">
+            <span>პერიოდი</span>
+            <select class="finance-input" data-finance-dashboard-range-select aria-label="სწრაფი პერიოდი">
+              <option value="">პერიოდი</option>
+              ${quickRanges.map((item) => `
+                <option value="${escapeAttr(item.value)}" ${item.value === currentRangeValue ? "selected" : ""}>${escapeHtml(item.label)}</option>
+              `).join("")}
+            </select>
+          </label>
+          <label class="finance-workbench-select">
+            <span>განყოფილება</span>
+            <select class="finance-input" data-finance-dashboard-tab-select aria-label="ფინანსების განყოფილება">
+              ${FINANCE_ADMIN_VIEWS.map((item) => `
+                <option value="${escapeAttr(item.id)}" ${activeView === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>
+              `).join("")}
+            </select>
+          </label>
         </div>
-        ${renderFinanceAdminTabs(activeView)}
       </div>
     </div>
   `;
@@ -1139,6 +1152,13 @@ function renderFinanceAdminCouriers(report) {
 
 
 function renderFinanceAdminPartners(report) {
+  const partnerTotals = report.partnerSummaries.reduce((totals, { summary }) => {
+    totals.cod += Number(summary.outstandingCash ?? summary.baseCash) || 0;
+    totals.service += Number(summary.outstandingServiceFees ?? summary.serviceFees) || 0;
+    totals.returnDue += Number(summary.partnerReturnDue) || 0;
+    totals.paymentDue += Number(summary.partnerPaymentDue) || 0;
+    return totals;
+  }, { cod: 0, service: 0, returnDue: 0, paymentDue: 0 });
   const rows = report.partnerSummaries
     .filter(({ partner, summary }) => financeMatchesSearch([
       partnerName(partner), partner.username, partner.contactPerson, partner.phone,
@@ -1173,10 +1193,10 @@ function renderFinanceAdminPartners(report) {
   return renderFinanceListPanel({
     title: "პარტნიორები",
     badges: [
-      `COD: ${formatMoney(report.totals.partnerBaseCash)}`,
-      `მომსახურება: ${formatMoney(report.totals.partnerServiceFees)}`,
-      `გადასარიცხი: ${formatMoney(report.totals.partnerCashDue)}`,
-      `მისაღები: ${formatMoney(report.totals.partnerPaymentDue)}`,
+      `COD: ${formatMoney(partnerTotals.cod)}`,
+      `მომსახურება: ${formatMoney(partnerTotals.service)}`,
+      `გადასარიცხი: ${formatMoney(partnerTotals.returnDue)}`,
+      `მისაღები: ${formatMoney(partnerTotals.paymentDue)}`,
       `გადახდილია: ${formatMoney(report.totals.paidPartnerTotal)}`,
     ],
     headers: ["პარტნიორი", "COD", "მომსახურება", "დასაბრუნებელი", "გადასახდელი", "ნეტო", "მოლოდინში", "კორექტირება", "სტატუსი", "გადახდა", ""],
@@ -1333,11 +1353,44 @@ function bindFinanceDashboardEvents(report) {
       await openFinanceDashboard();
     });
   });
+  document.querySelector("[data-finance-dashboard-range-select]")?.addEventListener("change", async (event) => {
+    const value = event.currentTarget.value;
+    if (!value) return;
+    if (value === "export") {
+      exportAdminDailyBalanceCsv({
+        range: report.range,
+        courierSummaries: report.courierSummaries,
+        partnerSummaries: report.partnerSummaries,
+        deliveredOrders: report.deliveredOrders,
+        totals: {
+          totalCourierPay: report.totals.totalCourierPay,
+          partnerBaseCash: report.totals.partnerBaseCash,
+          partnerServiceFees: report.totals.partnerServiceFees,
+          totalPartnerCash: report.totals.partnerCashDue,
+          partnerPaymentDue: report.totals.partnerPaymentDue,
+          partnerNetBalance: report.totals.partnerNetBalance,
+          partnerAdjustments: report.totals.partnerAdjustments,
+          deliveryFees: report.totals.deliveryFees,
+          adjustedProfit: report.totals.adjustedProfit,
+          delivered: report.totals.delivered,
+        },
+      });
+      event.currentTarget.value = `${report.range.start}|${report.range.end}`;
+      return;
+    }
+    const [start, end] = value.split("|");
+    setFinanceCourierRange(start, end);
+    await openFinanceDashboard();
+  });
   document.querySelectorAll("[data-finance-dashboard-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.financeAdminView = getFinanceAdminView(button.dataset.financeDashboardTab);
       await openFinanceDashboard();
     });
+  });
+  document.querySelector("[data-finance-dashboard-tab-select]")?.addEventListener("change", async (event) => {
+    state.financeAdminView = getFinanceAdminView(event.currentTarget.value);
+    await openFinanceDashboard();
   });
   const searchInput = document.getElementById("financeAdminSearch");
   if (searchInput) {
@@ -1374,6 +1427,7 @@ async function openFinanceDashboard() {
     return;
   }
   state.financeAdminView = getFinanceAdminView(state.financeAdminView);
+  state.financeAdminSearch = "";
   const report = await getFinanceAdminReport();
   const filters = renderFinanceAdminFilters(report, state.financeAdminView);
   const content = `

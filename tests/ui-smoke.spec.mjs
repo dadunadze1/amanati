@@ -206,8 +206,8 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   }, { batchId });
 
   await expect(page.locator("#dialogModal")).toHaveClass(/active/);
-  await expect(page.locator("[data-daily-balance-export]")).toBeVisible();
-  await page.locator(".finance-admin-tabs [data-finance-dashboard-tab='partners']").click();
+  await expect(page.locator("[data-finance-dashboard-range-select]")).toBeVisible();
+  await page.locator("[data-finance-dashboard-tab-select]").selectOption("partners");
 
   await expect(page.locator("#dialogBody")).toContainText(result.partnerCodName);
   await expect(page.locator("#dialogBody")).toContainText(result.partnerNoCodName);
@@ -242,6 +242,14 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   expect(resetCodSummary.outstandingCash).toBe(0);
   expect(resetCodSummary.netBalance).toBe(0);
   expect(resetCodSummary.partnerReturnDue).toBe(0);
+
+  await page.evaluate(() => window.openFinanceDashboard());
+  await page.locator("[data-finance-dashboard-tab-select]").selectOption("partners");
+  const partnerBadgeText = await page.locator(".finance-list-panel .partner-filter-row").textContent();
+  expect(partnerBadgeText).toContain("COD: 0.00");
+  expect(partnerBadgeText).toContain("მომსახურება: 0.00");
+  expect(partnerBadgeText).toContain("გადასარიცხი: 0.00");
+  expect(partnerBadgeText).toContain("მისაღები: 0.00");
 });
 
 test("admin partner management uses a tall scrollable list", async ({ page }) => {
