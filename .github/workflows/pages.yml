@@ -48,6 +48,7 @@ jobs:
           mkdir -p .pages
           cp index.html .pages/
           cp .nojekyll .pages/
+          cp -r push .pages/
           rsync -a --delete \
             --exclude 'script.js' \
             --exclude 'script.backup.js' \
