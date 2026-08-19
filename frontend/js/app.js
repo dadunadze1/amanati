@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=3";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=4";
 
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
@@ -633,6 +633,12 @@ function getInitialPushRouteIntent() {
 async function openInitialPushRouteIfNeeded() {
   if (!state.isAdmin || !state.currentUser || !getInitialPushRouteIntent()) return;
   await openPushInboxDialog();
+  const parcelId = new URLSearchParams(window.location.search).get("parcel");
+  if (parcelId && typeof focusPushInboxParcel === "function") {
+    await focusPushInboxParcel(parcelId).catch((error) => {
+      console.warn("Initial push parcel focus failed", error);
+    });
+  }
 }
 
 

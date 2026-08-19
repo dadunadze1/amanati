@@ -25,6 +25,7 @@ const WEB_PUSH_PUBLIC_KEY = "BAEuO5gXFaWrtcaxhWxvzgNc1hlvCYZoNtYdxJno43RqzgANahv
 const PUSH_MAX_ATTEMPTS = 5;
 const PUSH_RETRY_DELAY_MS = 5 * 60 * 1000;
 const PUSH_LOCK_STALE_MS = 2 * 60 * 1000;
+const PUSH_VIBRATE_PATTERN = [220, 90, 220, 90, 320];
 const NOTIFICATION_TITLE_PREFIXES = {
   delivered: "📦",
   created: "🛵",
@@ -185,13 +186,15 @@ async function sendToAdminDevices(notification) {
       data: buildPushData(notification),
       webpush: {
         fcmOptions: {
-          link: APP_LINK,
+          link: getNotificationLink(notification),
         },
         notification: {
           icon: `${APP_LINK}icons/icon-192-v2.png`,
           badge: `${APP_LINK}icons/favicon-v2.png`,
-          tag: notification.parcelId || notification.id,
-          requireInteraction: false,
+          tag: getNotificationTag(notification),
+          requireInteraction: true,
+          renotify: true,
+          vibrate: PUSH_VIBRATE_PATTERN,
         },
       },
     };
@@ -393,7 +396,10 @@ async function sendStandardWebPush(subscriptions, notification) {
     ...buildPushData(notification),
     icon: `${APP_LINK}icons/icon-192-v2.png`,
     badge: `${APP_LINK}icons/favicon-v2.png`,
-    tag: notification.parcelId || notification.id,
+    tag: getNotificationTag(notification),
+    requireInteraction: true,
+    renotify: true,
+    vibrate: PUSH_VIBRATE_PATTERN,
   });
 
   const results = await Promise.allSettled(subscriptions.map((subscription) => (
@@ -434,7 +440,11 @@ function buildPushData(notification) {
     partnerName: notification.partnerName,
     courierUsername: notification.courierUsername,
     recipientRoles: Array.isArray(notification.recipientRoles) ? notification.recipientRoles.join(",") : "",
-    url: APP_LINK,
+    url: getNotificationLink(notification),
+    tag: getNotificationTag(notification),
+    requireInteraction: "true",
+    renotify: "true",
+    vibrate: PUSH_VIBRATE_PATTERN.join(","),
   };
 }
 
@@ -531,7 +541,22 @@ function normalizeNotification(raw, id) {
     partnerName,
     courierUsername,
     recipientRoles,
+    pageUrl: String(raw.pageUrl || ""),
   };
+}
+
+function getNotificationLink(notification) {
+  const pageUrl = String(notification?.pageUrl || "").trim();
+  if (/^https?:\/\//i.test(pageUrl)) return pageUrl;
+  const parcelId = String(notification?.parcelId || "").trim();
+  const fallback = `?view=push${parcelId ? `&parcel=${encodeURIComponent(parcelId)}` : ""}`;
+  return new URL(pageUrl || fallback, APP_LINK).href;
+}
+
+function getNotificationTag(notification) {
+  const type = String(notification?.type || notification?.status || "push").trim() || "push";
+  const parcelId = String(notification?.parcelId || notification?.id || "swift-delivery").trim();
+  return `${type}-${parcelId}`.slice(0, 120);
 }
 
 function getDefaultNotificationTitle(status) {

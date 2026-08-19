@@ -86,7 +86,7 @@ async function requestAdminPushNotifications(options = {}) {
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=3", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=4", { scope: "./" });
     await registration.update().catch(() => {});
     const subscription = await createAdminStandardWebPushSubscription(registration);
 
@@ -397,13 +397,14 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
   const body = isFailed && failureReason ? `${details}\nმიზეზი: ${failureReason}` : details;
   const statusTime = options.completedAt || options.deliveredAt || options.failedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || "";
 
+  const parcelId = String(parcel.id || "");
   return {
     type: isFailed ? "parcel_failed" : "parcel_delivered",
     status,
     recipientRoles: getParcelPushPartnerId(parcel) ? ["admin", "partner"] : ["admin"],
     title,
     body,
-    parcelId: String(parcel.id || ""),
+    parcelId,
     address,
     fullName,
     failureReason,
@@ -413,7 +414,7 @@ function buildAdminParcelStatusNotification(parcel, status, options = {}) {
     courierUsername: String(parcel.courierUsername || state.currentUser || ""),
     createdBy: state.currentUser || "",
     createdByRole: state.currentUserProfile?.role || "",
-    pageUrl: "./",
+    pageUrl: buildPushPageUrl(parcelId),
     eventKey: `${parcel.id || "parcel"}-${status}-${statusTime || "now"}`,
   };
 }
@@ -426,13 +427,14 @@ function buildParcelCreatedNotification(parcel) {
   const courierUsername = String(parcel.courierUsername || "").trim();
   const recipientRoles = courierUsername ? ["admin", "courier"] : ["admin"];
 
+  const parcelId = String(parcel.id || "");
   return {
     type: "parcel_created",
     status: "created",
     recipientRoles,
     title: formatPushNotificationTitle("created", "პარტნიორმა ახალი ამანათი დაამატა"),
     body: `${partnerName || "პარტნიორი"} - ${details}`,
-    parcelId: String(parcel.id || ""),
+    parcelId,
     address,
     fullName,
     failureReason: "",
@@ -442,7 +444,7 @@ function buildParcelCreatedNotification(parcel) {
     courierUsername,
     createdBy: state.currentUser || "",
     createdByRole: state.currentUserProfile?.role || "",
-    pageUrl: "./",
+    pageUrl: buildPushPageUrl(parcelId),
     eventKey: `${parcel.id || "parcel"}-created-${courierUsername || "admin"}-${parcel.createdAt || "now"}`,
   };
 }
@@ -452,13 +454,14 @@ function buildParcelAssignedNotification(parcel, courierUsername) {
   const fullName = String(parcel.fullName || parcel.customerName || parcel.name || "").trim();
   const details = [address, fullName].filter(Boolean).join(", ") || "ახალი ამანათი გაქვთ";
 
+  const parcelId = String(parcel.id || "");
   return {
     type: "parcel_assigned",
     status: "assigned",
     recipientRoles: ["courier"],
     title: formatPushNotificationTitle("assigned", "ახალი ამანათი გაქვთ"),
     body: details,
-    parcelId: String(parcel.id || ""),
+    parcelId,
     address,
     fullName,
     failureReason: "",
@@ -468,9 +471,14 @@ function buildParcelAssignedNotification(parcel, courierUsername) {
     courierUsername: String(courierUsername || parcel.courierUsername || ""),
     createdBy: state.currentUser || "",
     createdByRole: state.currentUserProfile?.role || "",
-    pageUrl: "./",
+    pageUrl: buildPushPageUrl(parcelId),
     eventKey: `${parcel.id || "parcel"}-assigned-${courierUsername || parcel.courierUsername || "courier"}`,
   };
+}
+
+function buildPushPageUrl(parcelId = "") {
+  const id = String(parcelId || "").trim();
+  return `./?view=push${id ? `&parcel=${encodeURIComponent(id)}` : ""}`;
 }
 
 function formatPushNotificationTitle(status, title) {

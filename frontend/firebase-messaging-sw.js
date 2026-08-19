@@ -1,33 +1,34 @@
 "use strict";
 
-const APP_CACHE_NAME = "swift-delivery-app-shell-v1";
+const APP_CACHE_NAME = "swift-delivery-app-shell-v2";
+const DEFAULT_PUSH_VIBRATE = [220, 90, 220, 90, 320];
 const APP_CACHE_ASSETS = [
   "./",
   "./index.html",
   "./manifest.json?v=2",
-  "./style.min.css?v=15",
+  "./style.min.css?v=20",
   "./icons/favicon-v2.png",
   "./icons/icon-192-v2.png",
   "./icons/icon-512-v2.png",
-  "./js/config.js?v=4",
+  "./js/config.js?v=5",
   "./js/state.js?v=11",
-  "./js/utils.js?v=1",
+  "./js/utils.js?v=2",
   "./js/storage.js?v=3",
-  "./js/notifications.js?v=13",
-  "./js/api.js?v=15",
+  "./js/notifications.js?v=14",
+  "./js/api.js?v=16",
   "./js/address-directory.js?v=13",
   "./js/map.js?v=7",
   "./js/auth.js?v=9",
   "./js/zones.js?v=3",
   "./js/photo-import.js?v=1",
-  "./js/parcels.js?v=20",
+  "./js/parcels.js?v=21",
   "./js/admin.js?v=12",
   "./js/courier.js?v=6",
-  "./js/partner.js?v=23",
-  "./js/finance.js?v=11",
-  "./js/history.js?v=6",
-  "./js/tariffs.js?v=1",
-  "./js/app.js?v=22",
+  "./js/partner.js?v=29",
+  "./js/finance.js?v=16",
+  "./js/history.js?v=7",
+  "./js/tariffs.js?v=2",
+  "./js/app.js?v=23",
 ];
 
 self.addEventListener("install", (event) => {
@@ -91,15 +92,15 @@ try {
   const messaging = firebase.messaging();
   messaging.onBackgroundMessage((payload) => {
     const title = payload.notification?.title || payload.data?.title || "Swift Delivery";
-    const options = {
+    const options = buildPushNotificationOptions({
       body: payload.notification?.body || payload.data?.body || "",
-      icon: "./icons/icon-192-v2.png",
-      badge: "./icons/favicon-v2.png",
       tag: payload.data?.parcelId || payload.messageId || "swift-delivery-admin-push",
-      data: {
-        url: payload.fcmOptions?.link || payload.data?.url || "./",
-      },
-    };
+      parcelId: payload.data?.parcelId || "",
+      url: payload.fcmOptions?.link || payload.data?.url || "./",
+      requireInteraction: payload.data?.requireInteraction,
+      renotify: payload.data?.renotify,
+      vibrate: payload.data?.vibrate,
+    });
 
     self.registration.showNotification(title, options);
   });
@@ -110,15 +111,17 @@ try {
 self.addEventListener("push", (event) => {
   const payload = readPushPayload(event);
   const title = payload.title || "Swift Delivery";
-  const options = {
+  const options = buildPushNotificationOptions({
     body: payload.body || "",
-    icon: payload.icon || "./icons/icon-192-v2.png",
-    badge: payload.badge || "./icons/favicon-v2.png",
     tag: payload.parcelId || payload.tag || "swift-delivery-admin-push",
-    data: {
-      url: payload.url || "./",
-    },
-  };
+    parcelId: payload.parcelId || "",
+    url: payload.url || "./",
+    icon: payload.icon,
+    badge: payload.badge,
+    requireInteraction: payload.requireInteraction,
+    renotify: payload.renotify,
+    vibrate: payload.vibrate,
+  });
 
   event.waitUntil(self.registration.showNotification(title, options));
 });
@@ -126,7 +129,7 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url || "./";
-  event.waitUntil(clients.openWindow(url));
+  event.waitUntil(openPushNotificationClient(url));
 });
 
 function readPushPayload(event) {
@@ -136,4 +139,42 @@ function readPushPayload(event) {
   } catch {
     return { title: "Swift Delivery", body: event.data.text() };
   }
+}
+
+function buildPushNotificationOptions(payload = {}) {
+  const tag = String(payload.tag || payload.parcelId || "swift-delivery-admin-push");
+  return {
+    body: payload.body || "",
+    icon: payload.icon || "./icons/icon-192-v2.png",
+    badge: payload.badge || "./icons/favicon-v2.png",
+    tag,
+    renotify: payload.renotify !== false && payload.renotify !== "false",
+    requireInteraction: payload.requireInteraction !== false && payload.requireInteraction !== "false",
+    vibrate: parsePushVibrate(payload.vibrate) || DEFAULT_PUSH_VIBRATE,
+    data: {
+      url: payload.url || "./?view=push",
+      parcelId: payload.parcelId || "",
+    },
+  };
+}
+
+function parsePushVibrate(value) {
+  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+  if (typeof value === "string" && value.trim()) {
+    const parsed = value.split(",").map((item) => Number(item.trim())).filter(Number.isFinite);
+    return parsed.length ? parsed : null;
+  }
+  return null;
+}
+
+async function openPushNotificationClient(url) {
+  const target = new URL(url || "./?view=push", self.location.href).href;
+  const clientList = await clients.matchAll({ type: "window", includeUncontrolled: true });
+  const sameOriginClient = clientList.find((client) => new URL(client.url).origin === self.location.origin);
+  if (sameOriginClient) {
+    await sameOriginClient.focus();
+    if ("navigate" in sameOriginClient) return sameOriginClient.navigate(target);
+    return sameOriginClient;
+  }
+  return clients.openWindow(target);
 }
