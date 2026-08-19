@@ -783,11 +783,21 @@ function publicStaticUser(user) {
   };
 }
 
+function parseOptionalStaticPickupCoordinate(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+
 function getStaticPartnerPickupCoords(partner) {
-  const lat = Number(partner?.pickupLat ?? partner?.pickupLatitude);
-  const lng = Number(partner?.pickupLng ?? partner?.pickupLongitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng };
+  const lat = parseOptionalStaticPickupCoordinate(partner?.pickupLat ?? partner?.pickupLatitude);
+  const lng = parseOptionalStaticPickupCoordinate(partner?.pickupLng ?? partner?.pickupLongitude);
+  if (lat === null || lng === null) return null;
+  const coords = { lat, lng };
+  return isStaticTbilisiCoords(coords) ? coords : null;
 }
 
 function getStaticPartnerPickupZoneId(partner) {
@@ -1371,10 +1381,9 @@ async function staticApi(path, options = {}) {
 
   if (method === "POST" && apiPath === "/api/partners") {
     const now = new Date().toISOString();
-    const pickupLat = Number(body.pickupLat ?? body.pickupLatitude);
-    const pickupLng = Number(body.pickupLng ?? body.pickupLongitude);
-    const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
-    const pickupZoneId = body.pickupZoneId || (hasPickupCoords ? getStaticPartnerPickupZoneId({ pickupLat, pickupLng }) : "");
+    const pickupCoords = getStaticPartnerPickupCoords(body);
+    const hasPickupCoords = Boolean(pickupCoords);
+    const pickupZoneId = body.pickupZoneId || (hasPickupCoords ? getStaticPartnerPickupZoneId(pickupCoords) : "");
     const user = {
       id: `partner-${Date.now()}`,
       username: body.username || body.email || "",
@@ -1386,10 +1395,10 @@ async function staticApi(path, options = {}) {
       firstName: body.contactPerson || "",
       phone: body.phone || "",
       pickupAddress: body.pickupAddress || "",
-      pickupLat: hasPickupCoords ? pickupLat : "",
-      pickupLng: hasPickupCoords ? pickupLng : "",
-      pickupLatitude: hasPickupCoords ? pickupLat : "",
-      pickupLongitude: hasPickupCoords ? pickupLng : "",
+      pickupLat: hasPickupCoords ? pickupCoords.lat : "",
+      pickupLng: hasPickupCoords ? pickupCoords.lng : "",
+      pickupLatitude: hasPickupCoords ? pickupCoords.lat : "",
+      pickupLongitude: hasPickupCoords ? pickupCoords.lng : "",
       pickupZoneId,
       pickupZoneName: body.pickupZoneName || getStaticZoneNames([pickupZoneId]) || "",
       pickupLocationSource: hasPickupCoords ? body.pickupLocationSource || "admin_manual_pickup" : "",
@@ -1451,10 +1460,9 @@ async function staticApi(path, options = {}) {
     const username = decodeURIComponent(partnerMatch[1]);
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username) && item.role === "partner");
     if (user) {
-      const pickupLat = Number(body.pickupLat ?? body.pickupLatitude);
-      const pickupLng = Number(body.pickupLng ?? body.pickupLongitude);
-      const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
-      const pickupZoneId = body.pickupZoneId || (hasPickupCoords ? getStaticPartnerPickupZoneId({ pickupLat, pickupLng }) : "");
+      const pickupCoords = getStaticPartnerPickupCoords(body);
+      const hasPickupCoords = Boolean(pickupCoords);
+      const pickupZoneId = body.pickupZoneId || (hasPickupCoords ? getStaticPartnerPickupZoneId(pickupCoords) : "");
       Object.assign(user, {
         companyName: body.companyName || user.companyName || "",
         contactPerson: body.contactPerson || user.contactPerson || "",
@@ -1462,10 +1470,10 @@ async function staticApi(path, options = {}) {
         phone: body.phone || user.phone || "",
         status: body.status === "inactive" ? "inactive" : "active",
         pickupAddress: body.pickupAddress || "",
-        pickupLat: hasPickupCoords ? pickupLat : "",
-        pickupLng: hasPickupCoords ? pickupLng : "",
-        pickupLatitude: hasPickupCoords ? pickupLat : "",
-        pickupLongitude: hasPickupCoords ? pickupLng : "",
+        pickupLat: hasPickupCoords ? pickupCoords.lat : "",
+        pickupLng: hasPickupCoords ? pickupCoords.lng : "",
+        pickupLatitude: hasPickupCoords ? pickupCoords.lat : "",
+        pickupLongitude: hasPickupCoords ? pickupCoords.lng : "",
         pickupZoneId,
         pickupZoneName: body.pickupZoneName || getStaticZoneNames([pickupZoneId]) || "",
         pickupLocationSource: hasPickupCoords ? body.pickupLocationSource || "admin_manual_pickup" : "",

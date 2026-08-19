@@ -253,23 +253,40 @@ function cleanUserProfile(body) {
   };
 }
 
+function parseOptionalPickupCoordinate(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+
+function getCleanPickupCoords(body) {
+  const lat = parseOptionalPickupCoordinate(body?.pickupLat ?? body?.pickupLatitude);
+  const lng = parseOptionalPickupCoordinate(body?.pickupLng ?? body?.pickupLongitude);
+  if (lat === null || lng === null) return null;
+  const coords = { lat, lng };
+  return isTbilisiCoordinate(coords) ? coords : null;
+}
+
+
 function cleanPartnerProfile(body) {
-  const pickupLat = Number(body.pickupLat ?? body.pickupLatitude);
-  const pickupLng = Number(body.pickupLng ?? body.pickupLongitude);
-  const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+  const pickupCoords = getCleanPickupCoords(body);
+  const hasPickupCoords = Boolean(pickupCoords);
   const pickupZoneId = String(body.pickupZoneId || "").trim();
   const detectedPickupZoneId = hasPickupCoords
-    ? TBILISI_ZONES[pickupZoneId] ? pickupZoneId : detectTbilisiZone({ lat: pickupLat, lng: pickupLng })?.id || ""
+    ? TBILISI_ZONES[pickupZoneId] ? pickupZoneId : detectTbilisiZone(pickupCoords)?.id || ""
     : "";
   return {
     companyName: String(body.companyName || body.businessName || "").trim(),
     contactPerson: String(body.contactPerson || "").trim(),
     phone: String(body.phone || "").trim(),
     pickupAddress: String(body.pickupAddress || "").trim(),
-    pickupLat: hasPickupCoords ? pickupLat : "",
-    pickupLng: hasPickupCoords ? pickupLng : "",
-    pickupLatitude: hasPickupCoords ? pickupLat : "",
-    pickupLongitude: hasPickupCoords ? pickupLng : "",
+    pickupLat: hasPickupCoords ? pickupCoords.lat : "",
+    pickupLng: hasPickupCoords ? pickupCoords.lng : "",
+    pickupLatitude: hasPickupCoords ? pickupCoords.lat : "",
+    pickupLongitude: hasPickupCoords ? pickupCoords.lng : "",
     pickupZoneId: detectedPickupZoneId,
     pickupZoneName: getZoneName(detectedPickupZoneId),
     pickupLocationSource: hasPickupCoords ? String(body.pickupLocationSource || "admin_manual_pickup").trim() : "",
@@ -282,10 +299,7 @@ function partnerDisplayName(user) {
 }
 
 function getPartnerPickupCoords(partner) {
-  const lat = Number(partner?.pickupLat ?? partner?.pickupLatitude);
-  const lng = Number(partner?.pickupLng ?? partner?.pickupLongitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng };
+  return getCleanPickupCoords(partner);
 }
 
 function getPartnerPickupZoneId(partner) {

@@ -379,6 +379,31 @@ test("partner pickup dialog acknowledges active pickup pins", async ({ page }) =
   expect(stillVisible).toBe(false);
 });
 
+test("partner pickup edit starts from Tbilisi when coordinates are empty", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const coords = await page.evaluate(async () => {
+    state.partnerPickupDraft = {
+      originalUsername: "",
+      username: "draft-partner@test.local",
+      companyName: "Draft Partner",
+      contactPerson: "Draft Contact",
+      phone: "555450001",
+      status: "active",
+      pickupAddress: "",
+      pickupLat: "",
+      pickupLng: "",
+    };
+    window.openPartnerEditDialog("");
+    window.startPartnerPickupLocationEdit("");
+    return state.pendingCoords;
+  });
+
+  expect(coords.lat).toBeCloseTo(41.7151, 4);
+  expect(coords.lng).toBeCloseTo(44.8271, 4);
+});
+
 test("push deep link serves the same map app shell", async ({ page }) => {
   await page.goto("/push");
 

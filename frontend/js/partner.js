@@ -745,10 +745,39 @@ function getPartnerFormData(partner = {}, username = "") {
 }
 
 
+function parsePartnerPickupCoordinate(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+
+function getPartnerPickupCoordsFromValues(latValue, lngValue) {
+  const lat = parsePartnerPickupCoordinate(latValue);
+  const lng = parsePartnerPickupCoordinate(lngValue);
+  if (lat === null || lng === null) return null;
+  const coords = { lat, lng };
+  return typeof isWithinTbilisiBounds === "function" && isWithinTbilisiBounds(coords) ? coords : null;
+}
+
+
+function getPartnerPickupStartCoords(draft = {}) {
+  const existingCoords = getPartnerPickupCoordsFromValues(draft.pickupLat, draft.pickupLng);
+  if (existingCoords) return existingCoords;
+  const center = typeof getDefaultMapCenter === "function" ? getDefaultMapCenter() : CONFIG.center;
+  const fallback = Array.isArray(center) ? { lat: Number(center[0]), lng: Number(center[1]) } : null;
+  if (fallback && Number.isFinite(fallback.lat) && Number.isFinite(fallback.lng)) return fallback;
+  return { lat: 41.7151, lng: 44.8271 };
+}
+
+
 function renderPartnerForm(partner = {}) {
-  const hasPickup = Number.isFinite(Number(partner.pickupLat)) && Number.isFinite(Number(partner.pickupLng));
+  const pickupCoords = getPartnerPickupCoordsFromValues(partner.pickupLat, partner.pickupLng);
+  const hasPickup = Boolean(pickupCoords);
   const pickupLabel = hasPickup
-    ? `${Number(partner.pickupLat).toFixed(6)}, ${Number(partner.pickupLng).toFixed(6)}${partner.pickupZoneName ? ` · ${partner.pickupZoneName}` : ""}`
+    ? `${pickupCoords.lat.toFixed(6)}, ${pickupCoords.lng.toFixed(6)}${partner.pickupZoneName ? ` · ${partner.pickupZoneName}` : ""}`
     : "პიკაპის პინი არ არის დასმული";
   return `
     <label for="partnerCompanyName">კომპანიის/ბიზნესის სახელი</label>
@@ -783,9 +812,11 @@ function renderPartnerForm(partner = {}) {
 
 async function savePartner(username) {
   const message = document.getElementById("partnerFormMessage");
-  const pickupLat = Number(document.getElementById("partnerPickupLat")?.value);
-  const pickupLng = Number(document.getElementById("partnerPickupLng")?.value);
-  const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+  const pickupCoords = getPartnerPickupCoordsFromValues(
+    document.getElementById("partnerPickupLat")?.value,
+    document.getElementById("partnerPickupLng")?.value,
+  );
+  const hasPickupCoords = Boolean(pickupCoords);
   const body = {
     companyName: document.getElementById("partnerCompanyName")?.value.trim(),
     contactPerson: document.getElementById("partnerContactPerson")?.value.trim(),
@@ -794,8 +825,8 @@ async function savePartner(username) {
     password: document.getElementById("partnerPassword")?.value.trim(),
     status: document.getElementById("partnerStatus")?.value || "active",
     pickupAddress: document.getElementById("partnerPickupAddress")?.value.trim(),
-    pickupLat: hasPickupCoords ? pickupLat : "",
-    pickupLng: hasPickupCoords ? pickupLng : "",
+    pickupLat: hasPickupCoords ? pickupCoords.lat : "",
+    pickupLng: hasPickupCoords ? pickupCoords.lng : "",
     pickupZoneId: document.getElementById("partnerPickupZoneId")?.value || "",
     pickupZoneName: document.getElementById("partnerPickupZoneName")?.value || "",
     pickupLocationSource: hasPickupCoords ? "admin_manual_pickup" : "",
@@ -820,9 +851,11 @@ async function savePartner(username) {
 
 
 function readPartnerFormDraft(originalUsername = "") {
-  const pickupLat = Number(document.getElementById("partnerPickupLat")?.value);
-  const pickupLng = Number(document.getElementById("partnerPickupLng")?.value);
-  const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+  const pickupCoords = getPartnerPickupCoordsFromValues(
+    document.getElementById("partnerPickupLat")?.value,
+    document.getElementById("partnerPickupLng")?.value,
+  );
+  const hasPickupCoords = Boolean(pickupCoords);
   return {
     originalUsername,
     companyName: document.getElementById("partnerCompanyName")?.value.trim() || "",
@@ -831,8 +864,8 @@ function readPartnerFormDraft(originalUsername = "") {
     username: document.getElementById("partnerUsername")?.value.trim() || originalUsername || "",
     status: document.getElementById("partnerStatus")?.value || "active",
     pickupAddress: document.getElementById("partnerPickupAddress")?.value.trim() || "",
-    pickupLat: hasPickupCoords ? pickupLat : "",
-    pickupLng: hasPickupCoords ? pickupLng : "",
+    pickupLat: hasPickupCoords ? pickupCoords.lat : "",
+    pickupLng: hasPickupCoords ? pickupCoords.lng : "",
     pickupZoneId: document.getElementById("partnerPickupZoneId")?.value || "",
     pickupZoneName: document.getElementById("partnerPickupZoneName")?.value || "",
   };
@@ -842,10 +875,9 @@ function readPartnerFormDraft(originalUsername = "") {
 function startPartnerPickupLocationEdit(username = "") {
   if (!state.isAdmin || !state.map) return;
   const draft = readPartnerFormDraft(username);
-  const hasCoords = Number.isFinite(Number(draft.pickupLat)) && Number.isFinite(Number(draft.pickupLng));
-  const coords = hasCoords
-    ? { lat: Number(draft.pickupLat), lng: Number(draft.pickupLng) }
-    : toCoords(state.map.getCenter());
+  const existingCoords = getPartnerPickupCoordsFromValues(draft.pickupLat, draft.pickupLng);
+  const hasCoords = Boolean(existingCoords);
+  const coords = existingCoords || getPartnerPickupStartCoords(draft);
   state.partnerPickupDraft = draft;
   state.partnerPickupEditUsername = username || draft.username || "";
   state.pendingCoords = coords;
