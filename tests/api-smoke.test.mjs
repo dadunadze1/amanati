@@ -141,6 +141,11 @@ describe("local API smoke flow", () => {
     });
     courierToken = login.token;
     assert.ok(courierToken);
+    await api(`/api/users/${encodeURIComponent(courierUsername)}/zone`, {
+      method: "PUT",
+      token: adminToken,
+      body: { zoneIds: ["center"], zoneId: "center", zoneName: "ცენტრალური ზონა" },
+    });
 
     const partnerUsername = `partner-${Date.now()}`;
     const partner = await api("/api/partners", {
@@ -152,9 +157,14 @@ describe("local API smoke flow", () => {
         companyName: "Smoke Partner",
         contactPerson: "Partner Contact",
         phone: "555000222",
+        pickupAddress: "Tbilisi, Smoke Pickup 7",
+        pickupLat: 41.7151,
+        pickupLng: 44.8271,
+        pickupZoneId: "center",
       },
     });
     assert.equal(partner.partner.username, partnerUsername);
+    assert.equal(partner.partner.pickupZoneId, "center");
 
     const partnerLogin = await api("/api/login", {
       method: "POST",
@@ -220,6 +230,44 @@ describe("local API smoke flow", () => {
     });
     assert.equal(volumeCreated.parcel.tariffId, "volume_5_10");
     assert.equal(volumeCreated.parcel.partnerName, "Smoke Partner");
+
+    const adminPickups = await api("/api/partner-pickups", { token: adminToken });
+    const adminPickup = adminPickups.pickups.find((pickup) => pickup.partnerUsername === partnerUsername);
+    assert.equal(adminPickup.count, 1);
+    assert.equal(adminPickup.zoneId, "center");
+
+    const courierPickups = await api("/api/partner-pickups", { token: courierToken });
+    assert.equal(courierPickups.pickups.some((pickup) => pickup.partnerUsername === partnerUsername), true);
+
+    const pickupAck = await api(`/api/partners/${encodeURIComponent(partnerUsername)}/pickup-ack`, {
+      method: "POST",
+      token: courierToken,
+    });
+    assert.equal(pickupAck.acknowledgedCount, 1);
+
+    const hiddenPickups = await api("/api/partner-pickups", { token: adminToken });
+    assert.equal(hiddenPickups.pickups.some((pickup) => pickup.partnerUsername === partnerUsername), false);
+
+    const postAckCreated = await api("/api/parcels", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        courierUsername,
+        partnerId: partner.partner.id,
+        city: "Tbilisi",
+        address: "Smoke Pickup Return 12",
+        fullAddress: "Tbilisi, Smoke Pickup Return 12",
+        fullName: "Pickup Return Recipient",
+        phone: "555123457",
+        paymentAmount: 0,
+        lat: 41.7151,
+        lng: 44.8271,
+      },
+    });
+    const returnedPickups = await api("/api/partner-pickups", { token: adminToken });
+    const returnedPickup = returnedPickups.pickups.find((pickup) => pickup.partnerUsername === partnerUsername);
+    assert.equal(returnedPickup.count, 1);
+    assert.equal(returnedPickup.orderIds.includes(postAckCreated.parcel.id), true);
 
     const volumeDelivered = await api(`/api/parcels/${volumeCreated.parcel.id}/status`, {
       method: "PATCH",

@@ -177,6 +177,18 @@ function publicUser(user) {
     lastName: user.lastName || "",
     phone: user.phone || "",
     bankDetails: user.bankDetails || "",
+    pickupAddress: user.pickupAddress || "",
+    pickupLat: user.pickupLat ?? "",
+    pickupLng: user.pickupLng ?? "",
+    pickupLatitude: user.pickupLatitude ?? user.pickupLat ?? "",
+    pickupLongitude: user.pickupLongitude ?? user.pickupLng ?? "",
+    pickupZoneId: user.pickupZoneId || "",
+    pickupZoneName: user.pickupZoneName || getZoneName(user.pickupZoneId),
+    pickupLocationSource: user.pickupLocationSource || "",
+    pickupLocationUpdatedAt: user.pickupLocationUpdatedAt || "",
+    lastPickupAcknowledgedAt: user.lastPickupAcknowledgedAt || "",
+    lastPickupAcknowledgedBy: user.lastPickupAcknowledgedBy || "",
+    lastPickupAcknowledgedByRole: user.lastPickupAcknowledgedByRole || "",
     zoneIds,
     zoneId,
     zoneName: getZoneNames(zoneIds),
@@ -242,15 +254,109 @@ function cleanUserProfile(body) {
 }
 
 function cleanPartnerProfile(body) {
+  const pickupLat = Number(body.pickupLat ?? body.pickupLatitude);
+  const pickupLng = Number(body.pickupLng ?? body.pickupLongitude);
+  const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+  const pickupZoneId = String(body.pickupZoneId || "").trim();
+  const detectedPickupZoneId = hasPickupCoords
+    ? TBILISI_ZONES[pickupZoneId] ? pickupZoneId : detectTbilisiZone({ lat: pickupLat, lng: pickupLng })?.id || ""
+    : "";
   return {
     companyName: String(body.companyName || body.businessName || "").trim(),
     contactPerson: String(body.contactPerson || "").trim(),
     phone: String(body.phone || "").trim(),
+    pickupAddress: String(body.pickupAddress || "").trim(),
+    pickupLat: hasPickupCoords ? pickupLat : "",
+    pickupLng: hasPickupCoords ? pickupLng : "",
+    pickupLatitude: hasPickupCoords ? pickupLat : "",
+    pickupLongitude: hasPickupCoords ? pickupLng : "",
+    pickupZoneId: detectedPickupZoneId,
+    pickupZoneName: getZoneName(detectedPickupZoneId),
+    pickupLocationSource: hasPickupCoords ? String(body.pickupLocationSource || "admin_manual_pickup").trim() : "",
+    pickupLocationUpdatedAt: hasPickupCoords ? String(body.pickupLocationUpdatedAt || new Date().toISOString()).trim() : "",
   };
 }
 
 function partnerDisplayName(user) {
   return user?.companyName || user?.contactPerson || user?.username || "";
+}
+
+function getPartnerPickupCoords(partner) {
+  const lat = Number(partner?.pickupLat ?? partner?.pickupLatitude);
+  const lng = Number(partner?.pickupLng ?? partner?.pickupLongitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+function getPartnerPickupZoneId(partner) {
+  const storedZoneId = String(partner?.pickupZoneId || "").trim();
+  if (TBILISI_ZONES[storedZoneId]) return storedZoneId;
+  const coords = getPartnerPickupCoords(partner);
+  return coords ? detectTbilisiZone(coords)?.id || "" : "";
+}
+
+function getParcelCreatedTime(parcel) {
+  const value = Date.parse(parcel?.createdAt || parcel?.updatedAt || parcel?.assignedAt || "");
+  return Number.isFinite(value) ? value : 0;
+}
+
+function isPickupVisibleAfterAck(parcel, acknowledgedAt) {
+  const ackTime = Date.parse(acknowledgedAt || "");
+  if (!Number.isFinite(ackTime)) return true;
+  return getParcelCreatedTime(parcel) > ackTime;
+}
+
+function getActivePartnerPickupParcels(db, partner, acknowledgedAt = partner?.lastPickupAcknowledgedAt || "") {
+  const partnerId = partnerCashIdentity(partner);
+  const username = normalizeUsername(partner?.username);
+  return db.parcels
+    .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .filter((parcel) => (
+      (partnerId && parcel.partnerId === partnerId)
+      || (username && normalizeUsername(parcel.partnerUsername) === username)
+    ))
+    .filter((parcel) => isPickupVisibleAfterAck(parcel, acknowledgedAt));
+}
+
+function publicPartnerPickup(db, partner, parcels) {
+  const coords = getPartnerPickupCoords(partner);
+  if (!coords || !parcels.length) return null;
+  const zoneId = getPartnerPickupZoneId(partner);
+  const sortedParcels = [...parcels].sort((a, b) => getParcelCreatedTime(b) - getParcelCreatedTime(a));
+  return {
+    id: `partner-pickup-${partner.id || partner.username}`,
+    partnerId: partnerCashIdentity(partner),
+    partnerUsername: partner.username || "",
+    partnerName: partnerDisplayName(partner),
+    phone: partner.phone || "",
+    pickupAddress: partner.pickupAddress || "",
+    lat: coords.lat,
+    lng: coords.lng,
+    latitude: coords.lat,
+    longitude: coords.lng,
+    zoneId,
+    zoneName: getZoneName(zoneId),
+    count: sortedParcels.length,
+    orderIds: sortedParcels.map((parcel) => parcel.id).filter(Boolean),
+    lastOrderAt: sortedParcels[0]?.createdAt || sortedParcels[0]?.updatedAt || "",
+    lastPickupAcknowledgedAt: partner.lastPickupAcknowledgedAt || "",
+    lastPickupAcknowledgedBy: partner.lastPickupAcknowledgedBy || "",
+  };
+}
+
+function getPartnerPickupPinsForSession(db, session) {
+  const sessionUser = findUser(db, session?.username) || session;
+  return db.users
+    .filter((user) => user.role === "partner" && user.status === "active")
+    .map((partner) => {
+      const pickup = publicPartnerPickup(db, partner, getActivePartnerPickupParcels(db, partner));
+      if (!pickup) return null;
+      if (session.role === "admin") return pickup;
+      if (session.role === "courier" && userHasZone(sessionUser, pickup.zoneId)) return pickup;
+      if (session.role === "partner" && normalizeUsername(session.username) === normalizeUsername(partner.username)) return pickup;
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function getPartnerCashAdjustments(db) {
@@ -1200,6 +1306,14 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (method === "GET" && path === "/api/partner-pickups") {
+    const session = requireSession(request);
+    sendJson(response, 200, {
+      pickups: getPartnerPickupPinsForSession(db, session),
+    });
+    return;
+  }
+
   if (method === "GET" && path === "/api/partner-cash-adjustments") {
     const session = requireSession(request);
     const adjustments = getPartnerCashAdjustments(db).map(publicPartnerCashAdjustment);
@@ -1350,6 +1464,31 @@ async function handleApi(request, response, url) {
   const userMatch = path.match(/^\/api\/users\/([^/]+)$/);
   const userZoneMatch = path.match(/^\/api\/users\/([^/]+)\/zone$/);
   const partnerMatch = path.match(/^\/api\/partners\/([^/]+)$/);
+  const partnerPickupAckMatch = path.match(/^\/api\/partners\/([^/]+)\/pickup-ack$/);
+  if (partnerPickupAckMatch && method === "POST") {
+    const session = requireSession(request);
+    if (!["admin", "courier"].includes(session.role)) throw httpError(403, "წვდომა აკრძალულია.");
+    const username = decodeURIComponent(partnerPickupAckMatch[1]);
+    const partner = findUser(db, username);
+    if (!partner || partner.role !== "partner" || partner.status !== "active") throw httpError(404, "პარტნიორი ვერ მოიძებნა.");
+    const zoneId = getPartnerPickupZoneId(partner);
+    const sessionUser = findUser(db, session.username) || session;
+    if (session.role === "courier" && !userHasZone(sessionUser, zoneId)) throw httpError(403, "ეს პარტნიორი თქვენს ზონაში არ არის.");
+    const activeParcels = getActivePartnerPickupParcels(db, partner);
+    const now = new Date().toISOString();
+    partner.lastPickupAcknowledgedAt = now;
+    partner.lastPickupAcknowledgedBy = session.username || "";
+    partner.lastPickupAcknowledgedByRole = session.role || "";
+    partner.updatedAt = now;
+    await writeDb(db);
+    sendJson(response, 200, {
+      partner: publicUser(partner),
+      acknowledgedAt: now,
+      acknowledgedCount: activeParcels.length,
+      pickup: publicPartnerPickup(db, partner, getActivePartnerPickupParcels(db, partner)),
+    });
+    return;
+  }
   if (partnerMatch && method === "PUT") {
     requireAdmin(request);
     const username = decodeURIComponent(partnerMatch[1]);

@@ -30,6 +30,7 @@ const NOTIFICATION_TITLE_PREFIXES = {
   delivered: "📦",
   created: "🛵",
   assigned: "🛵",
+  picked_up: "📦",
   failed: "🚨",
 };
 const VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate";
@@ -507,7 +508,7 @@ async function deactivateInvalidWebPushSubscriptions(endpoints) {
 function normalizeNotification(raw, id) {
   if (!raw || typeof raw !== "object") return null;
   const status = String(raw.status || "");
-  if (!["delivered", "failed", "created", "assigned"].includes(status)) return null;
+  if (!["delivered", "failed", "created", "assigned", "picked_up"].includes(status)) return null;
 
   const address = String(raw.address || "").trim();
   const fullName = String(raw.fullName || "").trim();
@@ -563,6 +564,7 @@ function getDefaultNotificationTitle(status) {
   if (status === "failed") return "შეკვეთა ვერ ჩაბარდა";
   if (status === "created") return "ახალი ამანათი";
   if (status === "assigned") return "ახალი ამანათი გაქვთ";
+  if (status === "picked_up") return "პარტნიორის ამანათი აღებულია";
   return "შეკვეთა ჩაბარდა";
 }
 

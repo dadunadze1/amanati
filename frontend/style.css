@@ -1051,6 +1051,30 @@ body.auth-loading .app-shell {
   border-radius: 999px;
 }
 
+.partner-pickup-pin-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.22);
+  border: 2px solid #ffffff;
+  box-shadow: 0 12px 24px rgba(154, 52, 18, 0.32);
+}
+
+.partner-pickup-pin-icon span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #f97316;
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .list-button,
 .parcel-row,
 .stats-card {
@@ -8855,6 +8879,60 @@ button.finance-card:hover,
   padding: 5px 8px;
   line-height: 1.1;
   white-space: normal;
+}
+
+.partner-pickup-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 6px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.partner-pickup-form-row span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.partner-pickup-dialog {
+  display: grid;
+  gap: 12px;
+}
+
+.partner-pickup-dialog-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.partner-pickup-dialog-summary span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.partner-pickup-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.partner-pickup-dialog-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.partner-pickup-dialog-grid span {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 body:has(.app-shell.is-admin-dashboard) #dialogModal:has(.partner-management-screen) .modal-card {

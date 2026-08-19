@@ -12,6 +12,9 @@ const state = {
   isAdmin: false,
   isPartner: false,
   activePins: [],
+  partnerPickupPins: [],
+  partnerPickupEditUsername: "",
+  partnerPickupDraft: null,
   adminMapCouriers: [],
   adminMapFilters: {
     includeAllCouriers: true,

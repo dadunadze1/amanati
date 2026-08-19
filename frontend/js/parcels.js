@@ -34,6 +34,7 @@ async function refreshPinsOnce() {
   if (!state.currentUser || !state.map) {
     clearAdminMapPins();
     state.activePins = [];
+    state.partnerPickupPins = [];
     hideSelectedParcelCard();
     await renderCourierStatsCard([]);
     await renderAdminDashboard([]);
@@ -42,7 +43,10 @@ async function refreshPinsOnce() {
     return;
   }
 
-  const pins = await getPins(state.isAdmin || state.isPartner ? "" : state.currentUser);
+  const [pins, partnerPickupPins] = await Promise.all([
+    getPins(state.isAdmin || state.isPartner ? "" : state.currentUser),
+    (state.isAdmin || !state.isPartner) && typeof getPartnerPickupPins === "function" ? getPartnerPickupPins().catch(() => []) : Promise.resolve([]),
+  ]);
   pins.forEach((pin) => {
     const cachedAddress = getCachedParcelAddress(pin.id);
     const storedAddress = getStoredParcelAddress(pin);
@@ -50,6 +54,7 @@ async function refreshPinsOnce() {
     if (storedAddress) state.parcelAddressCache[pin.id] = storedAddress;
   });
   state.activePins = pins;
+  state.partnerPickupPins = partnerPickupPins;
   const visiblePins = getVisiblePinsForCurrentRole(pins);
   renderParcelMarkers(visiblePins);
   hydratePinAddresses(pins);
@@ -65,8 +70,9 @@ async function refreshPinsOnce() {
   } else {
     hideSelectedParcelCard();
   }
+  const viewportPins = visiblePins.concat(state.partnerPickupPins || []);
   if (state.mapViewportResetPending || !visiblePins.length) {
-    fitMapToPinsOrDefault(visiblePins);
+    fitMapToPinsOrDefault(viewportPins);
   } else {
     scheduleMapInvalidateSize(0);
   }
@@ -231,7 +237,7 @@ function setLocationEditCoords(coords) {
 
 
 function cancelMapSelection() {
-  if (!["selectingParcel", "editingParcelLocation"].includes(state.mode)) return;
+  if (!["selectingParcel", "editingParcelLocation", "editingPartnerPickup"].includes(state.mode)) return;
   resetMapSelectionUi();
 }
 
@@ -253,6 +259,10 @@ function showPendingMarker(coords) {
   state.pendingMarker.on("dragend", handlePendingMarkerDragEnd);
   state.pendingMarker.on("click", async (event) => {
     stopMapClick(event);
+    if (state.mode === "editingPartnerPickup" && state.pendingCoords && typeof confirmPartnerPickupLocationEdit === "function") {
+      await confirmPartnerPickupLocationEdit();
+      return;
+    }
   if (state.mode !== "selectingParcel" || !state.pendingCoords) return;
     await updatePendingZoneAssignment(state.pendingCoords);
     await openParcelDetailsDialog();
@@ -264,6 +274,10 @@ function showPendingMarker(coords) {
 
 async function handlePendingMarkerDragEnd(event) {
   const coords = toCoords(event.target.getLatLng());
+  if (state.mode === "editingPartnerPickup" && typeof setPartnerPickupLocationCoords === "function") {
+    await setPartnerPickupLocationCoords(coords, { reopen: false });
+    return;
+  }
   if (state.mode === "editingParcelLocation") {
     setLocationEditCoords(coords);
     return;
@@ -277,6 +291,11 @@ async function handlePendingMarkerDragEnd(event) {
 
 
 async function handleMapClick(event) {
+  if (state.mode === "editingPartnerPickup") {
+    if (!event.latlng || typeof setPartnerPickupLocationCoords !== "function") return;
+    await setPartnerPickupLocationCoords(toCoords(event.latlng), { reopen: true });
+    return;
+  }
   if (state.mode === "editingParcelLocation") {
     if (!event.latlng) return;
     setLocationEditCoords(toCoords(event.latlng));
@@ -1807,7 +1826,7 @@ async function hydratePinAddresses(pins) {
 }
 
 
-function resetMapSelectionUi() {
+function resetMapSelectionUi(options = {}) {
   state.mode = "idle";
   state.selectedCourier = null;
   state.pendingCoords = null;
@@ -1821,6 +1840,8 @@ function resetMapSelectionUi() {
   state.pendingAutoAssignment = null;
   state.photoParcelDraft = null;
   state.locationEditParcelId = "";
+  state.partnerPickupEditUsername = "";
+  if (!options.keepPartnerPickupDraft) state.partnerPickupDraft = null;
   els.menuButton.hidden = false;
   els.modeToast.hidden = true;
 }

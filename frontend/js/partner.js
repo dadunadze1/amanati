@@ -725,7 +725,7 @@ function openPartnerCreateDialog() {
 
 
 async function openPartnerEditDialog(username) {
-  const partner = username ? (await getPartners()).find((item) => item.username === username) : {};
+  const partner = getPartnerFormData(username ? (await getPartners()).find((item) => item.username === username) : {}, username);
   if (username && !partner) return;
   const body = renderPartnerForm(partner);
   showDialog(username ? "პარტნიორის რედაქტირება" : "ახალი პარტნიორი", body, [
@@ -735,7 +735,21 @@ async function openPartnerEditDialog(username) {
 }
 
 
+function getPartnerFormData(partner = {}, username = "") {
+  const draft = state.partnerPickupDraft;
+  const draftUsername = normalizeUsername(draft?.originalUsername || draft?.username);
+  const currentUsername = normalizeUsername(username || partner?.username || "");
+  if (draft && !draft.originalUsername && !username) return { ...(partner || {}), ...draft };
+  if (!draft || draftUsername !== currentUsername) return partner || {};
+  return { ...(partner || {}), ...draft, username: username || draft.username || partner?.username || "" };
+}
+
+
 function renderPartnerForm(partner = {}) {
+  const hasPickup = Number.isFinite(Number(partner.pickupLat)) && Number.isFinite(Number(partner.pickupLng));
+  const pickupLabel = hasPickup
+    ? `${Number(partner.pickupLat).toFixed(6)}, ${Number(partner.pickupLng).toFixed(6)}${partner.pickupZoneName ? ` · ${partner.pickupZoneName}` : ""}`
+    : "პიკაპის პინი არ არის დასმული";
   return `
     <label for="partnerCompanyName">კომპანიის/ბიზნესის სახელი</label>
     <input id="partnerCompanyName" type="text" value="${escapeAttr(partner.companyName || "")}">
@@ -747,6 +761,16 @@ function renderPartnerForm(partner = {}) {
     <input id="partnerUsername" type="email" autocomplete="username" value="${escapeAttr(partner.username || "")}" ${partner.username ? "disabled" : ""}>
     <label for="partnerPassword">პაროლი</label>
     <input id="partnerPassword" type="password" autocomplete="new-password" placeholder="${partner.username ? "ცარიელი დატოვე თუ არ იცვლება" : ""}">
+    <label for="partnerPickupAddress">პიკაპის მისამართი</label>
+    <input id="partnerPickupAddress" type="text" autocomplete="street-address" value="${escapeAttr(partner.pickupAddress || "")}" placeholder="მაგ: გლდანი, ხიზანიშვილის 12">
+    <input id="partnerPickupLat" type="hidden" value="${escapeAttr(partner.pickupLat ?? "")}">
+    <input id="partnerPickupLng" type="hidden" value="${escapeAttr(partner.pickupLng ?? "")}">
+    <input id="partnerPickupZoneId" type="hidden" value="${escapeAttr(partner.pickupZoneId || "")}">
+    <input id="partnerPickupZoneName" type="hidden" value="${escapeAttr(partner.pickupZoneName || "")}">
+    <div class="partner-pickup-form-row">
+      <span>${escapeHtml(pickupLabel)}</span>
+      <button class="mini-button" type="button" data-action="startPartnerPickupLocationEdit" data-value="${escapeAttr(partner.username || "")}">${hasPickup ? "პინის შეცვლა" : "პინის დასმა"}</button>
+    </div>
     <label for="partnerStatus">სტატუსი</label>
     <select id="partnerStatus">
       <option value="active" ${partner.status !== "inactive" ? "selected" : ""}>აქტიური</option>
@@ -759,6 +783,9 @@ function renderPartnerForm(partner = {}) {
 
 async function savePartner(username) {
   const message = document.getElementById("partnerFormMessage");
+  const pickupLat = Number(document.getElementById("partnerPickupLat")?.value);
+  const pickupLng = Number(document.getElementById("partnerPickupLng")?.value);
+  const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
   const body = {
     companyName: document.getElementById("partnerCompanyName")?.value.trim(),
     contactPerson: document.getElementById("partnerContactPerson")?.value.trim(),
@@ -766,6 +793,13 @@ async function savePartner(username) {
     username: document.getElementById("partnerUsername")?.value.trim(),
     password: document.getElementById("partnerPassword")?.value.trim(),
     status: document.getElementById("partnerStatus")?.value || "active",
+    pickupAddress: document.getElementById("partnerPickupAddress")?.value.trim(),
+    pickupLat: hasPickupCoords ? pickupLat : "",
+    pickupLng: hasPickupCoords ? pickupLng : "",
+    pickupZoneId: document.getElementById("partnerPickupZoneId")?.value || "",
+    pickupZoneName: document.getElementById("partnerPickupZoneName")?.value || "",
+    pickupLocationSource: hasPickupCoords ? "admin_manual_pickup" : "",
+    pickupLocationUpdatedAt: hasPickupCoords ? new Date().toISOString() : "",
   };
   if (!body.companyName || !body.contactPerson || !body.phone || (!username && (!body.username || !body.password))) {
     if (message) message.textContent = STRINGS.emptyFields;
@@ -777,10 +811,82 @@ async function savePartner(username) {
     } else {
       await api("/api/partners", { method: "POST", body });
     }
+    state.partnerPickupDraft = null;
     await openPartnerManagement();
   } catch (error) {
     if (message) message.textContent = error.message || STRINGS.serverFailed;
   }
+}
+
+
+function readPartnerFormDraft(originalUsername = "") {
+  const pickupLat = Number(document.getElementById("partnerPickupLat")?.value);
+  const pickupLng = Number(document.getElementById("partnerPickupLng")?.value);
+  const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+  return {
+    originalUsername,
+    companyName: document.getElementById("partnerCompanyName")?.value.trim() || "",
+    contactPerson: document.getElementById("partnerContactPerson")?.value.trim() || "",
+    phone: document.getElementById("partnerPhone")?.value.trim() || "",
+    username: document.getElementById("partnerUsername")?.value.trim() || originalUsername || "",
+    status: document.getElementById("partnerStatus")?.value || "active",
+    pickupAddress: document.getElementById("partnerPickupAddress")?.value.trim() || "",
+    pickupLat: hasPickupCoords ? pickupLat : "",
+    pickupLng: hasPickupCoords ? pickupLng : "",
+    pickupZoneId: document.getElementById("partnerPickupZoneId")?.value || "",
+    pickupZoneName: document.getElementById("partnerPickupZoneName")?.value || "",
+  };
+}
+
+
+function startPartnerPickupLocationEdit(username = "") {
+  if (!state.isAdmin || !state.map) return;
+  const draft = readPartnerFormDraft(username);
+  const hasCoords = Number.isFinite(Number(draft.pickupLat)) && Number.isFinite(Number(draft.pickupLng));
+  const coords = hasCoords
+    ? { lat: Number(draft.pickupLat), lng: Number(draft.pickupLng) }
+    : toCoords(state.map.getCenter());
+  state.partnerPickupDraft = draft;
+  state.partnerPickupEditUsername = username || draft.username || "";
+  state.pendingCoords = coords;
+  state.mode = "editingPartnerPickup";
+  closeDialog();
+  showPendingMarker(coords);
+  setMapView(coords, Math.max(getMapZoom(), 17));
+  els.modeToast.hidden = false;
+  els.modeToast.textContent = hasCoords
+    ? "გადაადგილე პარტნიორის პიკაპის პინი და დააწკაპე რუკაზე შესანახად."
+    : "დააწკაპე რუკაზე პარტნიორის პიკაპის პინის დასასმელად.";
+}
+
+
+async function setPartnerPickupLocationCoords(coords, options = {}) {
+  if (!state.isAdmin || state.mode !== "editingPartnerPickup" || !coords) return;
+  state.pendingCoords = coords;
+  showPendingMarker(coords);
+  const draft = state.partnerPickupDraft || {};
+  const zone = typeof detectZoneByCoords === "function" ? await detectZoneByCoords(coords).catch(() => null) : null;
+  const address = draft.pickupAddress || (typeof reverseGeocodeCoords === "function" ? await reverseGeocodeCoords(coords).catch(() => "") : "");
+  state.partnerPickupDraft = {
+    ...draft,
+    pickupAddress: address || draft.pickupAddress || formatCoordsAddress(coords),
+    pickupLat: coords.lat,
+    pickupLng: coords.lng,
+    pickupZoneId: zone ? getZoneId(zone) : "",
+    pickupZoneName: zone ? getZoneName(zone) : "",
+  };
+  els.modeToast.hidden = false;
+  els.modeToast.textContent = options.reopen
+    ? "პიკაპის პინი აირჩა."
+    : "პიკაპის პინი გადაადგილდა. დააწკაპე პინს ან რუკას დასადასტურებლად.";
+  if (options.reopen) await confirmPartnerPickupLocationEdit();
+}
+
+
+async function confirmPartnerPickupLocationEdit() {
+  const username = state.partnerPickupEditUsername || state.partnerPickupDraft?.originalUsername || "";
+  resetMapSelectionUi({ keepPartnerPickupDraft: true });
+  await openPartnerEditDialog(username);
 }
 
 
@@ -864,5 +970,64 @@ async function savePartnerOrderAssign(parcelId) {
     await refreshPins();
   } catch (error) {
     if (message) message.textContent = error.message || STRINGS.serverFailed;
+  }
+}
+
+
+function openPartnerPickupDialog(pickup) {
+  if (!pickup) return;
+  const orderIds = Array.isArray(pickup.orderIds) ? pickup.orderIds : [];
+  const body = `
+    <div class="partner-pickup-dialog">
+      <div class="partner-pickup-dialog-summary">
+        <strong>${escapeHtml(pickup.partnerName || pickup.partnerUsername || "პარტნიორი")}</strong>
+        <span>${escapeHtml(pickup.pickupAddress || "მისამართი არ არის მითითებული")}</span>
+      </div>
+      <div class="partner-pickup-dialog-grid">
+        <div><span>შეკვეთები</span><strong>${escapeHtml(String(pickup.count || orderIds.length || 0))}</strong></div>
+        <div><span>ზონა</span><strong>${escapeHtml(pickup.zoneName || "ზონა არ მოიძებნა")}</strong></div>
+      </div>
+      <p class="form-message" id="partnerPickupMessage" role="alert"></p>
+    </div>
+  `;
+  showDialog("პარტნიორის პიკაპი", body, [
+    { label: "შეკვეთების ნახვა", variant: "secondary", action: () => focusPartnerPickupOrders(pickup) },
+    { label: "შეკვეთები აღებულია", variant: "primary", action: () => acknowledgePartnerPickup(pickup.partnerUsername) },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+function focusPartnerPickupOrders(pickup) {
+  const orderIds = new Set(Array.isArray(pickup?.orderIds) ? pickup.orderIds : []);
+  const orders = state.activePins.filter((pin) => orderIds.has(pin.id));
+  if (orders.length > 1 && state.map && window.L) {
+    const coords = orders.filter((pin) => Number.isFinite(Number(pin.lat)) && Number.isFinite(Number(pin.lng)));
+    if (coords.length) state.map.fitBounds(L.latLngBounds(coords.map(toLeafletLatLng)), { padding: [44, 44], maxZoom: 17 });
+  }
+  closeDialog();
+  const firstOrderId = orders[0]?.id || pickup?.orderIds?.[0] || "";
+  if (firstOrderId) openParcelTab(firstOrderId, { closeOpenDialog: state.isAdmin, focus: true });
+}
+
+
+async function acknowledgePartnerPickup(partnerUsername) {
+  const username = String(partnerUsername || "").trim();
+  if (!username) return;
+  const message = document.getElementById("partnerPickupMessage");
+  const pickup = (state.partnerPickupPins || []).find((item) => normalizeUsername(item.partnerUsername) === normalizeUsername(username));
+  try {
+    const payload = await api(`/api/partners/${encodeURIComponent(username)}/pickup-ack`, { method: "POST", body: {} });
+    if (state.currentUserProfile?.role === "courier" && typeof publishPartnerPickupAcknowledgedNotification === "function") {
+      await publishPartnerPickupAcknowledgedNotification(pickup || payload?.pickup || { partnerUsername: username }).catch((error) => {
+        console.warn("Partner pickup push notification failed", error);
+      });
+    }
+    closeDialog();
+    await refreshPins();
+    showToast("პარტნიორის შეკვეთები აღებულად მოინიშნა.");
+  } catch (error) {
+    if (message) message.textContent = error.message || STRINGS.serverFailed;
+    else showToast(error.message || STRINGS.serverFailed);
   }
 }

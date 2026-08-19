@@ -292,6 +292,93 @@ test("admin partner management uses a tall scrollable list", async ({ page }) =>
   expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
 });
 
+test("partner pickup dialog acknowledges active pickup pins", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const batchId = Date.now();
+  const result = await page.evaluate(async ({ batchId }) => {
+    const apiRequest = async (path, options = {}) => {
+      const response = await fetch(path, {
+        method: options.method || "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${options.token || state.authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      if (!response.ok) throw new Error(`${options.method || "GET"} ${path} ${response.status}`);
+      return response.json();
+    };
+
+    const courierUsername = `pickup-ui-courier-${batchId}`;
+    await apiRequest("/api/users", {
+      method: "POST",
+      body: {
+        username: courierUsername,
+        password: "pass123",
+        role: "courier",
+        firstName: "Pickup",
+        lastName: "Courier",
+        phone: "555440001",
+      },
+    });
+    await apiRequest(`/api/users/${encodeURIComponent(courierUsername)}/zone`, {
+      method: "PUT",
+      body: { zoneIds: ["center"], zoneId: "center", zoneName: "ცენტრალური ზონა" },
+    });
+
+    const partner = await apiRequest("/api/partners", {
+      method: "POST",
+      body: {
+        username: `pickup-ui-partner-${batchId}@test.local`,
+        password: "pass123",
+        companyName: `Pickup UI Partner ${batchId}`,
+        contactPerson: "Pickup Contact",
+        phone: "555440002",
+        pickupAddress: "Tbilisi, Pickup UI 7",
+        pickupLat: 41.7151,
+        pickupLng: 44.8271,
+        pickupZoneId: "center",
+      },
+    });
+    await apiRequest("/api/parcels", {
+      method: "POST",
+      body: {
+        courierUsername,
+        partnerId: partner.partner.id,
+        city: "Tbilisi",
+        address: "Pickup UI Street 12",
+        fullAddress: "Tbilisi, Pickup UI Street 12",
+        fullName: "Pickup UI Recipient",
+        phone: "555440003",
+        paymentAmount: 0,
+        lat: 41.7151,
+        lng: 44.8271,
+      },
+    });
+
+    const pickups = await window.getPartnerPickupPins();
+    const pickup = pickups.find((item) => item.partnerUsername === partner.partner.username);
+    if (!pickup) throw new Error("pickup pin missing");
+    state.partnerPickupPins = pickups;
+    window.openPartnerPickupDialog(pickup);
+    return { partnerUsername: partner.partner.username, partnerName: partner.partner.companyName };
+  }, { batchId });
+
+  await expect(page.locator("#dialogModal")).toHaveClass(/active/);
+  await expect(page.locator("#dialogBody")).toContainText(result.partnerName);
+  await page.getByRole("button", { name: "შეკვეთები აღებულია" }).click();
+  await expect(page.locator("#dialogModal")).not.toHaveClass(/active/);
+
+  const stillVisible = await page.evaluate(async ({ partnerUsername }) => {
+    const pickups = await window.getPartnerPickupPins();
+    return pickups.some((item) => item.partnerUsername === partnerUsername);
+  }, { partnerUsername: result.partnerUsername });
+  expect(stillVisible).toBe(false);
+});
+
 test("push deep link serves the same map app shell", async ({ page }) => {
   await page.goto("/push");
 

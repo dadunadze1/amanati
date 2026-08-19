@@ -9,6 +9,7 @@ const PUSH_NOTIFICATION_TITLE_PREFIXES = {
   delivered: "📦",
   created: "🛵",
   assigned: "🛵",
+  picked_up: "📦",
   failed: "🚨",
 };
 
@@ -86,7 +87,7 @@ async function requestAdminPushNotifications(options = {}) {
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=4", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=5", { scope: "./" });
     await registration.update().catch(() => {});
     const subscription = await createAdminStandardWebPushSubscription(registration);
 
@@ -368,6 +369,34 @@ async function publishParcelAssignedNotification(parcel, courierUsername) {
   const notification = buildParcelAssignedNotification(parcel, courierUsername);
   return publishPushNotification(notification);
 }
+
+async function publishPartnerPickupAcknowledgedNotification(pickup) {
+  if (state.currentUserProfile?.role !== "courier" || !pickup) return false;
+  const partnerName = String(pickup.partnerName || pickup.partnerUsername || "").trim();
+  const courierName = String(userDisplayName(state.currentUserProfile || {}) || state.currentUser || "").trim();
+  const count = Number(pickup.count || 0);
+  const countLabel = count > 0 ? `${count} შეკვეთა` : "შეკვეთები";
+  return publishPushNotification({
+    type: "partner_pickup_acknowledged",
+    status: "picked_up",
+    recipientRoles: ["admin", "partner"],
+    title: formatPushNotificationTitle("picked_up", "პარტნიორის ამანათი აღებულია"),
+    body: [courierName, partnerName, countLabel].filter(Boolean).join(" - "),
+    parcelId: "",
+    address: String(pickup.pickupAddress || ""),
+    fullName: partnerName,
+    failureReason: "",
+    partnerId: String(pickup.partnerId || pickup.partnerUsername || ""),
+    partnerUsername: String(pickup.partnerUsername || ""),
+    partnerName,
+    courierUsername: state.currentUser || "",
+    createdBy: state.currentUser || "",
+    createdByRole: state.currentUserProfile?.role || "",
+    pageUrl: "./?view=push",
+    eventKey: `partner-pickup-${pickup.partnerUsername || pickup.partnerId || "partner"}-${Date.now()}`,
+  });
+}
+
 
 async function publishPushNotification(notification) {
   if (!notification) return false;

@@ -178,6 +178,7 @@ function renderParcelMarkers(pins) {
     }
     renderSinglePinMarker(group[0]);
   });
+  renderPartnerPickupMarkers(state.partnerPickupPins);
 }
 
 
@@ -208,7 +209,42 @@ function getMapPinRenderSignature(pins) {
       pin?.archivedAt || "",
       pin?.deletedAt || "",
     ].join("~")).join("|"),
+    (state.partnerPickupPins || []).map((pickup) => [
+      pickup?.id || "",
+      pickup?.partnerUsername || "",
+      Number(pickup?.lat ?? pickup?.latitude ?? 0).toFixed(6),
+      Number(pickup?.lng ?? pickup?.longitude ?? 0).toFixed(6),
+      pickup?.zoneId || "",
+      pickup?.count || "",
+      pickup?.lastOrderAt || "",
+      pickup?.lastPickupAcknowledgedAt || "",
+    ].join("~")).join("|"),
   ].join("||");
+}
+
+
+function renderPartnerPickupMarkers(pickups = []) {
+  if (!state.map || !window.L) return;
+  (Array.isArray(pickups) ? pickups : [])
+    .filter((pickup) => Number.isFinite(Number(pickup?.lat ?? pickup?.latitude)) && Number.isFinite(Number(pickup?.lng ?? pickup?.longitude)))
+    .forEach((pickup) => {
+      const count = Math.max(1, Number(pickup.count || 0));
+      const marker = L.marker(toLeafletLatLng(pickup), {
+        interactive: true,
+        keyboard: true,
+        icon: L.divIcon({
+          className: "partner-pickup-pin-icon",
+          html: `<span title="${escapeAttr(pickup.partnerName || "პარტნიორი")}">${escapeHtml(String(count))}</span>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        }),
+      }).addTo(state.map);
+      addParcelOverlay(marker);
+      marker.on("click", (event) => {
+        stopMapClick(event);
+        if (typeof openPartnerPickupDialog === "function") openPartnerPickupDialog(pickup);
+      });
+    });
 }
 
 

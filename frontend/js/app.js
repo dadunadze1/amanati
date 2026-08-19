@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=4";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=5";
 
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
@@ -690,6 +690,7 @@ async function handleAction(action, value, sourceElement) {
     partnerOrders: openPartnerOrdersDialog,
     createPartner: openPartnerCreateDialog,
     editPartner: () => openPartnerEditDialog(value),
+    startPartnerPickupLocationEdit: () => startPartnerPickupLocationEdit(value),
     togglePartnerStatus: () => togglePartnerStatus(value),
     adjustPartnerCash: () => openPartnerCashAdjustmentDialog(value),
     savePartnerCashAdjustment: () => savePartnerCashAdjustment(value),
@@ -697,6 +698,7 @@ async function handleAction(action, value, sourceElement) {
     savePartner: () => savePartner(value),
     assignPartnerOrder: () => openPartnerOrderAssignDialog(value),
     savePartnerOrderAssign: () => savePartnerOrderAssign(value),
+    ackPartnerPickup: () => acknowledgePartnerPickup(value),
     adminPartnerOrdersFilter: () => openAdminPartnerOrders(document.getElementById("adminPartnerOrdersFilter")?.value || ""),
     endDay: confirmEndDay,
     approve: () => approveCourier(value),

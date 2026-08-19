@@ -762,6 +762,18 @@ function publicStaticUser(user) {
     lastName: user.lastName || "",
     phone: user.phone || "",
     bankDetails: user.bankDetails || "",
+    pickupAddress: user.pickupAddress || "",
+    pickupLat: user.pickupLat ?? "",
+    pickupLng: user.pickupLng ?? "",
+    pickupLatitude: user.pickupLatitude ?? user.pickupLat ?? "",
+    pickupLongitude: user.pickupLongitude ?? user.pickupLng ?? "",
+    pickupZoneId: user.pickupZoneId || "",
+    pickupZoneName: user.pickupZoneName || getStaticZoneNames([user.pickupZoneId]) || "",
+    pickupLocationSource: user.pickupLocationSource || "",
+    pickupLocationUpdatedAt: user.pickupLocationUpdatedAt || "",
+    lastPickupAcknowledgedAt: user.lastPickupAcknowledgedAt || "",
+    lastPickupAcknowledgedBy: user.lastPickupAcknowledgedBy || "",
+    lastPickupAcknowledgedByRole: user.lastPickupAcknowledgedByRole || "",
     zoneIds,
     zoneId: zoneIds[0] || "",
     zoneName: getStaticZoneNames(zoneIds) || user.zoneName || "",
@@ -769,6 +781,86 @@ function publicStaticUser(user) {
     requestedAt: user.requestedAt || "",
     approvedAt: user.approvedAt || "",
   };
+}
+
+function getStaticPartnerPickupCoords(partner) {
+  const lat = Number(partner?.pickupLat ?? partner?.pickupLatitude);
+  const lng = Number(partner?.pickupLng ?? partner?.pickupLongitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+function getStaticPartnerPickupZoneId(partner) {
+  const storedZoneId = String(partner?.pickupZoneId || "").trim();
+  if ((DEFAULT_ZONES || []).some((zone) => String(zone.id || "") === storedZoneId)) return storedZoneId;
+  const coords = getStaticPartnerPickupCoords(partner);
+  if (!coords || typeof coordsMatchZone !== "function") return "";
+  return (DEFAULT_ZONES || []).find((zone) => coordsMatchZone(coords, zone))?.id || "";
+}
+
+function getStaticParcelCreatedTime(parcel) {
+  const value = Date.parse(parcel?.createdAt || parcel?.updatedAt || parcel?.assignedAt || "");
+  return Number.isFinite(value) ? value : 0;
+}
+
+function staticPickupVisibleAfterAck(parcel, acknowledgedAt) {
+  const ackTime = Date.parse(acknowledgedAt || "");
+  if (!Number.isFinite(ackTime)) return true;
+  return getStaticParcelCreatedTime(parcel) > ackTime;
+}
+
+function getStaticActivePartnerPickupParcels(store, partner, acknowledgedAt = partner?.lastPickupAcknowledgedAt || "") {
+  const partnerId = partner?.id || partner?.username || "";
+  const username = normalizeUsername(partner?.username);
+  return (Array.isArray(store.parcels) ? store.parcels : [])
+    .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .filter((parcel) => (
+      (partnerId && parcel.partnerId === partnerId)
+      || (username && normalizeUsername(parcel.partnerUsername) === username)
+    ))
+    .filter((parcel) => staticPickupVisibleAfterAck(parcel, acknowledgedAt));
+}
+
+function publicStaticPartnerPickup(store, partner, parcels) {
+  const coords = getStaticPartnerPickupCoords(partner);
+  if (!coords || !parcels.length) return null;
+  const zoneId = getStaticPartnerPickupZoneId(partner);
+  const sortedParcels = [...parcels].sort((a, b) => getStaticParcelCreatedTime(b) - getStaticParcelCreatedTime(a));
+  return {
+    id: `partner-pickup-${partner.id || partner.username}`,
+    partnerId: partner.id || partner.username || "",
+    partnerUsername: partner.username || "",
+    partnerName: userDisplayName(partner),
+    phone: partner.phone || "",
+    pickupAddress: partner.pickupAddress || "",
+    lat: coords.lat,
+    lng: coords.lng,
+    latitude: coords.lat,
+    longitude: coords.lng,
+    zoneId,
+    zoneName: getStaticZoneNames([zoneId]) || "",
+    count: sortedParcels.length,
+    orderIds: sortedParcels.map((parcel) => parcel.id).filter(Boolean),
+    lastOrderAt: sortedParcels[0]?.createdAt || sortedParcels[0]?.updatedAt || "",
+    lastPickupAcknowledgedAt: partner.lastPickupAcknowledgedAt || "",
+    lastPickupAcknowledgedBy: partner.lastPickupAcknowledgedBy || "",
+  };
+}
+
+function getStaticPartnerPickupPinsForCurrentUser(store) {
+  const role = state.currentUserProfile?.role || "";
+  const currentZoneIds = new Set(getStaticUserZoneIds(state.currentUserProfile || {}));
+  return (Array.isArray(store.users) ? store.users : [])
+    .filter((user) => user.role === "partner" && user.status !== "inactive")
+    .map((partner) => {
+      const pickup = publicStaticPartnerPickup(store, partner, getStaticActivePartnerPickupParcels(store, partner));
+      if (!pickup) return null;
+      if (role === "admin") return pickup;
+      if (role === "courier" && pickup.zoneId && currentZoneIds.has(pickup.zoneId)) return pickup;
+      if (role === "partner" && normalizeUsername(state.currentUser) === normalizeUsername(partner.username)) return pickup;
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function getStaticUserZoneIds(user) {
@@ -1092,6 +1184,10 @@ async function staticApi(path, options = {}) {
     return { partners: store.users.filter((user) => user.role === "partner").map(publicStaticUser) };
   }
 
+  if (method === "GET" && apiPath === "/api/partner-pickups") {
+    return { pickups: getStaticPartnerPickupPinsForCurrentUser(store) };
+  }
+
   if (method === "GET" && apiPath === "/api/partner-cash-adjustments") {
     const financeData = store.financeData && typeof store.financeData === "object" ? store.financeData : {};
     const adjustments = normalizeFinanceAdjustmentList(financeData.partnerCashAdjustments || [], "partnerCash");
@@ -1275,6 +1371,10 @@ async function staticApi(path, options = {}) {
 
   if (method === "POST" && apiPath === "/api/partners") {
     const now = new Date().toISOString();
+    const pickupLat = Number(body.pickupLat ?? body.pickupLatitude);
+    const pickupLng = Number(body.pickupLng ?? body.pickupLongitude);
+    const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+    const pickupZoneId = body.pickupZoneId || (hasPickupCoords ? getStaticPartnerPickupZoneId({ pickupLat, pickupLng }) : "");
     const user = {
       id: `partner-${Date.now()}`,
       username: body.username || body.email || "",
@@ -1285,6 +1385,15 @@ async function staticApi(path, options = {}) {
       contactPerson: body.contactPerson || "",
       firstName: body.contactPerson || "",
       phone: body.phone || "",
+      pickupAddress: body.pickupAddress || "",
+      pickupLat: hasPickupCoords ? pickupLat : "",
+      pickupLng: hasPickupCoords ? pickupLng : "",
+      pickupLatitude: hasPickupCoords ? pickupLat : "",
+      pickupLongitude: hasPickupCoords ? pickupLng : "",
+      pickupZoneId,
+      pickupZoneName: body.pickupZoneName || getStaticZoneNames([pickupZoneId]) || "",
+      pickupLocationSource: hasPickupCoords ? body.pickupLocationSource || "admin_manual_pickup" : "",
+      pickupLocationUpdatedAt: hasPickupCoords ? body.pickupLocationUpdatedAt || now : "",
       createdAt: now,
       updatedAt: now,
     };
@@ -1313,16 +1422,54 @@ async function staticApi(path, options = {}) {
 
   const userMatch = apiPath.match(/^\/api\/users\/([^/]+)$/);
   const partnerMatch = apiPath.match(/^\/api\/partners\/([^/]+)$/);
+  const partnerPickupAckMatch = apiPath.match(/^\/api\/partners\/([^/]+)\/pickup-ack$/);
+  if (partnerPickupAckMatch && method === "POST") {
+    const username = decodeURIComponent(partnerPickupAckMatch[1]);
+    const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username) && item.role === "partner");
+    if (!user) return { partner: null, acknowledgedCount: 0 };
+    if (!["admin", "courier"].includes(state.currentUserProfile?.role || "")) throw new Error("წვდომა აკრძალულია.");
+    const zoneId = getStaticPartnerPickupZoneId(user);
+    const currentZoneIds = new Set(getStaticUserZoneIds(state.currentUserProfile || {}));
+    if (state.currentUserProfile?.role === "courier" && (!zoneId || !currentZoneIds.has(zoneId))) throw new Error("ეს პარტნიორი თქვენს ზონაში არ არის.");
+    const activeParcels = getStaticActivePartnerPickupParcels(store, user);
+    const now = new Date().toISOString();
+    Object.assign(user, {
+      lastPickupAcknowledgedAt: now,
+      lastPickupAcknowledgedBy: state.currentUser || "",
+      lastPickupAcknowledgedByRole: state.currentUserProfile?.role || "",
+      updatedAt: now,
+    });
+    saveStaticBootstrap();
+    return {
+      partner: publicStaticUser(user),
+      acknowledgedAt: now,
+      acknowledgedCount: activeParcels.length,
+      pickup: publicStaticPartnerPickup(store, user, getStaticActivePartnerPickupParcels(store, user)),
+    };
+  }
   if (partnerMatch && method === "PUT") {
     const username = decodeURIComponent(partnerMatch[1]);
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username) && item.role === "partner");
     if (user) {
+      const pickupLat = Number(body.pickupLat ?? body.pickupLatitude);
+      const pickupLng = Number(body.pickupLng ?? body.pickupLongitude);
+      const hasPickupCoords = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+      const pickupZoneId = body.pickupZoneId || (hasPickupCoords ? getStaticPartnerPickupZoneId({ pickupLat, pickupLng }) : "");
       Object.assign(user, {
         companyName: body.companyName || user.companyName || "",
         contactPerson: body.contactPerson || user.contactPerson || "",
         firstName: body.contactPerson || user.contactPerson || "",
         phone: body.phone || user.phone || "",
         status: body.status === "inactive" ? "inactive" : "active",
+        pickupAddress: body.pickupAddress || "",
+        pickupLat: hasPickupCoords ? pickupLat : "",
+        pickupLng: hasPickupCoords ? pickupLng : "",
+        pickupLatitude: hasPickupCoords ? pickupLat : "",
+        pickupLongitude: hasPickupCoords ? pickupLng : "",
+        pickupZoneId,
+        pickupZoneName: body.pickupZoneName || getStaticZoneNames([pickupZoneId]) || "",
+        pickupLocationSource: hasPickupCoords ? body.pickupLocationSource || "admin_manual_pickup" : "",
+        pickupLocationUpdatedAt: hasPickupCoords ? body.pickupLocationUpdatedAt || new Date().toISOString() : "",
         updatedAt: new Date().toISOString(),
       });
       if (body.password) user.password = body.password;
@@ -1641,6 +1788,11 @@ async function getUsers() {
 async function getPartners() {
   const payload = await api("/api/partners");
   return Array.isArray(payload.partners) ? payload.partners : [];
+}
+
+async function getPartnerPickupPins() {
+  const payload = await api("/api/partner-pickups");
+  return Array.isArray(payload.pickups) ? payload.pickups : [];
 }
 
 async function getPending() {
