@@ -49,6 +49,13 @@ const DEFAULT_TARIFFS = {
 };
 const DATA_RETENTION_MONTHS = 8;
 const PARTNER_ORDER_RETENTION_MONTHS = 1;
+const WORKDAY_TIME_ZONE = "Asia/Tbilisi";
+const WORKDAY_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: WORKDAY_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 // Zone configuration lives here so future boundary changes are one small edit.
 // Polygon points are [lat, lng] and are checked with a standard point-in-polygon test.
@@ -161,6 +168,77 @@ function normalizeUsername(username) {
 
 function cleanUsername(username) {
   return String(username || "").trim();
+}
+
+function isDateKey(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function toWorkdayDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = WORKDAY_DATE_FORMATTER.formatToParts(date).reduce((result, part) => {
+    result[part.type] = part.value;
+    return result;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function addDaysToDateKey(dateKey, days) {
+  if (!isDateKey(dateKey)) return "";
+  const date = new Date(`${dateKey}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function getDbSettings(db) {
+  db.settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+  return db.settings;
+}
+
+function ensureWorkdayState(db, now = new Date()) {
+  const settings = getDbSettings(db);
+  const calendarDateKey = toWorkdayDateKey(now);
+  if (!isDateKey(settings.currentWorkdayKey)) {
+    settings.currentWorkdayKey = calendarDateKey;
+    settings.currentWorkdayStartedAt = now.toISOString();
+  }
+  return {
+    currentWorkdayKey: settings.currentWorkdayKey,
+    calendarDateKey,
+    lastClosedWorkdayKey: isDateKey(settings.lastClosedWorkdayKey) ? settings.lastClosedWorkdayKey : "",
+    lastWorkdayClosedAt: settings.lastWorkdayClosedAt || "",
+    currentWorkdayStartedAt: settings.currentWorkdayStartedAt || "",
+    isStale: isDateKey(settings.currentWorkdayKey) && settings.currentWorkdayKey < calendarDateKey,
+  };
+}
+
+function getCurrentWorkdayKey(db, now = new Date()) {
+  return ensureWorkdayState(db, now).currentWorkdayKey;
+}
+
+function closeCurrentWorkday(db, workdayKey, now = new Date()) {
+  const settings = getDbSettings(db);
+  const state = ensureWorkdayState(db, now);
+  const closedKey = isDateKey(workdayKey) ? workdayKey : state.currentWorkdayKey;
+  const nextWorkdayKey = addDaysToDateKey(closedKey, 1) || state.calendarDateKey;
+  settings.lastClosedWorkdayKey = closedKey;
+  settings.lastWorkdayClosedAt = now.toISOString();
+  if (!isDateKey(settings.currentWorkdayKey) || settings.currentWorkdayKey <= closedKey) {
+    settings.currentWorkdayKey = nextWorkdayKey;
+    settings.currentWorkdayStartedAt = now.toISOString();
+  }
+  return ensureWorkdayState(db, now);
+}
+
+function getParcelWorkdayDateKey(parcel) {
+  if (!parcel || typeof parcel !== "object") return "";
+  const statusDates = parcel.status === "delivered"
+    ? [parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+    : parcel.status === "failed"
+      ? [parcel.completedWorkdayKey, parcel.workdayKey, parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+      : [parcel.workdayKey, parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
+  return statusDates.concat([parcel.createdAt]).map((value) => (isDateKey(value) ? value : toDateKey(value))).find(Boolean) || "";
 }
 
 function publicUser(user) {
@@ -1206,6 +1284,14 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (method === "GET" && path === "/api/workday") {
+    requireSession(request);
+    const workday = ensureWorkdayState(db);
+    await writeDb(db);
+    sendJson(response, 200, { workday });
+    return;
+  }
+
   if (method === "POST" && path === "/api/setup-admin") {
     if (hasAdmin(db)) throw httpError(409, "ადმინის ანგარიში უკვე არსებობს.");
     const body = await readJsonBody(request);
@@ -1760,6 +1846,7 @@ async function handleApi(request, response, url) {
     }
 
     const now = new Date().toISOString();
+    const workdayKey = getCurrentWorkdayKey(db, new Date(now));
     const explicitTariffId = cleanParcelTariffId(body.tariffId || body.tariffType || body.deliveryTariffId);
     assertParcelTariffAllowed(explicitTariffId, new Date(now));
     const tariffId = explicitTariffId || (detectedZone ? "city" : "suburbs");
@@ -1809,6 +1896,7 @@ async function handleApi(request, response, url) {
       zoneName: detectedZone?.name || "",
       autoAssigned,
       status: "pending",
+      workdayKey,
       assignedAt: courier ? now : "",
       createdAt: now,
       updatedAt: now,
@@ -1886,6 +1974,7 @@ async function handleApi(request, response, url) {
     if (session.role !== "admin" && parcel.status === "delivered" && status === "failed") throw httpError(403, "ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
     if (status === "failed" && !String(body.failureReason || "").trim()) throw httpError(400, "ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
+    const workdayKey = getCurrentWorkdayKey(db, new Date(now));
     parcel.status = status;
     parcel.updatedAt = now;
     if (status === "pending") {
@@ -1893,13 +1982,17 @@ async function handleApi(request, response, url) {
       parcel.deliveredAt = "";
       parcel.failedAt = "";
       parcel.failureReason = "";
+      parcel.completedWorkdayKey = "";
+      parcel.financeDateKey = "";
     } else {
       parcel.completedAt = now;
+      parcel.completedWorkdayKey = workdayKey;
     }
     if (status === "delivered") {
       parcel.deliveredAt = now;
       parcel.failedAt = "";
       parcel.failureReason = "";
+      parcel.financeDateKey = workdayKey;
       applyDeliveredFinance(db, parcel);
     }
     if (status === "failed") {
@@ -1936,11 +2029,16 @@ async function handleApi(request, response, url) {
     const body = await readJsonBody(request);
     const courier = session.role === "admin" ? cleanUsername(body.courierUsername || "") : session.username;
     const parcelIds = Array.isArray(body.parcelIds) ? new Set(body.parcelIds.map((id) => String(id))) : null;
+    const closeWorkday = Boolean(body.closeWorkday);
+    if (closeWorkday && session.role !== "admin") throw httpError(403, "სამუშაო დღის დახურვა მხოლოდ ადმინს შეუძლია.");
+    const workdayState = ensureWorkdayState(db);
+    const closeWorkdayKey = isDateKey(body.workdayKey) ? String(body.workdayKey) : workdayState.currentWorkdayKey;
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
     const now = new Date().toISOString();
     let archived = 0;
     db.parcels.forEach((parcel) => {
-      if (!parcel.archivedAt && !isDeletedParcel(parcel) && isCompletedParcel(parcel) && (!parcelIds || parcelIds.has(parcel.id)) && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))) {
+      const matchesCloseWorkday = !closeWorkday || getParcelWorkdayDateKey(parcel) === closeWorkdayKey;
+      if (!parcel.archivedAt && !isDeletedParcel(parcel) && isCompletedParcel(parcel) && matchesCloseWorkday && (!parcelIds || parcelIds.has(parcel.id)) && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))) {
         applyDeliveredFinance(db, parcel);
         parcel.archivedAt = now;
         if (body.autoClosedDate) {
@@ -1951,8 +2049,9 @@ async function handleApi(request, response, url) {
         archived += 1;
       }
     });
+    const nextWorkday = closeWorkday ? closeCurrentWorkday(db, closeWorkdayKey, new Date(now)) : ensureWorkdayState(db, new Date(now));
     await writeDb(db);
-    sendJson(response, 200, { archived });
+    sendJson(response, 200, { archived, workday: nextWorkday, closedWorkdayKey: closeWorkday ? closeWorkdayKey : "" });
     return;
   }
 

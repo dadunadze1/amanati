@@ -942,6 +942,13 @@ function getFinanceAdminAdjustmentRows(report) {
 
 
 async function getFinanceAdminReport() {
+  const workday = typeof getWorkdayState === "function"
+    ? await getWorkdayState().catch(() => null)
+    : null;
+  if (!state.financeWorkdayInitialized && workday?.currentWorkdayKey) {
+    setFinanceCourierRange(workday.currentWorkdayKey, workday.currentWorkdayKey);
+    state.financeWorkdayInitialized = true;
+  }
   const range = getFinanceCourierRange();
   const [users, pins, history, partners] = await Promise.all([
     getUsers().catch(() => []),
@@ -981,7 +988,7 @@ async function getFinanceAdminReport() {
   const paidPartnerTotal = safeMoney(partnerSummaries.reduce((sum, item) => (
     sum + (findDailyBalanceEntry(ledger, "partner", range, item.partner.username || item.partner.id)?.amount || 0)
   ), 0));
-  const closablePins = pins.filter(isCompletedParcelStatus);
+  const closablePins = pins.filter((pin) => isCompletedParcelStatus(pin) && parcelMatchesStatsDateRange(pin, range.start, range.end));
   const deliveredOrders = daySummary.deliveredRecords || [];
   const snapshots = ledger
     .filter((entry) => entry.type === "snapshot" && entry.rangeStart === range.start && entry.rangeEnd === range.end)
@@ -992,6 +999,7 @@ async function getFinanceAdminReport() {
   return {
     range,
     users,
+    workday,
     couriers,
     pins,
     history,
@@ -1045,7 +1053,7 @@ function renderFinanceAdminTabs(activeView) {
 
 
 function renderFinanceAdminFilters(report, activeView) {
-  const today = toDateKey(new Date());
+  const today = report.workday?.currentWorkdayKey || toDateKey(new Date());
   const yesterday = addDaysToDateKey(today, -1);
   const quickRanges = [
     { label: "დღეს", value: `${today}|${today}` },
@@ -1055,8 +1063,12 @@ function renderFinanceAdminFilters(report, activeView) {
     { label: "CSV", value: "export" },
   ];
   const currentRangeValue = `${report.range.start}|${report.range.end}`;
+  const workdayNotice = report.workday?.isStale
+    ? `<p class="history-empty history-empty-card finance-workday-alert">სამუშაო დღე არ არის დახურული: ${escapeHtml(report.workday.currentWorkdayKey)} · კალენდარი: ${escapeHtml(report.workday.calendarDateKey || "")}</p>`
+    : `<p class="finance-workday-label">სამუშაო დღე: <strong>${escapeHtml(today)}</strong></p>`;
   return `
     <div class="finance-workbench-head">
+      ${workdayNotice}
       <div class="finance-workbench-topline">
         <div class="finance-toolbar finance-range-toolbar finance-workbench-range">
           <label>

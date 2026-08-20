@@ -1493,15 +1493,22 @@ function renderCloseDayCourierStats(stats) {
 async function openAdminCloseDay() {
   const pins = await getPins("");
   const couriers = await getCouriers();
-  const closablePins = pins.filter(isCompletedParcelStatus);
+  const workday = typeof getWorkdayState === "function"
+    ? await getWorkdayState().catch(() => null)
+    : null;
+  const currentWorkdayKey = workday?.currentWorkdayKey || toDateKey(new Date());
+  const closablePins = pins.filter((pin) => isCompletedParcelStatus(pin) && parcelMatchesStatsDate(pin, currentWorkdayKey));
   const delivered = closablePins.filter((pin) => pin.status === "delivered").length;
-  const failed = pins.filter((pin) => pin.status === "failed").length;
+  const failed = pins.filter((pin) => pin.status === "failed" && parcelMatchesStatsDate(pin, currentWorkdayKey)).length;
   const pending = pins.filter((pin) => pin.status === "pending").length;
-  const closable = delivered;
-  const courierStats = buildCloseDayCourierStats(couriers, pins.filter((pin) => pin.status === "delivered" || pin.status === "failed"));
+  const closable = closablePins.length;
+  const courierStats = buildCloseDayCourierStats(couriers, closablePins);
+  const staleNotice = workday?.isStale
+    ? `<p class="history-empty history-empty-card">სამუშაო დღე ჯერ არ არის დახურული: ${escapeHtml(currentWorkdayKey)}. კალენდარი: ${escapeHtml(workday.calendarDateKey || "")}</p>`
+    : "";
   const body = `
     <div class="history-summary">
-      <strong>დასახური პინები: ${closable}</strong>
+      <strong>სამუშაო დღე: ${escapeHtml(currentWorkdayKey)}</strong>
       <div class="history-metrics">
         <span><b>${delivered}</b> ჩაბარდა</span>
         <span><b>${failed}</b> არ ჩაბარდა</span>
@@ -1509,6 +1516,7 @@ async function openAdminCloseDay() {
         <span><b>${closable}</b> დაიხურება</span>
       </div>
     </div>
+    ${staleNotice}
     ${renderCloseDayCourierStats(courierStats)}
     <p>დღის დახურვა ისტორიაში გადაიტანს მხოლოდ ჩაბარებულ პინებს. არ ჩაბარებული და პროცესში დარჩენილი პინები აქტიურად რჩება.</p>
   `;
@@ -1521,21 +1529,31 @@ async function openAdminCloseDay() {
 
 async function closeAdminDay() {
   const pins = await getPins("");
-  const deliveredPins = pins.filter(isCompletedParcelStatus);
-  if (!deliveredPins.length) {
+  const workday = typeof getWorkdayState === "function"
+    ? await getWorkdayState().catch(() => null)
+    : null;
+  const currentWorkdayKey = workday?.currentWorkdayKey || toDateKey(new Date());
+  const completedPins = pins.filter((pin) => isCompletedParcelStatus(pin) && parcelMatchesStatsDate(pin, currentWorkdayKey));
+  if (!completedPins.length) {
     closeDialog();
-    showToast("ჩაბარებული პინი არ არის.");
+    showToast("დასახური პინი არ არის.");
     return;
   }
   const payload = await api("/api/parcels/archive", {
     method: "POST",
     body: {
       status: "delivered",
-      parcelIds: deliveredPins.map((pin) => pin.id),
+      closeWorkday: true,
+      workdayKey: currentWorkdayKey,
+      parcelIds: completedPins.map((pin) => pin.id),
     },
   });
-  const archivedIds = new Set(deliveredPins.map((pin) => pin.id));
+  const archivedIds = new Set(completedPins.map((pin) => pin.id));
   state.activePins = state.activePins.filter((pin) => !archivedIds.has(pin.id));
+  if (payload.workday?.currentWorkdayKey && typeof setFinanceCourierRange === "function") {
+    setFinanceCourierRange(payload.workday.currentWorkdayKey, payload.workday.currentWorkdayKey);
+    state.financeWorkdayInitialized = true;
+  }
   if (archivedIds.has(state.selectedPinId)) hideSelectedParcelCard();
   closeDialog();
   await refreshPins();

@@ -129,18 +129,9 @@ function handleDayChange(oldDay, newDay) {
   console.log("Day changed:", oldDay, "", newDay);
   showToast("ახალი დღე დაიწყო");
 
-  state.courierStats.selectedDate = newDay;
-  state.courierStats.rangeStart = newDay;
-  state.courierStats.rangeEnd = newDay;
-  state.financeDate = newDay;
-  state.financeRangeStart = newDay;
-  state.financeRangeEnd = newDay;
   state.selectedCourier = null;
   state.calendarDate = new Date();
 
-  runAutoDayClose(oldDay).catch((error) => {
-    console.warn("Auto day close failed", error);
-  });
   runAutoRetentionCleanup().catch((error) => {
     console.warn("Retention cleanup failed", error);
   });
@@ -168,7 +159,6 @@ async function handleMidnightRefresh() {
   state.midnightTimer = null;
   if (!state.currentUser) return;
 
-  await runAutoDayClose(getPreviousDateKey()).catch(() => {});
   await runAutoRetentionCleanup().catch(() => {});
   await refreshPins();
   if (state.activeDialogTitle === "ჩემი დღე") await openTodayStats();

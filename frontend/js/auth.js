@@ -100,9 +100,6 @@ function completeLogin(payload) {
     if (!state.isPartner) startLocationWatch();
     if (!state.isPartner) startCourierLocationServices();
     if (!state.isPartner) {
-      runAutoDayClose(getPreviousDateKey()).catch((error) => {
-        console.warn("Auto day close failed", error);
-      });
       runAutoRetentionCleanup().catch((error) => {
         console.warn("Retention cleanup failed", error);
       });

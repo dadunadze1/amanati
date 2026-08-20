@@ -635,6 +635,61 @@ function getStaticPaginationOptions(url) {
   return { limit, offset };
 }
 
+function isStaticDateKey(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function addStaticDaysToDateKey(dateKey, days) {
+  if (!isStaticDateKey(dateKey)) return "";
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + Number(days || 0));
+  return toDateKey(date);
+}
+
+function ensureStaticWorkdayState(store, now = new Date()) {
+  store.settings = store.settings && typeof store.settings === "object" ? store.settings : {};
+  const calendarDateKey = toDateKey(now);
+  if (!isStaticDateKey(store.settings.currentWorkdayKey)) {
+    store.settings.currentWorkdayKey = calendarDateKey;
+    store.settings.currentWorkdayStartedAt = now.toISOString();
+  }
+  return {
+    currentWorkdayKey: store.settings.currentWorkdayKey,
+    calendarDateKey,
+    lastClosedWorkdayKey: isStaticDateKey(store.settings.lastClosedWorkdayKey) ? store.settings.lastClosedWorkdayKey : "",
+    lastWorkdayClosedAt: store.settings.lastWorkdayClosedAt || "",
+    currentWorkdayStartedAt: store.settings.currentWorkdayStartedAt || "",
+    isStale: isStaticDateKey(store.settings.currentWorkdayKey) && store.settings.currentWorkdayKey < calendarDateKey,
+  };
+}
+
+function closeStaticCurrentWorkday(store, workdayKey, now = new Date()) {
+  const state = ensureStaticWorkdayState(store, now);
+  const closedKey = isStaticDateKey(workdayKey) ? workdayKey : state.currentWorkdayKey;
+  const nextWorkdayKey = addStaticDaysToDateKey(closedKey, 1) || state.calendarDateKey;
+  store.settings.lastClosedWorkdayKey = closedKey;
+  store.settings.lastWorkdayClosedAt = now.toISOString();
+  if (!isStaticDateKey(store.settings.currentWorkdayKey) || store.settings.currentWorkdayKey <= closedKey) {
+    store.settings.currentWorkdayKey = nextWorkdayKey;
+    store.settings.currentWorkdayStartedAt = now.toISOString();
+  }
+  return ensureStaticWorkdayState(store, now);
+}
+
+function getStaticCurrentWorkdayKey(store, now = new Date()) {
+  return ensureStaticWorkdayState(store, now).currentWorkdayKey;
+}
+
+function getStaticParcelWorkdayDateKey(parcel) {
+  if (!parcel || typeof parcel !== "object") return "";
+  const statusDates = parcel.status === "delivered"
+    ? [parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+    : parcel.status === "failed"
+      ? [parcel.completedWorkdayKey, parcel.workdayKey, parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+      : [parcel.workdayKey, parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
+  return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
+}
+
 function staticPaginatedPayload(key, records, pagination) {
   if (!pagination.limit) return { [key]: records };
   const total = records.length;
@@ -1368,6 +1423,12 @@ async function staticApi(path, options = {}) {
     return { tariffs: store.settings.tariffs };
   }
 
+  if (method === "GET" && apiPath === "/api/workday") {
+    const workday = ensureStaticWorkdayState(store);
+    saveStaticBootstrap();
+    return { workday };
+  }
+
   if (method === "GET" && apiPath === "/api/parcels") {
     const courier = url.searchParams.get("courier") || "";
     const partnerId = url.searchParams.get("partnerId") || "";
@@ -1612,6 +1673,7 @@ async function staticApi(path, options = {}) {
 
   if (method === "POST" && apiPath === "/api/parcels") {
     const now = new Date().toISOString();
+    const workdayKey = getStaticCurrentWorkdayKey(store, new Date(now));
     const partner = state.isPartner
       ? store.users.find((user) => user.id === state.currentUserProfile?.id)
       : store.users.find((user) => user.role === "partner" && (user.id === body.partnerId || normalizeUsername(user.username) === normalizeUsername(body.partnerUsername)));
@@ -1665,6 +1727,7 @@ async function staticApi(path, options = {}) {
       deliveryServiceType: tariffId === "express" ? "express" : typeof isVolumeTariffId === "function" && isVolumeTariffId(tariffId) ? "volume" : "standard",
       autoAssigned: Boolean(assignment.autoAssigned || body.autoAssigned),
       status: "pending",
+      workdayKey,
       createdAt: now,
       updatedAt: now,
       assignedAt: assignedCourierUsername ? now : "",
@@ -1701,6 +1764,7 @@ async function staticApi(path, options = {}) {
     assertStaticParcelVersion(parcel, body.expectedUpdatedAt);
     if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
+    const workdayKey = getStaticCurrentWorkdayKey(store, new Date(now));
     parcel.status = body.status || parcel.status;
     parcel.updatedAt = now;
     if (parcel.status === "delivered") {
@@ -1708,6 +1772,8 @@ async function staticApi(path, options = {}) {
       parcel.deliveredAt = body.deliveredAt || parcel.completedAt;
       parcel.failedAt = "";
       parcel.failureReason = "";
+      parcel.completedWorkdayKey = workdayKey;
+      parcel.financeDateKey = workdayKey;
       Object.assign(parcel, normalizeStaticParcelFinance(parcel, store));
     }
     if (parcel.status === "failed") {
@@ -1715,12 +1781,15 @@ async function staticApi(path, options = {}) {
       parcel.failedAt = body.failedAt || parcel.completedAt;
       parcel.deliveredAt = "";
       parcel.failureReason = body.failureReason || "";
+      parcel.completedWorkdayKey = workdayKey;
     }
     if (parcel.status === "pending") {
       parcel.completedAt = "";
       parcel.deliveredAt = "";
       parcel.failedAt = "";
       parcel.failureReason = "";
+      parcel.completedWorkdayKey = "";
+      parcel.financeDateKey = "";
     }
     if (["delivered", "failed"].includes(parcel.status)) {
       queueStaticPushNotification(store, buildStaticParcelStatusNotification(parcel, parcel.status, body));
@@ -1748,12 +1817,17 @@ async function staticApi(path, options = {}) {
     const parcelIds = Array.isArray(body.parcelIds) ? new Set(body.parcelIds) : null;
     const courier = body.courierUsername || "";
     const now = new Date().toISOString();
+    const closeWorkday = Boolean(body.closeWorkday);
+    const workdayState = ensureStaticWorkdayState(store, new Date(now));
+    const closeWorkdayKey = isStaticDateKey(body.workdayKey) ? body.workdayKey : workdayState.currentWorkdayKey;
     let archived = 0;
     store.parcels.forEach((parcel) => {
+      const matchesCloseWorkday = !closeWorkday || getStaticParcelWorkdayDateKey(parcel) === closeWorkdayKey;
       if (
         !parcel.archivedAt
         && !isStaticDeletedParcel(parcel)
         && parcel.status === "delivered"
+        && matchesCloseWorkday
         && (!parcelIds || parcelIds.has(parcel.id))
         && (!courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
       ) {
@@ -1769,6 +1843,7 @@ async function staticApi(path, options = {}) {
         archived += 1;
       }
     });
+    const nextWorkday = closeWorkday ? closeStaticCurrentWorkday(store, closeWorkdayKey, new Date(now)) : ensureStaticWorkdayState(store, new Date(now));
     if (body.autoClosedDate) {
       store.settings.lastAutoCloseDate = body.autoClosedDate;
       store.settings.lastAutoCloseAt = now;
@@ -1776,7 +1851,7 @@ async function staticApi(path, options = {}) {
     archiveStaticCompletedParcels(store);
     pruneStaticPushEvents(store);
     saveStaticBootstrap();
-    return { archived };
+    return { archived, workday: nextWorkday, closedWorkdayKey: closeWorkday ? closeWorkdayKey : "" };
   }
 
   const locationMatch = apiPath.match(/^\/api\/parcels\/([^/]+)\/location$/);
@@ -1890,6 +1965,12 @@ async function getPartnerPickupPins() {
 
 async function getPending() {
   return (await api("/api/pending")).pending;
+}
+
+async function getWorkdayState() {
+  const workday = (await api("/api/workday")).workday;
+  if (workday?.currentWorkdayKey) state.currentWorkdayKey = workday.currentWorkdayKey;
+  return workday;
 }
 
 async function getPins(username, options = {}) {

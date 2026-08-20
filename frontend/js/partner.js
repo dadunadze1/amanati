@@ -217,7 +217,8 @@ async function getPartnerOrderRecords(partner = null) {
 
 function getPartnerCashManagementRange() {
   const today = toDateKey(new Date());
-  return normalizeDateRange(state.partnerCashRangeStart || today, state.partnerCashRangeEnd || state.partnerCashRangeStart || today);
+  const defaultDate = state.currentWorkdayKey || state.financeRangeStart || today;
+  return normalizeDateRange(state.partnerCashRangeStart || defaultDate, state.partnerCashRangeEnd || state.partnerCashRangeStart || defaultDate);
 }
 
 

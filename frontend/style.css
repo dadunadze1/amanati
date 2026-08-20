@@ -14057,6 +14057,21 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   gap: 0;
 }
 
+.finance-workday-label,
+.finance-workday-alert {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+}
+
+.finance-workday-label {
+  color: #475569;
+  font-weight: 750;
+}
+
+.finance-workday-label strong {
+  color: #0f172a;
+}
+
 .finance-workbench-topline {
   grid-template-columns: minmax(410px, 0.68fr) minmax(300px, 0.32fr);
   gap: 6px;

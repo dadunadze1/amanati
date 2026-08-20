@@ -308,5 +308,82 @@ describe("local API smoke flow", () => {
 
     const history = await api(`/api/history?courier=${encodeURIComponent(courierUsername)}`, { token: adminToken });
     assert.ok(history.history.some((parcel) => parcel.id === createdParcel.id));
+
+  });
+
+  it("advances finance workday only when admin closes the day", async () => {
+    const initialWorkday = await api("/api/workday", { token: adminToken });
+    const currentWorkdayKey = initialWorkday.workday.currentWorkdayKey;
+
+    const firstCreated = await api("/api/parcels", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        courierUsername,
+        city: "Tbilisi",
+        address: "Workday First Street 12",
+        fullAddress: "Tbilisi, Workday First Street 12",
+        fullName: "Workday First",
+        phone: "555121001",
+        paymentAmount: 25,
+        lat: 41.7151,
+        lng: 44.8271,
+      },
+    });
+    assert.equal(firstCreated.parcel.workdayKey, currentWorkdayKey);
+
+    const firstDelivered = await api(`/api/parcels/${firstCreated.parcel.id}/status`, {
+      method: "PATCH",
+      token: courierToken,
+      body: { status: "delivered", expectedUpdatedAt: firstCreated.parcel.updatedAt },
+    });
+    assert.equal(firstDelivered.parcel.financeDateKey, currentWorkdayKey);
+
+    const close = await api("/api/parcels/archive", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        closeWorkday: true,
+        workdayKey: currentWorkdayKey,
+        parcelIds: [firstCreated.parcel.id],
+      },
+    });
+    assert.equal(close.archived, 1);
+    assert.notEqual(close.workday.currentWorkdayKey, currentWorkdayKey);
+
+    const secondCreated = await api("/api/parcels", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        courierUsername,
+        city: "Tbilisi",
+        address: "Workday Second Street 12",
+        fullAddress: "Tbilisi, Workday Second Street 12",
+        fullName: "Workday Second",
+        phone: "555121002",
+        paymentAmount: 40,
+        lat: 41.7151,
+        lng: 44.8271,
+      },
+    });
+    assert.equal(secondCreated.parcel.workdayKey, close.workday.currentWorkdayKey);
+
+    const secondDelivered = await api(`/api/parcels/${secondCreated.parcel.id}/status`, {
+      method: "PATCH",
+      token: courierToken,
+      body: { status: "delivered", expectedUpdatedAt: secondCreated.parcel.updatedAt },
+    });
+    assert.equal(secondDelivered.parcel.financeDateKey, close.workday.currentWorkdayKey);
+
+    const oldDayClose = await api("/api/parcels/archive", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        closeWorkday: true,
+        workdayKey: currentWorkdayKey,
+        parcelIds: [secondCreated.parcel.id],
+      },
+    });
+    assert.equal(oldDayClose.archived, 0);
   });
 });

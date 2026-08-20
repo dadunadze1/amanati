@@ -105,10 +105,10 @@ function normalizeDateKey(value) {
 function getParcelStatsDateKey(parcel) {
   if (!parcel || typeof parcel !== "object") return "";
   const statusDates = parcel.status === "delivered"
-    ? [parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+    ? [parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
     : parcel.status === "failed"
-      ? [parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
-      : [parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
+      ? [parcel.completedWorkdayKey, parcel.workdayKey, parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+      : [parcel.workdayKey, parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
   return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
 }
 
