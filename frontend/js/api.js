@@ -9,7 +9,10 @@ const STATIC_DEMO_COURIER_IDS = new Set(["static-courier-1", "static-courier-2"]
 const STATIC_DEMO_COURIER_PHONES = new Set(["+995555000001", "+995555000002"]);
 const STATIC_PUSH_EVENT_RETENTION_DAYS = 14;
 const STATIC_AUTO_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const STATIC_BOOTSTRAP_SAVE_DEBOUNCE_MS = 450;
 let staticRealtimeRefreshTimer = null;
+let staticBootstrapSaveTimer = null;
+let staticBootstrapSavePending = false;
 
 function isStaticDeploy() {
   const hostname = window.location.hostname;
@@ -64,7 +67,7 @@ async function loadStaticBootstrap() {
   runStaticAutomaticCleanup(loadStaticBootstrap.cache);
   await backfillStaticPartnerOrderLocations(loadStaticBootstrap.cache);
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
-  saveStaticBootstrap();
+  saveStaticBootstrap({ immediate: true });
   startStaticRealtimeSync();
   return loadStaticBootstrap.cache;
 }
@@ -369,7 +372,7 @@ function getStaticAdjustmentKey(adjustment) {
   ].join("|");
 }
 
-function saveStaticBootstrap() {
+function persistStaticBootstrapNow() {
   if (!loadStaticBootstrap.cache) return;
   saveData(STATIC_DEPLOY_STORAGE_KEY, loadStaticBootstrap.cache);
   if (typeof saveFirebaseStaticStore === "function") {
@@ -377,6 +380,40 @@ function saveStaticBootstrap() {
       console.warn("Firebase static store save failed", error);
     });
   }
+}
+
+function flushStaticBootstrapSave() {
+  if (staticBootstrapSaveTimer) {
+    window.clearTimeout(staticBootstrapSaveTimer);
+    staticBootstrapSaveTimer = null;
+  }
+  if (!loadStaticBootstrap.cache || !staticBootstrapSavePending) return;
+  staticBootstrapSavePending = false;
+  persistStaticBootstrapNow();
+}
+
+function saveStaticBootstrap(options = {}) {
+  if (!loadStaticBootstrap.cache) return;
+  if (options.immediate || typeof window === "undefined") {
+    staticBootstrapSavePending = false;
+    if (staticBootstrapSaveTimer) {
+      window.clearTimeout(staticBootstrapSaveTimer);
+      staticBootstrapSaveTimer = null;
+    }
+    persistStaticBootstrapNow();
+    return;
+  }
+
+  staticBootstrapSavePending = true;
+  if (staticBootstrapSaveTimer) return;
+  staticBootstrapSaveTimer = window.setTimeout(flushStaticBootstrapSave, STATIC_BOOTSTRAP_SAVE_DEBOUNCE_MS);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushStaticBootstrapSave);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) flushStaticBootstrapSave();
+  });
 }
 
 function startStaticRealtimeSync() {

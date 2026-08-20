@@ -56,12 +56,17 @@ async function refreshPinsOnce() {
   state.activePins = pins;
   state.partnerPickupPins = partnerPickupPins;
   const visiblePins = getVisiblePinsForCurrentRole(pins);
+  const panelSignature = getPinPanelRenderSignature(pins, partnerPickupPins);
+  const shouldRenderPanels = panelSignature !== state.pinPanelRenderSignature;
+  state.pinPanelRenderSignature = panelSignature;
   renderParcelMarkers(visiblePins);
   hydratePinAddresses(pins);
-  await renderCourierStatsCard(pins);
-  await renderAdminDashboard(pins);
-  await renderPartnerDashboard(pins);
-  await renderCourierMobileDashboard(getCourierLivePins(pins));
+  if (shouldRenderPanels) {
+    await renderCourierStatsCard(pins);
+    await renderAdminDashboard(pins);
+    await renderPartnerDashboard(pins);
+    await renderCourierMobileDashboard(getCourierLivePins(pins));
+  }
   if (state.routePinId && !pins.some((pin) => pin.id === state.routePinId)) clearActiveRoute();
   clearHistoryPreviewMarker();
 
@@ -77,6 +82,32 @@ async function refreshPinsOnce() {
     scheduleMapInvalidateSize(0);
   }
   scheduleMapInvalidateSize();
+}
+
+
+function getPinPanelRenderSignature(pins = [], partnerPickupPins = []) {
+  const role = state.isAdmin ? "admin" : state.isPartner ? "partner" : "courier";
+  return [
+    role,
+    state.currentUser || "",
+    state.currentUserProfile?.role || "",
+    (Array.isArray(pins) ? pins : []).map((pin) => [
+      pin?.id || "",
+      pin?.status || "",
+      pin?.courierUsername || "",
+      pin?.partnerId || "",
+      pin?.partnerUsername || "",
+      pin?.updatedAt || "",
+      pin?.archivedAt || "",
+      pin?.deletedAt || "",
+    ].join("~")).join("|"),
+    (Array.isArray(partnerPickupPins) ? partnerPickupPins : []).map((pickup) => [
+      pickup?.partnerUsername || "",
+      pickup?.count || "",
+      pickup?.lastOrderAt || "",
+      pickup?.lastPickupAcknowledgedAt || "",
+    ].join("~")).join("|"),
+  ].join("||");
 }
 
 

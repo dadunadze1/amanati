@@ -88,8 +88,13 @@ function safeMoney(value) {
 function normalizeDateKey(value) {
   if (!value) return "";
   if (typeof value === "string") {
-    const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+    const text = value.trim();
+    const plainDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (plainDateMatch) return `${plainDateMatch[1]}-${plainDateMatch[2]}-${plainDateMatch[3]}`;
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match && !/[Tt]|[Zz]|[+-]\d{2}:?\d{2}$/.test(text)) {
+      return `${match[1]}-${match[2]}-${match[3]}`;
+    }
   }
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";

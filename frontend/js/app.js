@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=9";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=10";
 
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
@@ -825,6 +825,7 @@ function showDialog(title, body, actions = []) {
   els.dialogModal.classList.remove("admin-map-dialog");
   els.dialogModal.classList.remove("courier-stats-dialog");
   els.dialogModal.classList.remove("zone-management-dialog");
+  syncDialogRoleClasses();
   els.dialogTitle.textContent = title;
   els.dialogBody.innerHTML = body;
   els.dialogActions.innerHTML = "";
@@ -848,10 +849,19 @@ function closeDialog() {
   els.dialogModal.classList.remove("admin-map-dialog");
   els.dialogModal.classList.remove("courier-stats-dialog");
   els.dialogModal.classList.remove("zone-management-dialog");
+  els.dialogModal.classList.remove("admin-dashboard-dialog", "courier-mobile-dialog", "partner-dashboard-dialog");
   hideModal(els.dialogModal);
   els.dialogTitle.textContent = "";
   els.dialogBody.textContent = "";
   els.dialogActions.textContent = "";
+}
+
+
+function syncDialogRoleClasses() {
+  if (!els.dialogModal) return;
+  els.dialogModal.classList.toggle("admin-dashboard-dialog", Boolean(state.isAdmin));
+  els.dialogModal.classList.toggle("partner-dashboard-dialog", Boolean(state.isPartner));
+  els.dialogModal.classList.toggle("courier-mobile-dialog", Boolean(state.currentUser && !state.isAdmin && !state.isPartner));
 }
 
 

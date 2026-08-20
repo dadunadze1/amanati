@@ -186,11 +186,11 @@ function getMapPinRenderSignature(pins) {
   const expandedLabels = Array.isArray(state.expandedPinLabels)
     ? state.expandedPinLabels.join(",")
     : "";
-  const zoom = state.map ? getMapZoom() : "";
+  const zoomBucket = state.map ? getMapRenderZoomBucket() : "";
   const role = state.isAdmin ? "admin" : state.isPartner ? "partner" : "courier";
   return [
     role,
-    zoom,
+    zoomBucket,
     state.selectedPinId || "",
     expandedLabels,
     pins.map((pin) => [
@@ -220,6 +220,17 @@ function getMapPinRenderSignature(pins) {
       pickup?.lastPickupAcknowledgedAt || "",
     ].join("~")).join("|"),
   ].join("||");
+}
+
+
+function getMapRenderZoomBucket() {
+  const zoom = getMapZoom();
+  if (state.isAdmin) {
+    if (zoom < 14) return "admin-cluster-wide";
+    if (zoom < 17) return "admin-cluster-near";
+    return "admin-detail";
+  }
+  return zoom >= 16 ? "courier-labels" : "courier-pins";
 }
 
 

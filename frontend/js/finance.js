@@ -888,17 +888,17 @@ function getFinanceAdminAdjustmentRows(report) {
 
 async function getFinanceAdminReport() {
   const range = getFinanceCourierRange();
-  const [users, pins, history, partners, partnerRecords] = await Promise.all([
+  const [users, pins, history, partners] = await Promise.all([
     getUsers().catch(() => []),
     getPins("").catch(() => []),
     getHistory("").catch(() => []),
     typeof getPartners === "function" ? getPartners().catch(() => []) : [],
-    typeof getAllPartnerCashRecords === "function" ? getAllPartnerCashRecords().catch(() => []) : [],
     typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
   ]);
   const ledger = await loadDailyBalanceLedger().catch(() => readDailyBalanceLedger());
   const couriers = users.filter((user) => user.role === "courier");
   const records = [...pins, ...history];
+  const partnerRecords = typeof mergePartnerOrderRecords === "function" ? mergePartnerOrderRecords(pins, history) : records;
   const daySummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
   const courierSummaries = couriers.map((courier) => ({
     courier,
@@ -1337,6 +1337,56 @@ function applyFinanceDashboardSearch() {
 }
 
 
+function renderFinanceDashboardWorkbench(report) {
+  return `
+    <div class="finance-workbench">
+      ${renderFinanceAdminContent(report, state.financeAdminView)}
+      <p class="history-empty finance-workbench-empty" hidden>ჩანაწერი ვერ მოიძებნა.</p>
+    </div>
+  `;
+}
+
+
+function bindFinanceDashboardContentEvents(report) {
+  document.querySelectorAll(".finance-workbench [data-finance-dashboard-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.financeAdminView = getFinanceAdminView(button.dataset.financeDashboardTab);
+      updateFinanceDashboardContent(report);
+    });
+  });
+  bindAdminDailyBalanceEvents({
+    range: report.range,
+    courierSummaries: report.courierSummaries,
+    partnerSummaries: report.partnerSummaries,
+    deliveredOrders: report.deliveredOrders,
+    totals: {
+      totalCourierPay: report.totals.totalCourierPay,
+      totalPartnerCash: report.totals.partnerCashDue,
+      partnerBaseCash: report.totals.partnerBaseCash,
+      partnerServiceFees: report.totals.partnerServiceFees,
+      partnerPaymentDue: report.totals.partnerPaymentDue,
+      partnerNetBalance: report.totals.partnerNetBalance,
+      partnerAdjustments: report.totals.partnerAdjustments,
+      deliveryFees: report.totals.deliveryFees,
+      adjustedProfit: report.totals.adjustedProfit,
+      delivered: report.totals.delivered,
+    },
+  });
+}
+
+
+function updateFinanceDashboardContent(report) {
+  const workbench = document.querySelector(".finance-workbench");
+  if (!workbench) return;
+  workbench.innerHTML = `
+    ${renderFinanceAdminContent(report, state.financeAdminView)}
+    <p class="history-empty finance-workbench-empty" hidden>ჩანაწერი ვერ მოიძებნა.</p>
+  `;
+  bindFinanceDashboardContentEvents(report);
+  applyFinanceDashboardSearch();
+}
+
+
 function bindFinanceDashboardEvents(report) {
   document.querySelector("[data-finance-dashboard-apply]")?.addEventListener("click", async () => {
     const range = normalizeDateRange(
@@ -1382,7 +1432,7 @@ function bindFinanceDashboardEvents(report) {
     setFinanceCourierRange(start, end);
     await openFinanceDashboard();
   });
-  document.querySelectorAll("[data-finance-dashboard-tab]").forEach((button) => {
+  document.querySelectorAll(".modal-filters [data-finance-dashboard-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.financeAdminView = getFinanceAdminView(button.dataset.financeDashboardTab);
       await openFinanceDashboard();
@@ -1400,24 +1450,7 @@ function bindFinanceDashboardEvents(report) {
     });
     applyFinanceDashboardSearch();
   }
-  bindAdminDailyBalanceEvents({
-    range: report.range,
-    courierSummaries: report.courierSummaries,
-    partnerSummaries: report.partnerSummaries,
-    deliveredOrders: report.deliveredOrders,
-    totals: {
-      totalCourierPay: report.totals.totalCourierPay,
-      totalPartnerCash: report.totals.partnerCashDue,
-      partnerBaseCash: report.totals.partnerBaseCash,
-      partnerServiceFees: report.totals.partnerServiceFees,
-      partnerPaymentDue: report.totals.partnerPaymentDue,
-      partnerNetBalance: report.totals.partnerNetBalance,
-      partnerAdjustments: report.totals.partnerAdjustments,
-      deliveryFees: report.totals.deliveryFees,
-      adjustedProfit: report.totals.adjustedProfit,
-      delivered: report.totals.delivered,
-    },
-  });
+  bindFinanceDashboardContentEvents(report);
 }
 
 
@@ -1430,12 +1463,7 @@ async function openFinanceDashboard() {
   state.financeAdminSearch = "";
   const report = await getFinanceAdminReport();
   const filters = renderFinanceAdminFilters(report, state.financeAdminView);
-  const content = `
-    <div class="finance-workbench">
-      ${renderFinanceAdminContent(report, state.financeAdminView)}
-      <p class="history-empty finance-workbench-empty" hidden>ჩანაწერი ვერ მოიძებნა.</p>
-    </div>
-  `;
+  const content = renderFinanceDashboardWorkbench(report);
   const body = renderFinanceModalLayout({ filters, content });
   showDialog("ფინანსები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
   bindFinanceDashboardEvents(report);
@@ -1448,16 +1476,18 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
   state.financeDate = range.start;
   setFinanceCourierRange(range.start, range.end);
 
-  const [users, records, partners, partnerRecords, ledger] = await Promise.all([
+  const [users, records, partners, ledger] = await Promise.all([
     getUsers().catch(() => []),
     getAllFinanceRecords(),
     typeof getPartners === "function" ? getPartners().catch(() => []) : [],
-    typeof getAllPartnerCashRecords === "function" ? getAllPartnerCashRecords().catch(() => []) : getAllFinanceRecords(),
     (async () => {
       if (typeof loadPartnerCashAdjustments === "function") await loadPartnerCashAdjustments().catch(() => []);
       return loadDailyBalanceLedger();
     })(),
   ]);
+  const activeRecords = (Array.isArray(records) ? records : []).filter((parcel) => !parcel.archivedAt);
+  const archivedRecords = (Array.isArray(records) ? records : []).filter((parcel) => parcel.archivedAt);
+  const partnerRecords = typeof mergePartnerOrderRecords === "function" ? mergePartnerOrderRecords(activeRecords, archivedRecords) : records;
 
   const couriers = users.filter((user) => user.role === "courier");
   const courierSummaries = couriers.map((courier) => ({

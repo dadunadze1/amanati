@@ -14110,12 +14110,12 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   }
 }
 
-body:has(.app-shell.is-courier-mobile) #dialogModal.active {
+#dialogModal.courier-mobile-dialog.active {
   align-items: flex-end !important;
   padding: 0 !important;
 }
 
-body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card {
+#dialogModal.courier-mobile-dialog.active .modal-card {
   width: 100% !important;
   max-width: none !important;
   max-height: min(78dvh, calc(100dvh - max(58px, env(safe-area-inset-top)))) !important;
@@ -14125,7 +14125,7 @@ body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card {
   border-radius: 18px 18px 0 0 !important;
 }
 
-body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card::before,
+#dialogModal.courier-mobile-dialog.active .modal-card::before,
 .app-shell.is-courier-mobile .right-panel.nearest-card:not([hidden])::before {
   content: "";
   width: 44px;
