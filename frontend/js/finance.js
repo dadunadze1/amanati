@@ -1096,12 +1096,14 @@ function renderFinanceAdminFilters(report, activeView) {
 
 function renderFinanceAdminMetrics(report) {
   const totals = report.totals;
+  const partnerSettlement = Math.max(totals.partnerCashDue, totals.partnerPaymentDue);
+  const partnerSettlementLabel = totals.partnerCashDue > 0
+    ? "პარტნიორებს გადასარიცხი"
+    : "პარტნიორებიდან მისაღები";
   return `
-    ${renderFinanceSummaryItem({ className: "finance-summary-item--hero finance-summary-item--final", icon: "₾", label: "კომპანიის მოგება", value: formatMoney(totals.adjustedProfit) })}
-    ${renderFinanceSummaryItem({ className: "finance-summary-item--cash finance-summary-item--alert", icon: "₾", label: "კურიერის ჩასაბარებელი ქეში", value: formatMoney(totals.totalCourierCash) })}
-    ${renderFinanceSummaryItem({ className: "finance-summary-item--base", icon: "₾", label: "კურიერებზე გადასახდელი", value: formatMoney(totals.totalCourierPay) })}
-    ${renderFinanceSummaryItem({ className: "finance-summary-item--cash", icon: "₾", label: "პარტნიორებისთვის გადასარიცხი", value: formatMoney(totals.partnerCashDue) })}
-    ${renderFinanceSummaryItem({ className: "finance-summary-item--delivered", icon: "₾", label: "პარტნიორის მომსახურება", value: formatMoney(totals.partnerServiceFees) })}
+    ${renderFinanceSummaryItem({ className: "finance-summary-item--hero finance-summary-item--final", icon: "₾", label: "მოგება", value: formatMoney(totals.adjustedProfit) })}
+    ${renderFinanceSummaryItem({ className: "finance-summary-item--cash finance-summary-item--alert", icon: "₾", label: "კურიერის ქეში", value: formatMoney(totals.totalCourierCash) })}
+    ${renderFinanceSummaryItem({ className: "finance-summary-item--base", icon: "₾", label: partnerSettlementLabel, value: formatMoney(partnerSettlement) })}
     ${renderFinanceSummaryItem({ className: "finance-summary-item--compact", icon: "◷", label: "პერიოდი", value: formatDateRangeLabel(report.range.start, report.range.end) })}
   `;
 }

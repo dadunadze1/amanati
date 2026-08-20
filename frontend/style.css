@@ -13998,12 +13998,55 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 }
 
 .modal-card:has(.finance-workbench) .finance-modal {
-  height: min(91vh, 910px);
-  gap: 4px;
+  height: min(95vh, 980px);
+  gap: 3px;
 }
 
 .modal-card:has(.finance-workbench) .modal-filters {
-  padding: 4px 6px;
+  padding: 3px 5px;
+}
+
+.modal-card:has(.finance-workbench) .finance-modal-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(58px, auto);
+  gap: 5px;
+}
+
+.modal-card:has(.finance-workbench) .finance-summary-item {
+  min-height: 58px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 7px;
+  row-gap: 1px;
+  align-content: center;
+  padding: 7px 9px;
+}
+
+.modal-card:has(.finance-workbench) .finance-summary-icon {
+  grid-row: 1 / span 2;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 0.7rem;
+}
+
+.modal-card:has(.finance-workbench) .finance-summary-item span:not(.finance-summary-icon) {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.66rem;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-card:has(.finance-workbench) .finance-summary-item strong,
+.modal-card:has(.finance-workbench) .finance-summary-item--hero strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.92rem;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-card:has(.finance-workbench) .modal-content-sections {
@@ -14043,18 +14086,18 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 }
 
 .finance-workbench .finance-list-panel {
-  gap: 4px;
+  gap: 3px;
 }
 
 .finance-workbench .partner-panel-head {
-  min-height: 28px;
+  min-height: 24px;
   grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
-  gap: 6px;
-  padding: 2px 6px;
+  gap: 5px;
+  padding: 1px 5px;
 }
 
 .finance-workbench .partner-panel-head h2 {
-  font-size: 0.86rem;
+  font-size: 0.82rem;
 }
 
 .finance-workbench .partner-filter-row {
@@ -14068,30 +14111,30 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 
 .finance-workbench .partner-tag {
   min-width: 0;
-  min-height: 18px;
+  min-height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1px 5px;
+  padding: 1px 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .finance-workbench .partner-order-table {
-  min-width: 1120px;
-  font-size: 0.78rem;
+  min-width: 980px;
+  font-size: 0.76rem;
 }
 
 .finance-workbench .partner-order-table th,
 .finance-workbench .partner-order-table td {
-  padding: 5px 7px;
+  padding: 4px 6px;
 }
 
 .finance-action-queue {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
 .finance-action-card {
@@ -14099,8 +14142,8 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 7px;
+  padding: 6px 8px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.94);
@@ -14128,7 +14171,7 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   min-width: 0;
   overflow: hidden;
   color: #0f172a;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -14157,7 +14200,7 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 
 .finance-settlement {
   min-width: 132px;
-  padding: 6px 8px;
+  padding: 5px 7px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
 }
@@ -14176,7 +14219,7 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
 .finance-detail-chip {
   min-width: 82px;
   max-width: 132px;
-  padding: 5px 7px;
+  padding: 4px 6px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 8px;
   background: rgba(248, 250, 252, 0.92);
@@ -14212,6 +14255,10 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   }
 
   .finance-workbench .partner-filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modal-card:has(.finance-workbench) .finance-modal-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
