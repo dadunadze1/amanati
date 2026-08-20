@@ -831,6 +831,40 @@ function getStaticActivePartnerPickupParcels(store, partner, acknowledgedAt = pa
     .filter((parcel) => staticPickupVisibleAfterAck(parcel, acknowledgedAt));
 }
 
+function addStaticPartnerPickupParcelGroup(groups, key, parcel) {
+  const normalizedKey = String(key || "").trim();
+  if (!normalizedKey) return;
+  if (!groups.has(normalizedKey)) groups.set(normalizedKey, []);
+  groups.get(normalizedKey).push(parcel);
+}
+
+function buildStaticActivePartnerPickupParcelGroups(store) {
+  const groups = new Map();
+  (Array.isArray(store.parcels) ? store.parcels : [])
+    .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .forEach((parcel) => {
+      addStaticPartnerPickupParcelGroup(groups, parcel.partnerId, parcel);
+      const username = normalizeUsername(parcel.partnerUsername);
+      if (username) addStaticPartnerPickupParcelGroup(groups, `username:${username}`, parcel);
+    });
+  return groups;
+}
+
+function getGroupedStaticActivePartnerPickupParcels(groups, partner, acknowledgedAt = partner?.lastPickupAcknowledgedAt || "") {
+  const partnerId = partner?.id || partner?.username || "";
+  const username = normalizeUsername(partner?.username);
+  const seen = new Set();
+  return [
+    ...(partnerId ? groups.get(partnerId) || [] : []),
+    ...(username ? groups.get(`username:${username}`) || [] : []),
+  ].filter((parcel) => {
+    const key = parcel.id || parcel.createdAt || `${parcel.partnerId}:${parcel.partnerUsername}:${parcel.address || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return staticPickupVisibleAfterAck(parcel, acknowledgedAt);
+  });
+}
+
 function publicStaticPartnerPickup(store, partner, parcels) {
   const coords = getStaticPartnerPickupCoords(partner);
   if (!coords || !parcels.length) return null;
@@ -860,10 +894,11 @@ function publicStaticPartnerPickup(store, partner, parcels) {
 function getStaticPartnerPickupPinsForCurrentUser(store) {
   const role = state.currentUserProfile?.role || "";
   const currentZoneIds = new Set(getStaticUserZoneIds(state.currentUserProfile || {}));
+  const parcelGroups = buildStaticActivePartnerPickupParcelGroups(store);
   return (Array.isArray(store.users) ? store.users : [])
     .filter((user) => user.role === "partner" && user.status !== "inactive")
     .map((partner) => {
-      const pickup = publicStaticPartnerPickup(store, partner, getStaticActivePartnerPickupParcels(store, partner));
+      const pickup = publicStaticPartnerPickup(store, partner, getGroupedStaticActivePartnerPickupParcels(parcelGroups, partner));
       if (!pickup) return null;
       if (role === "admin") return pickup;
       if (role === "courier" && pickup.zoneId && currentZoneIds.has(pickup.zoneId)) return pickup;

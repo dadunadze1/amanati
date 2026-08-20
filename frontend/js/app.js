@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=6";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=7";
 
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");

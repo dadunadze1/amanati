@@ -332,6 +332,40 @@ function getActivePartnerPickupParcels(db, partner, acknowledgedAt = partner?.la
     .filter((parcel) => isPickupVisibleAfterAck(parcel, acknowledgedAt));
 }
 
+function addPartnerPickupParcelGroup(groups, key, parcel) {
+  const normalizedKey = String(key || "").trim();
+  if (!normalizedKey) return;
+  if (!groups.has(normalizedKey)) groups.set(normalizedKey, []);
+  groups.get(normalizedKey).push(parcel);
+}
+
+function buildActivePartnerPickupParcelGroups(db) {
+  const groups = new Map();
+  db.parcels
+    .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .forEach((parcel) => {
+      addPartnerPickupParcelGroup(groups, parcel.partnerId, parcel);
+      const username = normalizeUsername(parcel.partnerUsername);
+      if (username) addPartnerPickupParcelGroup(groups, `username:${username}`, parcel);
+    });
+  return groups;
+}
+
+function getGroupedActivePartnerPickupParcels(groups, partner, acknowledgedAt = partner?.lastPickupAcknowledgedAt || "") {
+  const partnerId = partnerCashIdentity(partner);
+  const username = normalizeUsername(partner?.username);
+  const seen = new Set();
+  return [
+    ...(partnerId ? groups.get(partnerId) || [] : []),
+    ...(username ? groups.get(`username:${username}`) || [] : []),
+  ].filter((parcel) => {
+    const key = parcel.id || parcel.createdAt || `${parcel.partnerId}:${parcel.partnerUsername}:${parcel.address || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return isPickupVisibleAfterAck(parcel, acknowledgedAt);
+  });
+}
+
 function publicPartnerPickup(db, partner, parcels) {
   const coords = getPartnerPickupCoords(partner);
   if (!coords || !parcels.length) return null;
@@ -360,10 +394,11 @@ function publicPartnerPickup(db, partner, parcels) {
 
 function getPartnerPickupPinsForSession(db, session) {
   const sessionUser = findUser(db, session?.username) || session;
+  const parcelGroups = buildActivePartnerPickupParcelGroups(db);
   return db.users
     .filter((user) => user.role === "partner" && user.status === "active")
     .map((partner) => {
-      const pickup = publicPartnerPickup(db, partner, getActivePartnerPickupParcels(db, partner));
+      const pickup = publicPartnerPickup(db, partner, getGroupedActivePartnerPickupParcels(parcelGroups, partner));
       if (!pickup) return null;
       if (session.role === "admin") return pickup;
       if (session.role === "courier" && userHasZone(sessionUser, pickup.zoneId)) return pickup;
