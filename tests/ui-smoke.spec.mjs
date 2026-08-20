@@ -392,6 +392,19 @@ test("partner pickup dialog acknowledges active pickup pins", async ({ page }) =
   await expect(page.locator("#dialogModal")).toHaveClass(/active/);
   await expect(page.locator("#dialogBody")).toContainText(result.partnerName);
   await expect(page.locator("#dialogBody a[href^='tel:']")).toHaveAttribute("href", /555440002/);
+  await page.evaluate(({ partnerUsername }) => {
+    const pickup = (state.partnerPickupPins || []).find((item) => item.partnerUsername === partnerUsername);
+    state.isAdmin = false;
+    state.isPartner = false;
+    state.currentUserProfile = { ...(state.currentUserProfile || {}), role: "courier" };
+    window.openPartnerPickupDialog(pickup);
+  }, { partnerUsername: result.partnerUsername });
+  await expect(page.locator("#dialogBody")).not.toContainText("555440002");
+  await expect(page.locator("#dialogBody a[href^='tel:']")).toHaveAttribute("href", /555440002/);
+  await page.evaluate(() => {
+    state.isAdmin = true;
+    state.currentUserProfile = { ...(state.currentUserProfile || {}), role: "admin" };
+  });
   await page.getByRole("button", { name: "შეკვეთები აღებულია" }).click();
   await expect(page.locator("#dialogModal")).not.toHaveClass(/active/);
 

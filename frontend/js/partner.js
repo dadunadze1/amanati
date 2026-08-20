@@ -1038,6 +1038,7 @@ function openPartnerPickupDialog(pickup) {
   const orderIds = Array.isArray(pickup.orderIds) ? pickup.orderIds : [];
   const phone = String(pickup.phone || "").trim();
   const count = Number(pickup.count || orderIds.length || 0);
+  const callLabel = state.isAdmin ? `დარეკვა: ${phone}` : "დარეკვა";
   const body = `
     <div class="partner-pickup-dialog">
       <div class="partner-pickup-dialog-summary">
@@ -1049,7 +1050,7 @@ function openPartnerPickupDialog(pickup) {
         <div><span>ზონა</span><strong>${escapeHtml(pickup.zoneName || "ზონა არ მოიძებნა")}</strong></div>
       </div>
       <div class="partner-pickup-dialog-actions">
-        ${phone ? `<a class="button secondary" href="tel:${escapeAttr(phone)}">დარეკვა: ${escapeHtml(phone)}</a>` : `<span class="partner-tag">ნომერი არ არის</span>`}
+        ${phone ? `<a class="button secondary" href="tel:${escapeAttr(phone)}">${escapeHtml(callLabel)}</a>` : `<span class="partner-tag">ნომერი არ არის</span>`}
       </div>
       <p class="partner-pickup-lock-note">დადასტურების შემდეგ ამ ${escapeHtml(String(count))} შეკვეთას პარტნიორი ვეღარ წაშლის ან შეცვლის.</p>
       <p class="form-message" id="partnerPickupMessage" role="alert"></p>

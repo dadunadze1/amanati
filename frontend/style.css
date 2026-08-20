@@ -12682,32 +12682,6 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   transform: none !important;
 }
 
-.app-shell.is-courier-mobile .right-panel.nearest-card:not([hidden])::before,
-body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card::before {
-  content: "";
-  width: 44px;
-  height: 5px;
-  justify-self: center;
-  margin: 8px 0 2px;
-  background: #cbd5e1;
-  border-radius: 999px;
-}
-
-body:has(.app-shell.is-courier-mobile) #dialogModal.active {
-  align-items: flex-end;
-  padding: 0;
-}
-
-body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card {
-  width: 100%;
-  max-width: none;
-  max-height: min(78dvh, calc(100dvh - max(58px, env(safe-area-inset-top))));
-  border-right: 0;
-  border-bottom: 0;
-  border-left: 0;
-  border-radius: 18px 18px 0 0;
-}
-
 .app-shell.is-courier-mobile.courier-detail-open .bottom-nav,
 .app-shell.is-courier-mobile.courier-detail-open .courier-bottom-nav {
   display: none !important;
