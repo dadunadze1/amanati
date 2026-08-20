@@ -292,6 +292,28 @@ test("admin partner management uses a tall scrollable list", async ({ page }) =>
   expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
 });
 
+test("admin can create a partner from the management form", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  await page.evaluate(() => window.openPartnerManagement());
+  await page.locator("[data-action='createPartner']").click();
+
+  const username = `partner-form-${Date.now()}@test.local`;
+  await page.locator("#partnerCompanyName").fill("Form Partner");
+  await page.locator("#partnerContactPerson").fill("Form Contact");
+  await page.locator("#partnerPhone").fill("555441122");
+  await page.locator("#partnerUsername").fill(username);
+  await page.locator("#partnerPassword").fill("pass123");
+  await page.locator("#dialogActions button").first().click();
+
+  await expect.poll(async () => page.evaluate(async (partnerUsername) => {
+    const partners = await window.getPartners();
+    return partners.some((partner) => partner.username === partnerUsername);
+  }, username)).toBe(true);
+  await expect(page.locator("#dialogBody")).toContainText("Form Partner");
+});
+
 test("partner pickup dialog acknowledges active pickup pins", async ({ page }) => {
   await page.goto("/");
   await ensureAdminSession(page);

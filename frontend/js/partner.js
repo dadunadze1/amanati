@@ -474,11 +474,17 @@ async function savePartnerOrder() {
 
 
 async function openPartnerManagement() {
-  const partners = await getPartners();
   const range = getPartnerCashManagementRange();
-  const [records] = await Promise.all([
-    getAllPartnerCashRecords(),
-    loadPartnerCashAdjustments(),
+  const [partners, records] = await Promise.all([
+    getPartners(),
+    getAllPartnerCashRecords().catch((error) => {
+      console.warn("Partner cash records unavailable", error);
+      return [];
+    }),
+    loadPartnerCashAdjustments().catch((error) => {
+      console.warn("Partner cash adjustments unavailable", error);
+      return [];
+    }),
   ]);
   state.partnerCashRecords = records;
   const body = `
@@ -812,6 +818,7 @@ function renderPartnerForm(partner = {}) {
 
 async function savePartner(username) {
   const message = document.getElementById("partnerFormMessage");
+  const actionButtons = Array.from(document.querySelectorAll("#dialogActions button"));
   const pickupCoords = getPartnerPickupCoordsFromValues(
     document.getElementById("partnerPickupLat")?.value,
     document.getElementById("partnerPickupLng")?.value,
@@ -836,6 +843,10 @@ async function savePartner(username) {
     if (message) message.textContent = STRINGS.emptyFields;
     return;
   }
+  actionButtons.forEach((button) => {
+    button.disabled = true;
+  });
+  if (message) message.textContent = "ინახება...";
   try {
     if (username) {
       await api(`/api/partners/${encodeURIComponent(username)}`, { method: "PUT", body });
@@ -843,9 +854,21 @@ async function savePartner(username) {
       await api("/api/partners", { method: "POST", body });
     }
     state.partnerPickupDraft = null;
-    await openPartnerManagement();
+    try {
+      await openPartnerManagement();
+    } catch (refreshError) {
+      console.warn("Partner management refresh failed after save", refreshError);
+      if (message) message.textContent = "პარტნიორი შეინახა, მაგრამ სიის განახლება ვერ მოხერხდა.";
+      if (typeof showToast === "function") showToast("პარტნიორი შეინახა. პარტნიორების სია ხელახლა გახსენი.");
+    }
   } catch (error) {
     if (message) message.textContent = error.message || STRINGS.serverFailed;
+  } finally {
+    if (document.getElementById("partnerFormMessage") === message) {
+      actionButtons.forEach((button) => {
+        button.disabled = false;
+      });
+    }
   }
 }
 
