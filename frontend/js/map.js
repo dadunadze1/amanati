@@ -168,17 +168,310 @@ function renderParcelMarkers(pins) {
   const visiblePins = Array.isArray(pins) ? pins : [];
   const signature = getMapPinRenderSignature(visiblePins);
   if (signature && signature === state.mapPinRenderSignature) return;
-  clearParcelOverlays();
   state.mapPinRenderSignature = signature;
+  if (!state.map || !window.L) {
+    clearParcelOverlays();
+    return;
+  }
 
+  syncParcelOverlayDescriptors(getParcelOverlayDescriptors(visiblePins));
+}
+
+
+function getParcelOverlayDescriptors(visiblePins) {
+  const descriptors = [];
   getClusteredPinGroups(visiblePins).forEach((group) => {
     if (group.length > 1) {
-      renderPinCluster(group);
+      descriptors.push(getPinClusterOverlayDescriptor(group));
       return;
     }
-    renderSinglePinMarker(group[0]);
+    descriptors.push(...getSinglePinOverlayDescriptors(group[0]));
   });
-  renderPartnerPickupMarkers(state.partnerPickupPins);
+  descriptors.push(...getPartnerPickupOverlayDescriptors(state.partnerPickupPins));
+  return descriptors.filter(Boolean);
+}
+
+
+function syncParcelOverlayDescriptors(descriptors) {
+  const registry = getParcelOverlayRegistry();
+  const nextKeys = new Set();
+
+  descriptors.forEach((descriptor) => {
+    nextKeys.add(descriptor.key);
+    const current = registry.get(descriptor.key);
+    if (current && current.signature === descriptor.signature) return;
+    if (current) clearMapObject(current.overlay);
+    const overlay = descriptor.create();
+    if (!overlay) {
+      registry.delete(descriptor.key);
+      return;
+    }
+    registry.set(descriptor.key, { overlay, signature: descriptor.signature });
+  });
+
+  registry.forEach((entry, key) => {
+    if (nextKeys.has(key)) return;
+    clearMapObject(entry.overlay);
+    registry.delete(key);
+  });
+
+  state.markers = [...registry.values()].map((entry) => entry.overlay);
+}
+
+
+function getParcelOverlayRegistry() {
+  if (!(state.parcelOverlayRegistry instanceof Map)) {
+    state.parcelOverlayRegistry = new Map();
+  }
+  return state.parcelOverlayRegistry;
+}
+
+
+function getSinglePinOverlayDescriptors(pin) {
+  if (!pin) return [];
+  const descriptors = [];
+  if (pin.id && pin.id === state.selectedPinId) descriptors.push(getSelectedPinPulseOverlayDescriptor(pin));
+  descriptors.push(getSinglePinMarkerOverlayDescriptor(pin));
+  if (shouldShowPinLabel(pin)) descriptors.push(getPinLabelOverlayDescriptor(pin));
+  return descriptors;
+}
+
+
+function getSinglePinMarkerOverlayDescriptor(pin) {
+  const isSelected = pin.id && pin.id === state.selectedPinId;
+  return {
+    key: `pin:${pin.id || `${pin.lat}:${pin.lng}`}`,
+    signature: getSinglePinMarkerSignature(pin, isSelected),
+    create: () => createSinglePinMarker(pin, isSelected),
+  };
+}
+
+
+function getSelectedPinPulseOverlayDescriptor(pin) {
+  return {
+    key: `pin-pulse:${pin.id}`,
+    signature: getSelectedPinPulseSignature(pin),
+    create: () => createSelectedPinPulse(pin),
+  };
+}
+
+
+function getPinLabelOverlayDescriptor(pin) {
+  return {
+    key: `pin-label:${pin.id || `${pin.lat}:${pin.lng}`}`,
+    signature: getPinLabelSignature(pin),
+    create: () => createPinLabelOverlay(pin),
+  };
+}
+
+
+function getPinClusterOverlayDescriptor(pins) {
+  const ids = pins.map((pin) => pin.id || `${pin.lat}:${pin.lng}`).sort().join(",");
+  return {
+    key: `cluster:${ids}`,
+    signature: getPinClusterSignature(pins),
+    create: () => createPinClusterMarker(pins),
+  };
+}
+
+
+function getPartnerPickupOverlayDescriptors(pickups = []) {
+  return (Array.isArray(pickups) ? pickups : [])
+    .filter((pickup) => Number.isFinite(Number(pickup?.lat ?? pickup?.latitude)) && Number.isFinite(Number(pickup?.lng ?? pickup?.longitude)))
+    .map((pickup) => ({
+      key: `partner-pickup:${pickup.id || pickup.partnerUsername || `${pickup.lat}:${pickup.lng}`}`,
+      signature: getPartnerPickupOverlaySignature(pickup),
+      create: () => createPartnerPickupMarker(pickup),
+    }));
+}
+
+
+function getSinglePinMarkerSignature(pin, isSelected) {
+  return [
+    Number(pin?.lat ?? pin?.latitude ?? 0).toFixed(6),
+    Number(pin?.lng ?? pin?.longitude ?? 0).toFixed(6),
+    pin?.status || "",
+    pin?.locationAccuracy || "",
+    isSelected ? "selected" : "",
+    isPartnerUnconfirmedPin(pin) ? "partner-unconfirmed" : "",
+  ].join("|");
+}
+
+
+function getSelectedPinPulseSignature(pin) {
+  return [
+    Number(pin?.lat ?? pin?.latitude ?? 0).toFixed(6),
+    Number(pin?.lng ?? pin?.longitude ?? 0).toFixed(6),
+    pin?.status || "",
+    isPartnerUnconfirmedPin(pin) ? "partner-unconfirmed" : "",
+  ].join("|");
+}
+
+
+function getPinLabelSignature(pin) {
+  return [
+    Number(pin?.lat ?? pin?.latitude ?? 0).toFixed(6),
+    Number(pin?.lng ?? pin?.longitude ?? 0).toFixed(6),
+    pin?.id === state.selectedPinId ? "selected" : "",
+    pin?.status || "",
+    pin?.fullName || "",
+    pin?.address || pin?.fullAddress || "",
+    pin?.courierUsername || "",
+    getPaymentAmount(pin),
+    getMapRenderZoomBucket(),
+  ].join("|");
+}
+
+
+function getPinClusterSignature(pins) {
+  const center = getClusterCenter(pins);
+  const delivered = pins.filter((pin) => pin.status === "delivered").length;
+  const failed = pins.filter((pin) => pin.status === "failed").length;
+  return [
+    Number(center.lat).toFixed(6),
+    Number(center.lng).toFixed(6),
+    pins.length,
+    delivered,
+    failed,
+    getMapRenderZoomBucket(),
+  ].join("|");
+}
+
+
+function getPartnerPickupOverlaySignature(pickup) {
+  return [
+    Number(pickup?.lat ?? pickup?.latitude ?? 0).toFixed(6),
+    Number(pickup?.lng ?? pickup?.longitude ?? 0).toFixed(6),
+    pickup?.partnerName || "",
+    pickup?.partnerUsername || "",
+    pickup?.zoneId || "",
+    pickup?.count || "",
+    pickup?.lastOrderAt || "",
+    pickup?.lastPickupAcknowledgedAt || "",
+  ].join("|");
+}
+
+
+function createSinglePinMarker(pin, isSelected) {
+  const locationClass = `dispatch-pin-location-${pin.locationAccuracy || "confirmed"}`;
+  const partnerUnconfirmedClass = isPartnerUnconfirmedPin(pin) ? "dispatch-pin-partner-unconfirmed" : "";
+  const fillColor = getPinMarkerColor(pin);
+  const strokeColor = getPinMarkerStrokeColor(pin, isSelected);
+  const marker = createCircleMarker(pin, {
+    radius: isSelected ? 12 : 9,
+    fillColor,
+    color: strokeColor,
+    weight: isSelected ? 4 : 2,
+    fillOpacity: 0.92,
+    className: `${isSelected ? "selected-pin-marker" : "dispatch-pin-marker"} dispatch-pin-status-${pin.status || "pending"} ${locationClass} ${partnerUnconfirmedClass}`,
+  });
+
+  marker.on("click", (event) => {
+    handlePinMarkerClick(pin, event);
+  });
+  marker.on("mouseover", () => {
+    if (pin.id === state.selectedPinId) return;
+    marker.setRadius?.(11);
+    marker.setStyle?.({
+      weight: 3,
+      fillOpacity: 1,
+    });
+    marker.bringToFront?.();
+  });
+  marker.on("mouseout", () => {
+    if (pin.id === state.selectedPinId) return;
+    marker.setRadius?.(9);
+    marker.setStyle?.({
+      weight: 2,
+      fillOpacity: 0.92,
+    });
+  });
+  if (isSelected) marker.bringToFront?.();
+  return marker;
+}
+
+
+function createSelectedPinPulse(pin) {
+  const fillColor = getPinMarkerColor(pin);
+  const strokeColor = getPinMarkerStrokeColor(pin, true);
+  const partnerUnconfirmedClass = isPartnerUnconfirmedPin(pin) ? "dispatch-pin-partner-unconfirmed" : "";
+  return createCircleMarker(pin, {
+    radius: 18,
+    fillColor,
+    color: strokeColor,
+    weight: 2,
+    fillOpacity: 0.12,
+    opacity: 0.62,
+    className: `selected-pin-pulse ${partnerUnconfirmedClass}`,
+  });
+}
+
+
+function createPinLabelOverlay(pin) {
+  const payment = getPaymentAmount(pin);
+  const address = getParcelAddress(pin);
+  const courier = parcelCourierDisplayName(pin);
+  const statusLabel = getStatusLabel(pin.status);
+  return new HtmlMapLabel(pin, `
+        <div class="pin-label-card pin-label-status-${escapeAttr(pin.status)} ${pin.id === state.selectedPinId ? "is-selected" : ""}">
+          <strong class="pin-label-address">${escapeHtml(address)}</strong>
+          <span class="pin-label-name">${escapeHtml(pin.fullName || "უსახელო")}</span>
+          ${state.isAdmin ? `<span class="pin-label-courier">${escapeHtml(courier)}</span>` : ""}
+          <span class="pin-label-meta">
+            <b>${escapeHtml(statusLabel)}</b>
+            ${payment > 0 ? `<em>${escapeHtml(formatPinMoney(payment))}</em>` : ""}
+          </span>
+        </div>
+      `);
+}
+
+
+function createPinClusterMarker(pins) {
+  const center = getClusterCenter(pins);
+  const delivered = pins.filter((pin) => pin.status === "delivered").length;
+  const failed = pins.filter((pin) => pin.status === "failed").length;
+  const pending = pins.length - delivered - failed;
+  const dominantStatus = failed ? "failed" : delivered >= pending ? "delivered" : "pending";
+  const marker = L.marker(toLeafletLatLng(center), {
+    interactive: true,
+    icon: L.divIcon({
+      className: `dispatch-cluster-icon dispatch-cluster-icon--${dominantStatus}`,
+      html: `<span>${pins.length}</span><small>${pending}/${delivered}/${failed}</small>`,
+      iconSize: [48, 48],
+      iconAnchor: [24, 24],
+    }),
+  }).addTo(state.map);
+
+  marker.on("click", (event) => {
+    event.originalEvent?.stopPropagation?.();
+    stopMapClick(event);
+    if (getMapZoom() < 17) {
+      const bounds = L.latLngBounds(pins.map((pin) => toLeafletLatLng(pin)));
+      state.map.fitBounds(bounds, { padding: [44, 44], maxZoom: 17 });
+    }
+  });
+  return marker;
+}
+
+
+function createPartnerPickupMarker(pickup) {
+  const count = Math.max(1, Number(pickup.count || 0));
+  const marker = L.marker(toLeafletLatLng(pickup), {
+    interactive: true,
+    keyboard: true,
+    icon: L.divIcon({
+      className: "partner-pickup-pin-icon",
+      html: `<span title="${escapeAttr(pickup.partnerName || "პარტნიორი")}">${escapeHtml(String(count))}</span>`,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+    }),
+  }).addTo(state.map);
+
+  marker.on("click", (event) => {
+    stopMapClick(event);
+    if (typeof openPartnerPickupDialog === "function") openPartnerPickupDialog(pickup);
+  });
+  return marker;
 }
 
 
@@ -568,6 +861,7 @@ function addParcelOverlay(overlay) {
 function clearParcelOverlays() {
   (state.markers || []).forEach(clearMapObject);
   state.markers = [];
+  if (state.parcelOverlayRegistry instanceof Map) state.parcelOverlayRegistry.clear();
   state.mapPinRenderSignature = "";
 }
 

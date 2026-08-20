@@ -182,6 +182,14 @@ body.auth-loading .app-shell {
   opacity: 0.45;
 }
 
+.button.is-busy,
+.mini-button.is-busy,
+.nearest-status-button.is-busy,
+.action-item.is-busy {
+  cursor: progress;
+  opacity: 0.68;
+}
+
 .link-button {
   width: 100%;
   background: transparent;

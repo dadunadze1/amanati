@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=10";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=11";
 
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
@@ -810,11 +810,23 @@ async function handleAction(action, value, sourceElement) {
     logout,
   };
 
+  const actionButton = sourceElement?.closest?.("button");
+  setActionButtonBusy(actionButton, true);
   try {
     await handlers[action]?.();
   } catch (error) {
     showToast(error.message || STRINGS.serverFailed);
+  } finally {
+    setActionButtonBusy(actionButton, false);
   }
+}
+
+
+function setActionButtonBusy(button, busy) {
+  if (!button || button.dataset.busyLocked === "true") return;
+  button.disabled = Boolean(busy);
+  button.setAttribute("aria-busy", busy ? "true" : "false");
+  button.classList.toggle("is-busy", Boolean(busy));
 }
 
 
@@ -835,7 +847,14 @@ function showDialog(title, body, actions = []) {
     button.type = "button";
     button.className = `button ${item.variant || "secondary"}`;
     button.textContent = item.label;
-    button.addEventListener("click", item.action);
+    button.addEventListener("click", async () => {
+      setActionButtonBusy(button, true);
+      try {
+        await item.action?.();
+      } finally {
+        setActionButtonBusy(button, false);
+      }
+    });
     els.dialogActions.append(button);
   });
 
