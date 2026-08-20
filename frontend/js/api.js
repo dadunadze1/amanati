@@ -823,7 +823,7 @@ function getStaticActivePartnerPickupParcels(store, partner, acknowledgedAt = pa
   const partnerId = partner?.id || partner?.username || "";
   const username = normalizeUsername(partner?.username);
   return (Array.isArray(store.parcels) ? store.parcels : [])
-    .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && !isPickedUpStaticPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
     .filter((parcel) => (
       (partnerId && parcel.partnerId === partnerId)
       || (username && normalizeUsername(parcel.partnerUsername) === username)
@@ -841,7 +841,7 @@ function addStaticPartnerPickupParcelGroup(groups, key, parcel) {
 function buildStaticActivePartnerPickupParcelGroups(store) {
   const groups = new Map();
   (Array.isArray(store.parcels) ? store.parcels : [])
-    .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && !isPickedUpStaticPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
     .forEach((parcel) => {
       addStaticPartnerPickupParcelGroup(groups, parcel.partnerId, parcel);
       const username = normalizeUsername(parcel.partnerUsername);
@@ -938,9 +938,14 @@ function isStaticDeletedParcel(parcel) {
   return Boolean(parcel?.deletedAt);
 }
 
+function isPickedUpStaticPartnerParcel(parcel) {
+  return Boolean(isStaticPartnerParcel(parcel) && (parcel?.pickedUpAt || parcel?.partnerPickupAcknowledgedAt));
+}
+
 function canDeleteStaticParcel(parcel) {
   if (!parcel || parcel.archivedAt || isStaticDeletedParcel(parcel) || parcel.status === "delivered") return false;
   if (state.isAdmin) return true;
+  if (isPickedUpStaticPartnerParcel(parcel)) return false;
   if (!state.isPartner) return false;
   const partner = state.currentUserProfile || {};
   return Boolean(
@@ -1477,6 +1482,14 @@ async function staticApi(path, options = {}) {
     if (state.currentUserProfile?.role === "courier" && (!zoneId || !currentZoneIds.has(zoneId))) throw new Error("ეს პარტნიორი თქვენს ზონაში არ არის.");
     const activeParcels = getStaticActivePartnerPickupParcels(store, user);
     const now = new Date().toISOString();
+    activeParcels.forEach((parcel) => {
+      parcel.pickedUpAt = now;
+      parcel.pickedUpBy = state.currentUser || "";
+      parcel.pickedUpByRole = state.currentUserProfile?.role || "";
+      parcel.partnerPickupAcknowledgedAt = now;
+      parcel.partnerPickupAcknowledgedBy = state.currentUser || "";
+      parcel.updatedAt = now;
+    });
     Object.assign(user, {
       lastPickupAcknowledgedAt: now,
       lastPickupAcknowledgedBy: state.currentUser || "",

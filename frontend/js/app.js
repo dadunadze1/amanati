@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=8";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=9";
 
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
@@ -96,6 +96,7 @@ function bindEvents() {
   els.dialogModal?.addEventListener("click", handleDialogBackdropClick);
   bindCourierSheetEvents();
   bindCourierStatsSheetEvents();
+  bindCourierSwipeCloseEvents();
   bindAdminDrawerEvents();
   document.addEventListener("click", (event) => {
     const drawerToggle = event.target.closest("[data-admin-drawer-toggle]");
@@ -378,6 +379,63 @@ function bindCourierStatsSheetEvents() {
     pointerId = null;
     els.courierStatsCard.classList.remove("is-dragging");
   });
+}
+
+
+function canSwipeCloseCourierSurface(event) {
+  if (!state.currentUser || state.isAdmin || state.isPartner) return false;
+  if (!els.appShell?.classList.contains("is-courier-mobile")) return false;
+  return Boolean(event.target.closest("#dialogModal.active .modal-card, #nearestParcelCard:not([hidden])"));
+}
+
+
+function getSwipeCloseScrollable(target) {
+  return target.closest(".dialog-body, .nearest-card-body");
+}
+
+
+function closeCourierSwipeSurface(target) {
+  if (target.closest("#dialogModal.active")) {
+    closeDialog();
+    return;
+  }
+  if (target.closest("#nearestParcelCard")) hideSelectedParcelCard();
+}
+
+
+function bindCourierSwipeCloseEvents() {
+  let startY = 0;
+  let startX = 0;
+  let tracking = false;
+  let startedAtScrollableTop = true;
+  let startTarget = null;
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!canSwipeCloseCourierSurface(event)) return;
+    startY = event.clientY;
+    startX = event.clientX;
+    startTarget = event.target;
+    const scrollable = getSwipeCloseScrollable(event.target);
+    startedAtScrollableTop = !scrollable || scrollable.scrollTop <= 1;
+    tracking = true;
+  }, { passive: true });
+
+  document.addEventListener("pointerup", (event) => {
+    if (!tracking) return;
+    tracking = false;
+    const deltaY = event.clientY - startY;
+    const deltaX = Math.abs(event.clientX - startX);
+    const scrollable = getSwipeCloseScrollable(startTarget);
+    const canCloseFromScroll = startedAtScrollableTop || !scrollable || scrollable.scrollTop <= 1;
+    const pulledDown = deltaY > 72 && deltaY > deltaX * 1.35;
+    if (pulledDown && canCloseFromScroll) closeCourierSwipeSurface(startTarget);
+    startTarget = null;
+  }, { passive: true });
+
+  document.addEventListener("pointercancel", () => {
+    tracking = false;
+    startTarget = null;
+  }, { passive: true });
 }
 
 

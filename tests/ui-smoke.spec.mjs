@@ -365,7 +365,7 @@ test("partner pickup dialog acknowledges active pickup pins", async ({ page }) =
         pickupZoneId: "center",
       },
     });
-    await apiRequest("/api/parcels", {
+    const parcel = await apiRequest("/api/parcels", {
       method: "POST",
       body: {
         courierUsername,
@@ -386,19 +386,25 @@ test("partner pickup dialog acknowledges active pickup pins", async ({ page }) =
     if (!pickup) throw new Error("pickup pin missing");
     state.partnerPickupPins = pickups;
     window.openPartnerPickupDialog(pickup);
-    return { partnerUsername: partner.partner.username, partnerName: partner.partner.companyName };
+    return { partnerUsername: partner.partner.username, partnerName: partner.partner.companyName, parcelId: parcel.parcel.id };
   }, { batchId });
 
   await expect(page.locator("#dialogModal")).toHaveClass(/active/);
   await expect(page.locator("#dialogBody")).toContainText(result.partnerName);
+  await expect(page.locator("#dialogBody a[href^='tel:']")).toHaveAttribute("href", /555440002/);
   await page.getByRole("button", { name: "შეკვეთები აღებულია" }).click();
   await expect(page.locator("#dialogModal")).not.toHaveClass(/active/);
 
-  const stillVisible = await page.evaluate(async ({ partnerUsername }) => {
+  const resultAfterAck = await page.evaluate(async ({ partnerUsername, parcelId }) => {
     const pickups = await window.getPartnerPickupPins();
-    return pickups.some((item) => item.partnerUsername === partnerUsername);
-  }, { partnerUsername: result.partnerUsername });
-  expect(stillVisible).toBe(false);
+    const parcels = await window.getPins("");
+    return {
+      stillVisible: pickups.some((item) => item.partnerUsername === partnerUsername),
+      pickedUpAt: parcels.find((parcel) => parcel.id === parcelId)?.pickedUpAt || "",
+    };
+  }, { partnerUsername: result.partnerUsername, parcelId: result.parcelId });
+  expect(resultAfterAck.stillVisible).toBe(false);
+  expect(resultAfterAck.pickedUpAt).toBeTruthy();
 });
 
 test("partner pickup edit starts from Tbilisi when coordinates are empty", async ({ page }) => {

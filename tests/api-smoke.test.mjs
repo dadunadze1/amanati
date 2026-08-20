@@ -245,6 +245,17 @@ describe("local API smoke flow", () => {
     });
     assert.equal(pickupAck.acknowledgedCount, 1);
 
+    const partnerParcelsAfterPickup = await api("/api/parcels", { token: partnerToken });
+    const pickedUpParcel = partnerParcelsAfterPickup.parcels.find((parcel) => parcel.id === volumeCreated.parcel.id);
+    assert.ok(pickedUpParcel.pickedUpAt);
+
+    const pickedUpDelete = await request(`/api/parcels/${encodeURIComponent(volumeCreated.parcel.id)}`, {
+      method: "DELETE",
+      token: partnerToken,
+      body: { expectedUpdatedAt: pickedUpParcel.updatedAt },
+    });
+    assert.equal(pickedUpDelete.response.status, 403);
+
     const hiddenPickups = await api("/api/partner-pickups", { token: adminToken });
     assert.equal(hiddenPickups.pickups.some((pickup) => pickup.partnerUsername === partnerUsername), false);
 
@@ -272,7 +283,7 @@ describe("local API smoke flow", () => {
     const volumeDelivered = await api(`/api/parcels/${volumeCreated.parcel.id}/status`, {
       method: "PATCH",
       token: courierToken,
-      body: { status: "delivered", expectedUpdatedAt: volumeCreated.parcel.updatedAt },
+      body: { status: "delivered", expectedUpdatedAt: pickedUpParcel.updatedAt },
     });
     volumeParcel = volumeDelivered.parcel;
     assert.equal(volumeParcel.deliveryTotalPrice, 10);

@@ -8935,6 +8935,30 @@ button.finance-card:hover,
   font-size: 0.78rem;
 }
 
+.partner-pickup-dialog-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.partner-pickup-dialog-actions .button {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  margin-top: 0;
+  text-decoration: none;
+}
+
+.partner-pickup-lock-note {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--warning);
+  background: #fff7ed;
+  border: 1px solid rgba(146, 64, 14, 0.22);
+  border-radius: 8px;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 body:has(.app-shell.is-admin-dashboard) #dialogModal:has(.partner-management-screen) .modal-card {
   width: min(1180px, calc(100vw - 20px)) !important;
   max-width: min(1180px, calc(100vw - 20px)) !important;
@@ -12658,6 +12682,32 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   transform: none !important;
 }
 
+.app-shell.is-courier-mobile .right-panel.nearest-card:not([hidden])::before,
+body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card::before {
+  content: "";
+  width: 44px;
+  height: 5px;
+  justify-self: center;
+  margin: 8px 0 2px;
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+body:has(.app-shell.is-courier-mobile) #dialogModal.active {
+  align-items: flex-end;
+  padding: 0;
+}
+
+body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card {
+  width: 100%;
+  max-width: none;
+  max-height: min(78dvh, calc(100dvh - max(58px, env(safe-area-inset-top))));
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 18px 18px 0 0;
+}
+
 .app-shell.is-courier-mobile.courier-detail-open .bottom-nav,
 .app-shell.is-courier-mobile.courier-detail-open .courier-bottom-nav {
   display: none !important;
@@ -14084,4 +14134,30 @@ body:has(.app-shell.is-courier-mobile) #dialogModal .status-failed {
   .finance-workbench .partner-filter-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+body:has(.app-shell.is-courier-mobile) #dialogModal.active {
+  align-items: flex-end !important;
+  padding: 0 !important;
+}
+
+body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card {
+  width: 100% !important;
+  max-width: none !important;
+  max-height: min(78dvh, calc(100dvh - max(58px, env(safe-area-inset-top)))) !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+  border-radius: 18px 18px 0 0 !important;
+}
+
+body:has(.app-shell.is-courier-mobile) #dialogModal.active .modal-card::before,
+.app-shell.is-courier-mobile .right-panel.nearest-card:not([hidden])::before {
+  content: "";
+  width: 44px;
+  height: 5px;
+  justify-self: center;
+  margin: 8px 0 2px;
+  background: #cbd5e1;
+  border-radius: 999px;
 }

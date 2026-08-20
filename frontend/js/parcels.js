@@ -89,6 +89,10 @@ function isPartnerParcelRecord(parcel) {
   return Boolean(parcel?.partnerId || parcel?.partnerUsername || parcel?.createdByRole === "partner");
 }
 
+function isPickedUpPartnerParcelRecord(parcel) {
+  return Boolean(isPartnerParcelRecord(parcel) && (parcel?.pickedUpAt || parcel?.partnerPickupAcknowledgedAt));
+}
+
 
 function parcelBelongsToCurrentPartner(parcel) {
   if (!parcel || !state.isPartner) return false;
@@ -103,6 +107,7 @@ function parcelBelongsToCurrentPartner(parcel) {
 function canDeleteParcelRecord(parcel) {
   if (!parcel || parcel.archivedAt || parcel.deletedAt || parcel.status === "delivered") return false;
   if (state.isAdmin) return true;
+  if (isPickedUpPartnerParcelRecord(parcel)) return false;
   return state.isPartner && isPartnerParcelRecord(parcel) && parcelBelongsToCurrentPartner(parcel);
 }
 

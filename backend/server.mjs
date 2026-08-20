@@ -324,7 +324,7 @@ function getActivePartnerPickupParcels(db, partner, acknowledgedAt = partner?.la
   const partnerId = partnerCashIdentity(partner);
   const username = normalizeUsername(partner?.username);
   return db.parcels
-    .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && !isPickedUpPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
     .filter((parcel) => (
       (partnerId && parcel.partnerId === partnerId)
       || (username && normalizeUsername(parcel.partnerUsername) === username)
@@ -342,7 +342,7 @@ function addPartnerPickupParcelGroup(groups, key, parcel) {
 function buildActivePartnerPickupParcelGroups(db) {
   const groups = new Map();
   db.parcels
-    .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
+    .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && !isPickedUpPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
     .forEach((parcel) => {
       addPartnerPickupParcelGroup(groups, parcel.partnerId, parcel);
       const username = normalizeUsername(parcel.partnerUsername);
@@ -781,6 +781,10 @@ function isDeletedParcel(parcel) {
   return Boolean(parcel?.deletedAt);
 }
 
+function isPickedUpPartnerParcel(parcel) {
+  return Boolean(isPartnerParcel(parcel) && (parcel?.pickedUpAt || parcel?.partnerPickupAcknowledgedAt));
+}
+
 function parcelBelongsToPartner(parcel, partner) {
   if (!parcel || !partner) return false;
   const partnerId = partnerCashIdentity(partner);
@@ -794,6 +798,7 @@ function parcelBelongsToPartner(parcel, partner) {
 function canDeleteParcel(session, db, parcel) {
   if (!session || !parcel || parcel.archivedAt || isDeletedParcel(parcel) || parcel.status === "delivered") return false;
   if (session.role === "admin") return true;
+  if (isPickedUpPartnerParcel(parcel)) return false;
   if (session.role !== "partner") return false;
   const partner = findUser(db, session.username);
   return Boolean(partner && partner.role === "partner" && partner.status === "active" && isPartnerParcel(parcel) && parcelBelongsToPartner(parcel, partner));
@@ -1525,6 +1530,14 @@ async function handleApi(request, response, url) {
     if (session.role === "courier" && !userHasZone(sessionUser, zoneId)) throw httpError(403, "ეს პარტნიორი თქვენს ზონაში არ არის.");
     const activeParcels = getActivePartnerPickupParcels(db, partner);
     const now = new Date().toISOString();
+    activeParcels.forEach((parcel) => {
+      parcel.pickedUpAt = now;
+      parcel.pickedUpBy = session.username || "";
+      parcel.pickedUpByRole = session.role || "";
+      parcel.partnerPickupAcknowledgedAt = now;
+      parcel.partnerPickupAcknowledgedBy = session.username || "";
+      parcel.updatedAt = now;
+    });
     partner.lastPickupAcknowledgedAt = now;
     partner.lastPickupAcknowledgedBy = session.username || "";
     partner.lastPickupAcknowledgedByRole = session.role || "";

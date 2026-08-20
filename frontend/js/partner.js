@@ -310,7 +310,11 @@ function canAssignPartnerOrder(order) {
 
 function renderPartnerOrderActionCell(order, options = {}) {
   const actions = [];
-  if (options.allowAssign && canAssignPartnerOrder(order)) {
+  const pickedUp = typeof isPickedUpPartnerParcelRecord === "function" && isPickedUpPartnerParcelRecord(order);
+  if (pickedUp && state.isPartner) {
+    actions.push(`<span class="partner-tag">აღებულია</span>`);
+  }
+  if (!pickedUp && options.allowAssign && canAssignPartnerOrder(order)) {
     actions.push(`<button class="mini-button" type="button" data-action="assignPartnerOrder" data-value="${escapeAttr(order.id)}">${hasOrderLocation(order) ? "კურიერი" : "პინის დასმა"}</button>`);
   }
   if (canDeleteParcelRecord(order)) {
@@ -1032,6 +1036,8 @@ async function savePartnerOrderAssign(parcelId) {
 function openPartnerPickupDialog(pickup) {
   if (!pickup) return;
   const orderIds = Array.isArray(pickup.orderIds) ? pickup.orderIds : [];
+  const phone = String(pickup.phone || "").trim();
+  const count = Number(pickup.count || orderIds.length || 0);
   const body = `
     <div class="partner-pickup-dialog">
       <div class="partner-pickup-dialog-summary">
@@ -1039,9 +1045,13 @@ function openPartnerPickupDialog(pickup) {
         <span>${escapeHtml(pickup.pickupAddress || "მისამართი არ არის მითითებული")}</span>
       </div>
       <div class="partner-pickup-dialog-grid">
-        <div><span>შეკვეთები</span><strong>${escapeHtml(String(pickup.count || orderIds.length || 0))}</strong></div>
+        <div><span>შეკვეთები</span><strong>${escapeHtml(String(count))}</strong></div>
         <div><span>ზონა</span><strong>${escapeHtml(pickup.zoneName || "ზონა არ მოიძებნა")}</strong></div>
       </div>
+      <div class="partner-pickup-dialog-actions">
+        ${phone ? `<a class="button secondary" href="tel:${escapeAttr(phone)}">დარეკვა: ${escapeHtml(phone)}</a>` : `<span class="partner-tag">ნომერი არ არის</span>`}
+      </div>
+      <p class="partner-pickup-lock-note">დადასტურების შემდეგ ამ ${escapeHtml(String(count))} შეკვეთას პარტნიორი ვეღარ წაშლის ან შეცვლის.</p>
       <p class="form-message" id="partnerPickupMessage" role="alert"></p>
     </div>
   `;
