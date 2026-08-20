@@ -831,6 +831,61 @@ function renderFinanceCell(label, content, className = "") {
 }
 
 
+function renderFinanceDetailChips(items) {
+  return `
+    <div class="finance-detail-chips">
+      ${items.map(({ label, value, tone = "" }) => `
+        <span class="finance-detail-chip ${tone ? `finance-detail-chip--${escapeAttr(tone)}` : ""}">
+          <small>${escapeHtml(label)}</small>
+          <strong>${escapeHtml(value)}</strong>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
+
+function getPartnerSettlementState(summary) {
+  const returnDue = safeMoney(summary.partnerReturnDue);
+  const paymentDue = safeMoney(summary.partnerPaymentDue);
+  if (returnDue > 0) {
+    return {
+      label: "გადასარიცხი პარტნიორს",
+      shortLabel: "გადასარიცხი",
+      amount: returnDue,
+      tone: "pay",
+      status: "pending",
+    };
+  }
+  if (paymentDue > 0) {
+    return {
+      label: "მისაღებია პარტნიორისგან",
+      shortLabel: "მისაღები",
+      amount: paymentDue,
+      tone: "collect",
+      status: "pending",
+    };
+  }
+  return {
+    label: "ბალანსი დახურულია",
+    shortLabel: "დახურული",
+    amount: 0,
+    tone: "closed",
+    status: "delivered",
+  };
+}
+
+
+function renderFinanceSettlementAmount(state) {
+  return `
+    <div class="finance-settlement finance-settlement--${escapeAttr(state.tone)}">
+      <strong>${escapeHtml(formatMoney(state.amount))}</strong>
+      <small>${escapeHtml(state.label)}</small>
+    </div>
+  `;
+}
+
+
 const FINANCE_ADMIN_VIEWS = [
   { id: "summary", label: "ყველა" },
   { id: "couriers", label: "კურიერები" },
@@ -1054,63 +1109,114 @@ function renderFinanceAdminMetrics(report) {
 
 function renderFinanceAdminSummary(report) {
   const totals = report.totals;
+  const actionRows = [
+    {
+      title: "კურიერის ქეში",
+      label: "ჩასაბარებელია",
+      value: formatMoney(totals.totalCourierCash),
+      meta: `${report.couriers.length} კურიერი`,
+      action: "couriers",
+      actionLabel: "კურიერები",
+      search: ["ქეში", "კურიერი", totals.totalCourierCash],
+      tone: "collect",
+    },
+    {
+      title: "პარტნიორების ბალანსი",
+      label: totals.partnerCashDue > 0 ? "გადასარიცხია" : "მისაღებია",
+      value: formatMoney(Math.max(totals.partnerCashDue, totals.partnerPaymentDue)),
+      meta: `${report.partnerSummaries.length} პარტნიორი`,
+      action: "partners",
+      actionLabel: "პარტნიორები",
+      search: ["პარტნიორი", "ბალანსი", "მომსახურება", totals.partnerCashDue, totals.partnerPaymentDue],
+      tone: totals.partnerCashDue > 0 ? "pay" : "collect",
+    },
+    {
+      title: "დღის დახურვა",
+      label: "დასახურია",
+      value: String(report.closablePins.length),
+      meta: formatDateRangeLabel(report.range.start, report.range.end),
+      action: "close",
+      actionLabel: "დახურვა",
+      search: ["დღის დახურვა", report.closablePins.length],
+      tone: report.closablePins.length > 0 ? "pay" : "closed",
+    },
+  ];
+  const actionQueue = `
+    <section class="finance-action-queue" aria-label="სწრაფი ფინანსური მოქმედებები">
+      ${actionRows.map((item) => `
+        <article class="finance-action-card finance-action-card--${escapeAttr(item.tone)} finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(item.search))}">
+          <div>
+            <span>${escapeHtml(item.title)}</span>
+            <strong>${escapeHtml(item.value)}</strong>
+            <small>${escapeHtml(item.label)} · ${escapeHtml(item.meta)}</small>
+          </div>
+          <button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="${escapeAttr(item.action)}">${escapeHtml(item.actionLabel)}</button>
+        </article>
+      `).join("")}
+    </section>
+  `;
   const content = renderFinanceListPanel({
-    title: "ფინანსური სია",
+    title: "ფინანსური ნაკადები",
     badges: [
       `კურიერი: ${report.couriers.length}`,
       `პარტნიორი: ${report.partnerSummaries.length}`,
       `ჩაბარებული: ${totals.delivered}`,
       `პერიოდი: ${formatDateRangeLabel(report.range.start, report.range.end)}`,
     ],
-    headers: ["ნაკადი", "ჩვენ უნდა მივიღოთ", "ჩვენ უნდა გადავუხადოთ", "ქეში / COD", "მომსახურება", "მოგება", ""],
+    headers: ["ნაკადი", "ბალანსი", "დეტალები", "მოქმედება"],
     rows: [
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["ქეში", "კურიერი", totals.totalCourierCash]))}">
           ${renderFinanceCell("ნაკადი", renderFinanceTableText("კურიერები", "ქეში და ანაზღაურება"))}
-          ${renderFinanceCell("ჩვენ უნდა მივიღოთ", escapeHtml(formatMoney(totals.totalCourierCash)))}
-          ${renderFinanceCell("ჩვენ უნდა გადავუხადოთ", escapeHtml(formatMoney(totals.totalCourierPay)))}
-          ${renderFinanceCell("ქეში / COD", escapeHtml(formatMoney(totals.totalCourierCash)))}
-          ${renderFinanceCell("მომსახურება", "-")}
-          ${renderFinanceCell("მოგება", "-")}
+          ${renderFinanceCell("ბალანსი", renderFinanceSettlementAmount({ amount: totals.totalCourierCash, label: "ჩასაბარებელი ქეში", tone: "collect" }))}
+          ${renderFinanceCell("დეტალები", renderFinanceDetailChips([
+            { label: "ქეში", value: formatMoney(totals.totalCourierCash), tone: "collect" },
+            { label: "გადასახდელი", value: formatMoney(totals.totalCourierPay), tone: "pay" },
+          ]))}
           ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="couriers">გაშლა</button>`)}
         </tr>
       `,
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["პარტნიორი", "ბალანსი", "მომსახურება", totals.partnerCashDue, totals.partnerPaymentDue]))}">
           ${renderFinanceCell("ნაკადი", renderFinanceTableText("პარტნიორები", "COD მინუს მომსახურება"))}
-          ${renderFinanceCell("ჩვენ უნდა მივიღოთ", escapeHtml(formatMoney(totals.partnerPaymentDue)))}
-          ${renderFinanceCell("ჩვენ უნდა გადავუხადოთ", escapeHtml(formatMoney(totals.partnerCashDue)))}
-          ${renderFinanceCell("ქეში / COD", escapeHtml(formatMoney(totals.partnerBaseCash)))}
-          ${renderFinanceCell("მომსახურება", escapeHtml(formatMoney(totals.partnerServiceFees)))}
-          ${renderFinanceCell("მოგება", "-")}
+          ${renderFinanceCell("ბალანსი", renderFinanceSettlementAmount({
+            amount: Math.max(totals.partnerCashDue, totals.partnerPaymentDue),
+            label: totals.partnerCashDue > 0 ? "გადასარიცხი პარტნიორებს" : "მისაღებია პარტნიორებისგან",
+            tone: totals.partnerCashDue > 0 ? "pay" : "collect",
+          }))}
+          ${renderFinanceCell("დეტალები", renderFinanceDetailChips([
+            { label: "COD", value: formatMoney(totals.partnerBaseCash), tone: "collect" },
+            { label: "მომსახურება", value: formatMoney(totals.partnerServiceFees), tone: "pay" },
+            { label: "მისაღები", value: formatMoney(totals.partnerPaymentDue), tone: "collect" },
+          ]))}
           ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="partners">გაშლა</button>`)}
         </tr>
       `,
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["მოგება", "მიტანა", totals.adjustedProfit]))}">
           ${renderFinanceCell("ნაკადი", renderFinanceTableText("კომპანიის მოგება", "მომსახურება - კურიერი"))}
-          ${renderFinanceCell("ჩვენ უნდა მივიღოთ", escapeHtml(formatMoney(totals.deliveryFees)))}
-          ${renderFinanceCell("ჩვენ უნდა გადავუხადოთ", escapeHtml(formatMoney(totals.totalCourierPay)))}
-          ${renderFinanceCell("ქეში / COD", "-")}
-          ${renderFinanceCell("მომსახურება", escapeHtml(formatMoney(totals.deliveryFees)))}
-          ${renderFinanceCell("მოგება", escapeHtml(formatMoney(totals.adjustedProfit)))}
+          ${renderFinanceCell("ბალანსი", renderFinanceSettlementAmount({ amount: totals.adjustedProfit, label: "საბოლოო მოგება", tone: "closed" }))}
+          ${renderFinanceCell("დეტალები", renderFinanceDetailChips([
+            { label: "მომსახურება", value: formatMoney(totals.deliveryFees), tone: "collect" },
+            { label: "კურიერი", value: formatMoney(totals.totalCourierPay), tone: "pay" },
+          ]))}
           ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="orders">შეკვეთები</button>`)}
         </tr>
       `,
       `
         <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["დღის დახურვა", report.closablePins.length]))}">
           ${renderFinanceCell("ნაკადი", renderFinanceTableText("დახურვა", "დასრულებული შეკვეთების ისტორიაში გადატანა"))}
-          ${renderFinanceCell("ჩვენ უნდა მივიღოთ", "-")}
-          ${renderFinanceCell("ჩვენ უნდა გადავუხადოთ", "-")}
-          ${renderFinanceCell("ქეში / COD", escapeHtml(formatMoney(totals.totalCourierCash)))}
-          ${renderFinanceCell("მომსახურება", escapeHtml(formatMoney(totals.deliveryFees)))}
-          ${renderFinanceCell("მოგება", renderAppStatusBadge("delivered", String(report.closablePins.length)))}
+          ${renderFinanceCell("ბალანსი", renderAppStatusBadge("delivered", String(report.closablePins.length)))}
+          ${renderFinanceCell("დეტალები", renderFinanceDetailChips([
+            { label: "ქეში", value: formatMoney(totals.totalCourierCash), tone: "collect" },
+            { label: "მომსახურება", value: formatMoney(totals.deliveryFees), tone: "pay" },
+          ]))}
           ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="close">გაშლა</button>`)}
         </tr>
       `,
     ],
   });
-  return content;
+  return `${actionQueue}${content}`;
 }
 
 
@@ -1168,22 +1274,19 @@ function renderFinanceAdminPartners(report) {
       const codBalance = summary.outstandingCash ?? summary.baseCash;
       const serviceFeeBalance = summary.outstandingServiceFees ?? summary.serviceFees;
       const settlementAmount = Math.max(summary.partnerReturnDue, summary.partnerPaymentDue);
-      const statusLabel = summary.partnerPaymentDue > 0
-        ? "მისაღები"
-        : summary.partnerReturnDue > 0
-          ? "გადასარიცხი"
-          : "დახურული";
+      const settlementState = getPartnerSettlementState(summary);
       return `
       <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, partner.contactPerson, partner.phone, codBalance, serviceFeeBalance, summary.netBalance]))}">
         ${renderFinanceCell("პარტნიორი", renderFinanceTableText(partnerName(partner), partner.username || partner.id || ""))}
-        ${renderFinanceCell("COD", escapeHtml(formatMoney(codBalance)))}
-        ${renderFinanceCell("მომსახურება", escapeHtml(formatMoney(serviceFeeBalance)))}
-        ${renderFinanceCell("დასაბრუნებელი", escapeHtml(formatMoney(summary.partnerReturnDue)))}
-        ${renderFinanceCell("გადასახდელი", escapeHtml(formatMoney(summary.partnerPaymentDue)))}
-        ${renderFinanceCell("ნეტო", escapeHtml(formatMoney(summary.netBalance)))}
-        ${renderFinanceCell("მოლოდინში", escapeHtml(formatMoney(summary.pendingCash)))}
-        ${renderFinanceCell("კორექტირება", escapeHtml(`${getAdjustmentDirectionLabel(summary.adjustmentTotal)}: ${formatAdjustmentDisplay(summary.adjustmentTotal)}`))}
-        ${renderFinanceCell("სტატუსი", renderAppStatusBadge(settlementAmount > 0 ? "pending" : "delivered", statusLabel))}
+        ${renderFinanceCell("ბალანსი", renderFinanceSettlementAmount(settlementState), "finance-cell-balance")}
+        ${renderFinanceCell("დეტალები", renderFinanceDetailChips([
+          { label: "COD", value: formatMoney(codBalance), tone: "collect" },
+          { label: "მომსახურება", value: formatMoney(serviceFeeBalance), tone: "pay" },
+          { label: "ნეტო", value: formatMoney(summary.netBalance), tone: settlementState.tone },
+          { label: "მოლოდინში", value: formatMoney(summary.pendingCash) },
+          { label: "კორექტირება", value: `${getAdjustmentDirectionLabel(summary.adjustmentTotal)}: ${formatAdjustmentDisplay(summary.adjustmentTotal)}` },
+        ]))}
+        ${renderFinanceCell("სტატუსი", renderAppStatusBadge(settlementState.status, settlementState.shortLabel))}
         ${renderFinanceCell("გადახდა", renderDailyBalancePaidControl("partner", report.range, partner.username || partner.id, partnerName(partner), settlementAmount, summary.deliveredOrders.length, report.ledger, { partnerId: partner.id || "", partnerUsername: partner.username || "" }))}
         ${renderFinanceCell("მოქმედება", renderFinanceTableAction("adjustPartnerCash", "გასწორება", partner.username, "mini-button finance-button-primary"))}
       </tr>
@@ -1199,8 +1302,8 @@ function renderFinanceAdminPartners(report) {
       `მისაღები: ${formatMoney(partnerTotals.paymentDue)}`,
       `გადახდილია: ${formatMoney(report.totals.paidPartnerTotal)}`,
     ],
-    headers: ["პარტნიორი", "COD", "მომსახურება", "დასაბრუნებელი", "გადასახდელი", "ნეტო", "მოლოდინში", "კორექტირება", "სტატუსი", "გადახდა", ""],
-    rows: rows.length ? rows : [`<tr><td colspan="11">პარტნიორი ვერ მოიძებნა.</td></tr>`],
+    headers: ["პარტნიორი", "ბალანსი", "დეტალები", "სტატუსი", "გადახდა", ""],
+    rows: rows.length ? rows : [`<tr><td colspan="6">პარტნიორი ვერ მოიძებნა.</td></tr>`],
   });
 }
 
