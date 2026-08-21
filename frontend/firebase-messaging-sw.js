@@ -1,13 +1,13 @@
 "use strict";
 
-const APP_CACHE_NAME = "swift-delivery-app-shell-v28";
+const APP_CACHE_NAME = "swift-delivery-app-shell-v25";
 const DEFAULT_PUSH_VIBRATE = [220, 90, 220, 90, 320];
 const APP_CACHE_ASSETS = [
   "./",
   "./index.html",
   "./manifest.json?v=2",
   "./style.min.css?v=28",
-  "./style-overrides.css?v=6",
+  "./style-overrides.css?v=4",
   "./icons/favicon-v2.png",
   "./icons/icon-192-v2.png",
   "./icons/icon-512-v2.png",
@@ -16,7 +16,7 @@ const APP_CACHE_ASSETS = [
   "./js/utils.js?v=4",
   "./js/storage.js?v=3",
   "./js/notifications.js?v=22",
-  "./js/api.js?v=24",
+  "./js/api.js?v=23",
   "./js/address-directory.js?v=13",
   "./js/map.js?v=15",
   "./js/auth.js?v=11",
@@ -25,8 +25,8 @@ const APP_CACHE_ASSETS = [
   "./js/parcels.js?v=25",
   "./js/admin.js?v=13",
   "./js/courier.js?v=6",
-  "./js/partner.js?v=36",
-  "./js/finance.js?v=24",
+  "./js/partner.js?v=35",
+  "./js/finance.js?v=21",
   "./js/history.js?v=8",
   "./js/tariffs.js?v=2",
   "./js/app.js?v=37",

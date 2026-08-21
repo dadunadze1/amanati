@@ -215,21 +215,6 @@ async function getPartnerOrderRecords(partner = null) {
 }
 
 
-function mergeAllPartnerOrderRecords(...recordSets) {
-  const byId = new Map();
-  recordSets.flat().filter(Boolean).forEach((order) => {
-    const key = order.id || `${order.partnerId || ""}:${order.createdAt || ""}:${order.fullName || ""}:${order.phone || ""}`;
-    const current = byId.get(key);
-    if (!current || String(order.updatedAt || order.archivedAt || order.createdAt || "") > String(current.updatedAt || current.archivedAt || current.createdAt || "")) {
-      byId.set(key, order);
-    }
-  });
-  return [...byId.values()]
-    .filter((order) => order.partnerId || order.partnerUsername)
-    .sort((a, b) => String(getPartnerOrderDisplayDateKey(b) || "").localeCompare(String(getPartnerOrderDisplayDateKey(a) || "")));
-}
-
-
 function getPartnerCashManagementRange() {
   const today = toDateKey(new Date());
   const defaultDate = state.currentWorkdayKey || state.financeRangeStart || today;

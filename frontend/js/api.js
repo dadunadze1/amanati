@@ -784,19 +784,17 @@ function runStaticRetentionCleanup(store, cutoffDate, partnerOrderCutoffDate = c
   const beforePayAdjustments = Array.isArray(financeData.payAdjustments) ? financeData.payAdjustments.length : 0;
   const beforeDailyBalanceLedger = Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger.length : 0;
 
-  // Partner order history backs the unpaid service ledger and must outlive UI retention.
-  store.history = store.history.filter((parcel) => isStaticPartnerParcel(parcel) || !isStaticRetentionParcelExpired(parcel, cutoffDate));
+  store.history = store.history.filter((parcel) => !isStaticRetentionParcelExpired(parcel, isStaticPartnerParcel(parcel) ? partnerOrderCutoffDate : cutoffDate));
   store.parcels = store.parcels.filter((parcel) => {
     if (!parcel.archivedAt) return true;
-    return isStaticPartnerParcel(parcel) || !isStaticRetentionParcelExpired(parcel, cutoffDate);
+    return !isStaticRetentionParcelExpired(parcel, isStaticPartnerParcel(parcel) ? partnerOrderCutoffDate : cutoffDate);
   });
   pruneStaticPushEvents(store);
 
   const cashAdjustments = filterStaticRetentionAdjustments(financeData.cashAdjustments, cutoffDate);
   const partnerCashAdjustments = filterStaticRetentionAdjustments(financeData.partnerCashAdjustments, partnerOrderCutoffDate);
   const payAdjustments = filterStaticRetentionAdjustments(financeData.payAdjustments, cutoffDate);
-  const dailyBalanceLedger = (Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger : [])
-    .filter((entry) => String(entry?.id || "").startsWith("partner-payout|") || filterStaticRetentionAdjustments([entry], cutoffDate).length > 0);
+  const dailyBalanceLedger = filterStaticRetentionAdjustments(financeData.dailyBalanceLedger, cutoffDate);
   store.financeData = {
     ...financeData,
     cashAdjustments,

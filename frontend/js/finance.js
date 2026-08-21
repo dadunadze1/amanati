@@ -137,8 +137,7 @@ function calculateFinanceSummary(data = {}, filters = {}) {
   const adminProfit = sumAdminProfit(deliveredRecords);
   const cashReceived = Math.max(0, safeMoney(totalOrdersAmount + cashAdjustmentTotal));
   const finalPay = Math.max(0, safeMoney(courierBasePay + payAdjustmentTotal));
-  // COD is already represented by totalOrdersAmount; cashReceived is its outstanding view.
-  const finalTotal = safeMoney(totalOrdersAmount + deliveryFees + positiveCorrections - negativeCorrections);
+  const finalTotal = safeMoney(totalOrdersAmount + deliveryFees + cashReceived + positiveCorrections - negativeCorrections);
 
   const summary = {
     range,
@@ -467,53 +466,6 @@ function calculatePartnerCashSummaryForRange(partner, records = [], startDate, e
 
 function partnerSummaryHasOrders(summary) {
   return Array.isArray(summary?.orders) && summary.orders.length > 0;
-}
-
-
-function getPartnerPayoutIdentity(partner) {
-  return partner?.username || partner?.id || "";
-}
-
-
-function getPartnerPayoutPayments(ledger, partner) {
-  const identity = normalizeUsername(getPartnerPayoutIdentity(partner));
-  const partnerId = String(partner?.id || "");
-  return (Array.isArray(ledger) ? ledger : []).filter((entry) => (
-    entry.type === "partner"
-    && String(entry.id || "").startsWith("partner-payout|")
-    && (
-      (partnerId && entry.partnerId === partnerId)
-      || (identity && normalizeUsername(entry.partnerUsername || entry.username) === identity)
-    )
-  ));
-}
-
-
-function calculatePartnerPayoutSummary(partner, records, ledger) {
-  const orders = (Array.isArray(records) ? records : [])
-    .filter((order) => orderBelongsToPartner(order, partner));
-  const deliveredOrders = orders.filter((order) => order.status === "delivered");
-  const codTotal = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPaymentAmount(order), 0));
-  const serviceTotal = safeMoney(deliveredOrders.reduce((sum, order) => sum + getPartnerOrderServiceFee(order), 0));
-  const payments = getPartnerPayoutPayments(ledger, partner);
-  const paidTotal = safeMoney(payments.reduce((sum, entry) => sum + safeMoney(entry.amount), 0));
-  return {
-    orders,
-    deliveredOrders,
-    codTotal,
-    serviceTotal,
-    paidTotal: Math.min(serviceTotal, paidTotal),
-    due: Math.max(0, safeMoney(serviceTotal - paidTotal)),
-    payments,
-  };
-}
-
-
-function getPartnerPayoutSummaryForReport(report, partner) {
-  return report.partnerPayoutSummaries.find(({ partner: item }) => (
-    (partner.id && item.id === partner.id)
-    || (partner.username && normalizeUsername(item.username) === normalizeUsername(partner.username))
-  ))?.summary || { codTotal: 0, serviceTotal: 0, paidTotal: 0, due: 0, deliveredOrders: [], payments: [] };
 }
 
 
@@ -938,7 +890,6 @@ const FINANCE_ADMIN_VIEWS = [
   { id: "summary", label: "ყველა" },
   { id: "couriers", label: "კურიერები" },
   { id: "partners", label: "პარტნიორები" },
-  { id: "payouts", label: "ჩასარიცხი" },
   { id: "orders", label: "შეკვეთები" },
   { id: "adjustments", label: "კორექტირებები" },
   { id: "close", label: "დახურვა" },
@@ -1004,14 +955,12 @@ async function getFinanceAdminReport() {
     getPins("").catch(() => []),
     getHistory("").catch(() => []),
     typeof getPartners === "function" ? getPartners().catch(() => []) : [],
+    typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
   ]);
-  if (typeof loadPartnerCashAdjustments === "function") await loadPartnerCashAdjustments().catch(() => []);
   const ledger = await loadDailyBalanceLedger().catch(() => readDailyBalanceLedger());
   const couriers = users.filter((user) => user.role === "courier");
   const records = [...pins, ...history];
-  const partnerRecords = typeof mergeAllPartnerOrderRecords === "function"
-    ? mergeAllPartnerOrderRecords(pins, history)
-    : (typeof mergePartnerOrderRecords === "function" ? mergePartnerOrderRecords(pins, history) : records);
+  const partnerRecords = typeof mergePartnerOrderRecords === "function" ? mergePartnerOrderRecords(pins, history) : records;
   const daySummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
   const courierSummaries = couriers.map((courier) => ({
     courier,
@@ -1021,10 +970,6 @@ async function getFinanceAdminReport() {
     partner,
     summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end),
   })).filter(({ summary }) => partnerSummaryHasOrders(summary));
-  const partnerPayoutSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
-    partner,
-    summary: calculatePartnerPayoutSummary(partner, partnerRecords, ledger),
-  })).filter(({ summary }) => summary.codTotal > 0 || summary.serviceTotal > 0 || summary.paidTotal > 0);
   const totalCourierCash = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.cashReceived, 0));
   const totalCourierPay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
   const courierBasePay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.basePay, 0));
@@ -1037,8 +982,6 @@ async function getFinanceAdminReport() {
   const partnerPendingCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.pendingCash, 0));
   const partnerBaseCash = safeMoney(partnerSummaries.reduce((sum, item) => sum + (item.summary.outstandingCash ?? item.summary.baseCash), 0));
   const partnerAdjustments = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
-  const partnerPayoutDue = safeMoney(partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.due, 0));
-  const partnerPayoutPaid = safeMoney(partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.paidTotal, 0));
   const paidCourierTotal = safeMoney(courierSummaries.reduce((sum, item) => (
     sum + (findDailyBalanceEntry(ledger, "courier", range, item.courier.username)?.amount || 0)
   ), 0));
@@ -1067,7 +1010,6 @@ async function getFinanceAdminReport() {
     daySummary,
     courierSummaries,
     partnerSummaries,
-    partnerPayoutSummaries,
     deliveredOrders,
     closablePins,
     snapshots,
@@ -1085,8 +1027,6 @@ async function getFinanceAdminReport() {
       partnerPendingCash,
       partnerBaseCash,
       partnerAdjustments,
-      partnerPayoutDue,
-      partnerPayoutPaid,
       paidCourierTotal,
       paidPartnerTotal,
       adjustedProfit,
@@ -1168,10 +1108,14 @@ function renderFinanceAdminFilters(report, activeView) {
 
 function renderFinanceAdminMetrics(report) {
   const totals = report.totals;
+  const partnerSettlement = Math.max(totals.partnerCashDue, totals.partnerPaymentDue);
+  const partnerSettlementLabel = totals.partnerCashDue > 0
+    ? "პარტნიორებს გადასარიცხი"
+    : "პარტნიორებიდან მისაღები";
   return `
     ${renderFinanceSummaryItem({ className: "finance-summary-item--hero finance-summary-item--final", icon: "₾", label: "მოგება", value: formatMoney(totals.adjustedProfit) })}
     ${renderFinanceSummaryItem({ className: "finance-summary-item--cash finance-summary-item--alert", icon: "₾", label: "კურიერის ქეში", value: formatMoney(totals.totalCourierCash) })}
-    ${renderFinanceSummaryItem({ className: "finance-summary-item--base", icon: "₾", label: "პარტნიორების გადასახდელი", value: formatMoney(totals.partnerPayoutDue) })}
+    ${renderFinanceSummaryItem({ className: "finance-summary-item--base", icon: "₾", label: partnerSettlementLabel, value: formatMoney(partnerSettlement) })}
     ${renderFinanceSummaryItem({ className: "finance-summary-item--compact", icon: "◷", label: "პერიოდი", value: formatDateRangeLabel(report.range.start, report.range.end) })}
   `;
 }
@@ -1191,14 +1135,14 @@ function renderFinanceAdminSummary(report) {
       tone: "collect",
     },
     {
-      title: "პარტნიორების გადასახდელი",
-      label: "გადასარიცხია",
-      value: formatMoney(totals.partnerPayoutDue),
-      meta: `${report.partnerPayoutSummaries.length} პარტნიორი`,
+      title: "პარტნიორების ბალანსი",
+      label: totals.partnerCashDue > 0 ? "გადასარიცხია" : "მისაღებია",
+      value: formatMoney(Math.max(totals.partnerCashDue, totals.partnerPaymentDue)),
+      meta: `${report.partnerSummaries.length} პარტნიორი`,
       action: "partners",
       actionLabel: "პარტნიორები",
-      search: ["პარტნიორი", "გადასახდელი", totals.partnerPayoutDue],
-      tone: totals.partnerPayoutDue > 0 ? "pay" : "closed",
+      search: ["პარტნიორი", "ბალანსი", "მომსახურება", totals.partnerCashDue, totals.partnerPaymentDue],
+      tone: totals.partnerCashDue > 0 ? "pay" : "collect",
     },
     {
       title: "დღის დახურვა",
@@ -1247,12 +1191,17 @@ function renderFinanceAdminSummary(report) {
         </tr>
       `,
       `
-        <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["პარტნიორი", "გადასახდელი", totals.partnerPayoutDue]))}">
-          ${renderFinanceCell("ნაკადი", renderFinanceTableText("პარტნიორები", "მომსახურების გადასახდელი"))}
-          ${renderFinanceCell("ბალანსი", renderFinanceSettlementAmount({ amount: totals.partnerPayoutDue, label: "გადასარიცხი", tone: totals.partnerPayoutDue > 0 ? "pay" : "closed" }))}
+        <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["პარტნიორი", "ბალანსი", "მომსახურება", totals.partnerCashDue, totals.partnerPaymentDue]))}">
+          ${renderFinanceCell("ნაკადი", renderFinanceTableText("პარტნიორები", "COD მინუს მომსახურება"))}
+          ${renderFinanceCell("ბალანსი", renderFinanceSettlementAmount({
+            amount: Math.max(totals.partnerCashDue, totals.partnerPaymentDue),
+            label: totals.partnerCashDue > 0 ? "გადასარიცხი პარტნიორებს" : "მისაღებია პარტნიორებისგან",
+            tone: totals.partnerCashDue > 0 ? "pay" : "collect",
+          }))}
           ${renderFinanceCell("დეტალები", renderFinanceDetailChips([
-            { label: "COD", value: formatMoney(report.partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.codTotal, 0)), tone: "collect" },
-            { label: "გადასახდელი", value: formatMoney(totals.partnerPayoutDue), tone: "pay" },
+            { label: "COD", value: formatMoney(totals.partnerBaseCash), tone: "collect" },
+            { label: "მომსახურება", value: formatMoney(totals.partnerServiceFees), tone: "pay" },
+            { label: "მისაღები", value: formatMoney(totals.partnerPaymentDue), tone: "collect" },
           ]))}
           ${renderFinanceCell("მოქმედება", `<button class="mini-button finance-button-primary" type="button" data-finance-dashboard-tab="partners">გაშლა</button>`)}
         </tr>
@@ -1323,25 +1272,37 @@ function renderFinanceAdminCouriers(report) {
 
 
 function renderFinanceAdminPartners(report) {
-  const partnerTotals = report.partnerPayoutSummaries.reduce((total, { summary }) => total + summary.due, 0);
-  const rows = report.partnerPayoutSummaries
+  const partnerTotals = report.partnerSummaries.reduce((totals, { summary }) => {
+    totals.cod += Number(summary.outstandingCash ?? summary.baseCash) || 0;
+    totals.service += Number(summary.outstandingServiceFees ?? summary.serviceFees) || 0;
+    totals.returnDue += Number(summary.partnerReturnDue) || 0;
+    totals.paymentDue += Number(summary.partnerPaymentDue) || 0;
+    return totals;
+  }, { cod: 0, service: 0, returnDue: 0, paymentDue: 0 });
+  const rows = report.partnerSummaries
     .filter(({ partner, summary }) => financeMatchesSearch([
       partnerName(partner), partner.username, partner.contactPerson, partner.phone,
-      summary.codTotal, summary.due,
+      summary.outstandingCash, summary.outstandingServiceFees, summary.partnerReturnDue, summary.partnerPaymentDue, summary.netBalance,
     ]))
-    .sort((a, b) => b.summary.due - a.summary.due)
     .map(({ partner, summary }) => {
-      const status = summary.due > 0 ? "pending" : "delivered";
-      const statusLabel = summary.due > 0 ? "გადასარიცხია" : "გადახდილია";
+      const codBalance = summary.outstandingCash ?? summary.baseCash;
+      const serviceFeeBalance = summary.outstandingServiceFees ?? summary.serviceFees;
+      const settlementAmount = Math.max(summary.partnerReturnDue, summary.partnerPaymentDue);
+      const settlementState = getPartnerSettlementState(summary);
       return `
-      <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, summary.codTotal, summary.due]))}">
+      <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, partner.contactPerson, partner.phone, codBalance, serviceFeeBalance, summary.netBalance]))}">
         ${renderFinanceCell("პარტნიორი", renderFinanceTableText(partnerName(partner), partner.username || partner.id || ""))}
-        ${renderFinanceCell("კურიერის მიერ შეგროვებული COD", escapeHtml(formatMoney(summary.codTotal)))}
-        ${renderFinanceCell("ჩასარიცხი", `<strong class="finance-payout-due">${escapeHtml(formatMoney(summary.due))}</strong>`)}
-        ${renderFinanceCell("სტატუსი", renderAppStatusBadge(status, statusLabel))}
-        ${renderFinanceCell("მოქმედება", summary.due > 0
-          ? `<button class="mini-button finance-button-primary" type="button" data-partner-payout-pay data-partner-id="${escapeAttr(partner.id || "")}" data-partner-username="${escapeAttr(partner.username || "")}" data-label="${escapeAttr(partnerName(partner))}" data-due="${escapeAttr(summary.due)}">გადახდის მონიშვნა</button>`
-          : `<button class="mini-button" type="button" data-partner-payout-history data-partner-id="${escapeAttr(partner.id || "")}" data-partner-username="${escapeAttr(partner.username || "")}">ისტორია</button>`)}
+        ${renderFinanceCell("ბალანსი", renderFinanceSettlementAmount(settlementState), "finance-cell-balance")}
+        ${renderFinanceCell("დეტალები", renderFinanceDetailChips([
+          { label: "COD", value: formatMoney(codBalance), tone: "collect" },
+          { label: "მომსახურება", value: formatMoney(serviceFeeBalance), tone: "pay" },
+          { label: "ნეტო", value: formatMoney(summary.netBalance), tone: settlementState.tone },
+          { label: "მოლოდინში", value: formatMoney(summary.pendingCash) },
+          { label: "კორექტირება", value: `${getAdjustmentDirectionLabel(summary.adjustmentTotal)}: ${formatAdjustmentDisplay(summary.adjustmentTotal)}` },
+        ]))}
+        ${renderFinanceCell("სტატუსი", renderAppStatusBadge(settlementState.status, settlementState.shortLabel))}
+        ${renderFinanceCell("გადახდა", renderDailyBalancePaidControl("partner", report.range, partner.username || partner.id, partnerName(partner), settlementAmount, summary.deliveredOrders.length, report.ledger, { partnerId: partner.id || "", partnerUsername: partner.username || "" }))}
+        ${renderFinanceCell("მოქმედება", renderFinanceTableAction("adjustPartnerCash", "გასწორება", partner.username, "mini-button finance-button-primary"))}
       </tr>
     `;
     });
@@ -1349,10 +1310,14 @@ function renderFinanceAdminPartners(report) {
   return renderFinanceListPanel({
     title: "პარტნიორები",
     badges: [
-      `ჩასარიცხი: ${formatMoney(partnerTotals)}`,
+      `COD: ${formatMoney(partnerTotals.cod)}`,
+      `მომსახურება: ${formatMoney(partnerTotals.service)}`,
+      `გადასარიცხი: ${formatMoney(partnerTotals.returnDue)}`,
+      `მისაღები: ${formatMoney(partnerTotals.paymentDue)}`,
+      `გადახდილია: ${formatMoney(report.totals.paidPartnerTotal)}`,
     ],
-    headers: ["პარტნიორი", "კურიერის მიერ შეგროვებული COD", "ჩასარიცხი", "სტატუსი", "მოქმედება"],
-    rows: rows.length ? rows : [`<tr><td colspan="5">პარტნიორი ვერ მოიძებნა.</td></tr>`],
+    headers: ["პარტნიორი", "ბალანსი", "დეტალები", "სტატუსი", "გადახდა", ""],
+    rows: rows.length ? rows : [`<tr><td colspan="6">პარტნიორი ვერ მოიძებნა.</td></tr>`],
   });
 }
 
@@ -1392,43 +1357,6 @@ function renderFinanceAdminOrders(report) {
     ],
     headers: ["მიმღები", "პარტნიორი", "კურიერი", "COD", "მომსახურება", "პარტნიორის ნეტო", "კურიერი", "მოგება", "თარიღი"],
     rows: rows.length ? rows : [`<tr><td colspan="9">ამ პერიოდში ჩაბარებული შეკვეთა არ არის.</td></tr>`],
-  });
-}
-
-
-function renderFinanceAdminPayouts(report) {
-  const dueTotal = safeMoney(report.partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.due, 0));
-  const rows = report.partnerPayoutSummaries
-    .filter(({ partner, summary }) => financeMatchesSearch([
-      partnerName(partner), partner.username, partner.contactPerson, partner.phone,
-      summary.codTotal, summary.due,
-    ]))
-    .sort((a, b) => b.summary.due - a.summary.due)
-    .map(({ partner, summary }) => {
-      const lastPayment = summary.payments[summary.payments.length - 1];
-      const status = summary.due > 0 ? "pending" : "delivered";
-      const statusLabel = summary.due > 0 ? "გადასარიცხია" : "გადახდილია";
-      return `
-        <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, summary.codTotal, summary.due]))}">
-          ${renderFinanceCell("კომპანია", renderFinanceTableText(partnerName(partner), partner.phone || partner.username || ""))}
-          ${renderFinanceCell("კურიერის მიერ შეგროვებული COD", `<strong>${escapeHtml(formatMoney(summary.codTotal))}</strong>`)}
-          ${renderFinanceCell("ჩასარიცხი", `<strong class="finance-payout-due">${escapeHtml(formatMoney(summary.due))}</strong>`)}
-          ${renderFinanceCell("სტატუსი", renderAppStatusBadge(status, statusLabel))}
-          ${renderFinanceCell("მოქმედება", summary.due > 0
-            ? `<button class="mini-button finance-button-primary" type="button" data-partner-payout-pay data-partner-id="${escapeAttr(partner.id || "")}" data-partner-username="${escapeAttr(partner.username || "")}" data-label="${escapeAttr(partnerName(partner))}" data-due="${escapeAttr(summary.due)}">გადახდის მონიშვნა</button>`
-            : `<button class="mini-button" type="button" data-partner-payout-history data-partner-id="${escapeAttr(partner.id || "")}" data-partner-username="${escapeAttr(partner.username || "")}">ისტორია</button>`)}
-        </tr>
-      `;
-    });
-
-  return renderFinanceListPanel({
-    title: "ჩასარიცხი კომპანიები",
-    badges: [
-      `ჩასარიცხი: ${formatMoney(dueTotal)}`,
-      `COD: ${formatMoney(report.partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.codTotal, 0))}`,
-    ],
-    headers: ["კომპანია", "კურიერის მიერ შეგროვებული COD", "ჩასარიცხი", "სტატუსი", "მოქმედება"],
-    rows: rows.length ? rows : [`<tr><td colspan="5">ჩასარიცხი თანხა არ არის.</td></tr>`],
   });
 }
 
@@ -1505,7 +1433,6 @@ function renderFinanceAdminClose(report) {
 function renderFinanceAdminContent(report, activeView) {
   if (activeView === "couriers") return renderFinanceAdminCouriers(report);
   if (activeView === "partners") return renderFinanceAdminPartners(report);
-  if (activeView === "payouts") return renderFinanceAdminPayouts(report);
   if (activeView === "orders") return renderFinanceAdminOrders(report);
   if (activeView === "adjustments") return renderFinanceAdminAdjustments(report);
   if (activeView === "close") return renderFinanceAdminClose(report);
@@ -1562,89 +1489,6 @@ function bindFinanceDashboardContentEvents(report) {
       delivered: report.totals.delivered,
     },
   });
-  bindPartnerPayoutEvents(report);
-}
-
-
-function bindPartnerPayoutEvents(report) {
-  document.querySelectorAll("[data-partner-payout-pay]").forEach((button) => {
-    button.addEventListener("click", () => openPartnerPayoutPaymentDialog({
-      partnerId: button.dataset.partnerId || "",
-      partnerUsername: button.dataset.partnerUsername || "",
-      label: button.dataset.label || button.dataset.partnerUsername || "პარტნიორი",
-      due: safeMoney(button.dataset.due),
-    }));
-  });
-  document.querySelectorAll("[data-partner-payout-history]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const item = report.partnerPayoutSummaries.find(({ partner }) => (
-        (button.dataset.partnerId && partner.id === button.dataset.partnerId)
-        || (button.dataset.partnerUsername && normalizeUsername(partner.username) === normalizeUsername(button.dataset.partnerUsername))
-      ));
-      if (item) openPartnerPayoutHistoryDialog(item.partner, item.summary);
-    });
-  });
-}
-
-
-function openPartnerPayoutPaymentDialog({ partnerId, partnerUsername, label, due }) {
-  showDialog("ჩარიცხვის მონიშვნა", `
-    <div class="finance-payout-dialog">
-      <strong>${escapeHtml(label)}</strong>
-      <p>დარჩენილი თანხა: <b>${escapeHtml(formatMoney(due))}</b></p>
-      <label class="finance-payout-amount-field">
-        <span>ჩარიცხული თანხა</span>
-        <input id="partnerPayoutAmount" class="finance-input" type="number" min="0.01" max="${escapeAttr(due)}" step="0.01" value="${escapeAttr(due)}">
-      </label>
-      <label class="finance-payout-amount-field">
-        <span>კომენტარი (არასავალდებულო)</span>
-        <input id="partnerPayoutNote" class="finance-input" type="text" maxlength="120" placeholder="მაგ. საბანკო ჩარიცხვა">
-      </label>
-    </div>
-  `, [
-    { label: "დადასტურება", variant: "primary", action: async () => {
-      const amount = safeMoney(document.getElementById("partnerPayoutAmount")?.value);
-      if (amount <= 0 || amount > due) {
-        showToast("თანხა უნდა იყოს დარჩენილ თანხაზე 0-ზე მეტი და ნაკლები ან ტოლი");
-        return;
-      }
-      await saveDailyBalanceEntry({
-        id: `partner-payout|${partnerId || partnerUsername}|${Date.now()}`,
-        type: "partner",
-        status: "paid",
-        dateKey: toDateKey(new Date()),
-        rangeStart: "2000-01-01",
-        rangeEnd: toDateKey(new Date()),
-        partnerId,
-        partnerUsername,
-        label,
-        amount,
-        note: document.getElementById("partnerPayoutNote")?.value.trim() || "პარტნიორის მომსახურების ჩარიცხვა",
-      });
-      closeDialog();
-      showToast(`${label}: ჩარიცხვა შენახულია`);
-      await openFinanceDashboard({ preserveSearch: true });
-    } },
-    { label: "გაუქმება", variant: "secondary", action: closeDialog },
-  ]);
-  els.dialogModal.classList.add("finance-payout-dialog-modal");
-}
-
-
-function openPartnerPayoutHistoryDialog(partner, summary) {
-  const rows = summary.payments.slice().reverse().map((entry) => `
-    <div class="finance-payout-history-row">
-      <strong>${escapeHtml(formatMoney(entry.amount))}</strong>
-      <span>${escapeHtml(formatOptionalDateTime(entry.updatedAt || entry.createdAt))}</span>
-      <small>${escapeHtml(entry.note || "ჩარიცხვა")}</small>
-    </div>
-  `).join("");
-  showDialog(`${partnerName(partner)} — გადახდები`, `
-    <div class="finance-payout-history">
-      <div class="finance-payout-history-total"><span>სულ ჩარიცხული</span><strong>${escapeHtml(formatMoney(summary.paidTotal))}</strong></div>
-      ${rows || "<p class=\"history-empty\">გადახდის ისტორია არ არის.</p>"}
-    </div>
-  `, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
 }
 
 
@@ -1683,13 +1527,16 @@ function bindFinanceDashboardEvents(report) {
       exportAdminDailyBalanceCsv({
         range: report.range,
         courierSummaries: report.courierSummaries,
-        partnerPayoutSummaries: report.partnerPayoutSummaries,
+        partnerSummaries: report.partnerSummaries,
         deliveredOrders: report.deliveredOrders,
         totals: {
           totalCourierPay: report.totals.totalCourierPay,
-          totalPartnerPayoutDue: report.totals.partnerPayoutDue,
-          partnerPayoutServiceTotal: report.partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.serviceTotal, 0),
-          partnerPayoutPaid: report.totals.partnerPayoutPaid,
+          partnerBaseCash: report.totals.partnerBaseCash,
+          partnerServiceFees: report.totals.partnerServiceFees,
+          totalPartnerCash: report.totals.partnerCashDue,
+          partnerPaymentDue: report.totals.partnerPaymentDue,
+          partnerNetBalance: report.totals.partnerNetBalance,
+          partnerAdjustments: report.totals.partnerAdjustments,
           deliveryFees: report.totals.deliveryFees,
           adjustedProfit: report.totals.adjustedProfit,
           delivered: report.totals.delivered,
@@ -1757,9 +1604,7 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
   ]);
   const activeRecords = (Array.isArray(records) ? records : []).filter((parcel) => !parcel.archivedAt);
   const archivedRecords = (Array.isArray(records) ? records : []).filter((parcel) => parcel.archivedAt);
-  const partnerRecords = typeof mergeAllPartnerOrderRecords === "function"
-    ? mergeAllPartnerOrderRecords(activeRecords, archivedRecords)
-    : (typeof mergePartnerOrderRecords === "function" ? mergePartnerOrderRecords(activeRecords, archivedRecords) : records);
+  const partnerRecords = typeof mergePartnerOrderRecords === "function" ? mergePartnerOrderRecords(activeRecords, archivedRecords) : records;
 
   const couriers = users.filter((user) => user.role === "courier");
   const courierSummaries = couriers.map((courier) => ({
@@ -1770,10 +1615,6 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
     partner,
     summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end),
   })).filter(({ summary }) => partnerSummaryHasOrders(summary));
-  const partnerPayoutSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
-    partner,
-    summary: calculatePartnerPayoutSummary(partner, partnerRecords, ledger),
-  })).filter(({ summary }) => summary.serviceTotal > 0 || summary.paidTotal > 0);
   const daySummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
   const deliveredOrders = daySummary.deliveredRecords || [];
   const totalCourierPay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
@@ -1785,7 +1626,6 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
   const partnerPaymentDue = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.partnerPaymentDue, 0));
   const partnerNetBalance = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.netBalance, 0));
   const totalPartnerSettlement = safeMoney(totalPartnerCash + partnerPaymentDue);
-  const totalPartnerPayoutDue = safeMoney(partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.due, 0));
   const partnerAdjustments = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.adjustmentTotal, 0));
   const adjustedProfit = safeMoney(daySummary.deliveryFees - totalCourierPay);
   const paidCourierTotal = safeMoney(courierSummaries.reduce((sum, item) => (
@@ -1829,8 +1669,14 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--hero finance-summary-item--cash finance-summary-item--alert",
           icon: "₾",
-          label: "პარტნიორების გადასახდელი",
-          value: formatMoney(totalPartnerPayoutDue),
+          label: "პარტნიორებისთვის გადასარიცხი",
+          value: formatMoney(totalPartnerCash),
+        })}
+        ${renderFinanceSummaryItem({
+          className: "finance-summary-item--compact",
+          icon: "₾",
+          label: "პარტნიორის მომსახურება",
+          value: formatMoney(partnerServiceFees),
         })}
         ${renderFinanceSummaryItem({
           className: "finance-summary-item--hero finance-summary-item--delivered",
@@ -1869,16 +1715,17 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
     </article>
   `).join("");
 
-  const partnerRows = partnerPayoutSummaries.map(({ partner, summary: partnerSummary }) => `
-    <article class="finance-card finance-mini-card finance-static-card finance-card--partner ${partnerSummary.due > 0 ? "finance-card--alert" : ""}">
+  const partnerRows = partnerSummaries.map(({ partner, summary: partnerSummary }) => `
+    <article class="finance-card finance-mini-card finance-static-card finance-card--partner ${Math.max(partnerSummary.partnerReturnDue, partnerSummary.partnerPaymentDue) > 0 ? "finance-card--alert" : ""}">
       <span class="finance-summary-icon finance-summary-icon--cash" aria-hidden="true">₾</span>
       <span>${escapeHtml(partnerName(partner))}</span>
-      <small>კურიერის მიერ შეგროვებული COD: ${escapeHtml(formatMoney(partnerSummary.codTotal))}</small>
-      <strong>${escapeHtml(formatMoney(partnerSummary.due))}</strong>
-      <small>ჩასარიცხი</small>
-      ${partnerSummary.due > 0
-        ? `<button class="mini-button finance-button-primary" type="button" data-partner-payout-pay data-partner-id="${escapeAttr(partner.id || "")}" data-partner-username="${escapeAttr(partner.username || "")}" data-label="${escapeAttr(partnerName(partner))}" data-due="${escapeAttr(partnerSummary.due)}">გადახდის მონიშვნა</button>`
-        : `<button class="mini-button" type="button" data-partner-payout-history data-partner-id="${escapeAttr(partner.id || "")}" data-partner-username="${escapeAttr(partner.username || "")}">ისტორია</button>`}
+      <small>ჩაბარებული: ${escapeHtml(String(partnerSummary.deliveredOrders.length))}</small>
+      <strong>${escapeHtml(formatMoney(partnerSummary.netBalance))}</strong>
+      <small>COD: ${escapeHtml(formatMoney(partnerSummary.outstandingCash ?? partnerSummary.baseCash))} · მომსახურება: ${escapeHtml(formatMoney(partnerSummary.outstandingServiceFees ?? partnerSummary.serviceFees))}</small>
+      <small>დასაბრუნებელი: ${escapeHtml(formatMoney(partnerSummary.partnerReturnDue))} · გადასახდელი: ${escapeHtml(formatMoney(partnerSummary.partnerPaymentDue))}</small>
+      <small>${escapeHtml(getAdjustmentDirectionLabel(partnerSummary.adjustmentTotal))}: ${escapeHtml(formatAdjustmentDisplay(partnerSummary.adjustmentTotal))}</small>
+      <small>მოლოდინში: ${escapeHtml(formatMoney(partnerSummary.pendingCash))}</small>
+      ${renderDailyBalancePaidControl("partner", range, partner.username || partner.id, partnerName(partner), Math.max(partnerSummary.partnerReturnDue, partnerSummary.partnerPaymentDue), partnerSummary.deliveredOrders.length, ledger, { partnerId: partner.id || "", partnerUsername: partner.username || "" })}
     </article>
   `).join("");
 
@@ -1912,8 +1759,8 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
     })}
     ${renderFinanceCollapsibleSection({
       title: "ობიექტები / პარტნიორები",
-      subtitle: "პარტნიორების დაგროვილი მომსახურების გადასახდელი",
-      badge: formatMoney(totalPartnerPayoutDue),
+      subtitle: `COD ${formatMoney(partnerBaseCash)}, მომსახურება ${formatMoney(partnerServiceFees)}, მისაღები ${formatMoney(partnerPaymentDue)}`,
+      badge: `${formatMoney(paidPartnerTotal)} / ${formatMoney(totalPartnerSettlement)}`,
       className: "finance-collapsible--partners",
       content: `<section class="finance-section finance-card-list finance-card-list--dashboard">${partnerRows || "<div class=\"history-empty history-empty-card\">პარტნიორი ჯერ არ არის დამატებული</div>"}</section>`,
     })}
@@ -1956,13 +1803,9 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
     range,
     courierSummaries,
     partnerSummaries,
-    partnerPayoutSummaries,
     deliveredOrders,
     totals: {
       totalCourierPay,
-      totalPartnerPayoutDue,
-      partnerPayoutServiceTotal: safeMoney(partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.serviceTotal, 0)),
-      partnerPayoutPaid: safeMoney(partnerPayoutSummaries.reduce((sum, item) => sum + item.summary.paidTotal, 0)),
       totalPartnerCash,
       partnerBaseCash,
       partnerServiceFees,
@@ -1975,7 +1818,6 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
       delivered: daySummary.delivered,
     },
   });
-  bindPartnerPayoutEvents({ partnerPayoutSummaries });
 }
 
 
@@ -2087,12 +1929,12 @@ async function saveAdminDailyBalanceSnapshot(report) {
 
 
 function exportAdminDailyBalanceCsv(report) {
-  const { range, courierSummaries, partnerPayoutSummaries, deliveredOrders, totals } = report;
+  const { range, courierSummaries, partnerSummaries, deliveredOrders, totals } = report;
   const rows = [
-    ["section", "name", "orders", "service_total", "paid_total", "due", "courier_pay", "profit", "adjustment", "period"],
-    ["summary", "კურიერებზე გადასახდელი", totals.delivered, "", "", "", totals.totalCourierPay, "", "", formatDateRangeLabel(range.start, range.end)],
-    ["summary", "პარტნიორების გადასახდელი", "", totals.partnerPayoutServiceTotal || 0, totals.partnerPayoutPaid || 0, totals.totalPartnerPayoutDue || 0, "", "", "", formatDateRangeLabel(range.start, range.end)],
-    ["summary", "კომპანიის მოგება", totals.delivered, "", "", "", totals.totalCourierPay, totals.adjustedProfit, "", formatDateRangeLabel(range.start, range.end)],
+    ["section", "name", "delivered", "cod", "service_fee", "partner_return_due", "partner_payment_due", "partner_net", "courier_pay", "profit", "adjustment", "period"],
+    ["summary", "კურიერებზე გადასახდელი", totals.delivered, "", "", "", "", "", totals.totalCourierPay, "", "", formatDateRangeLabel(range.start, range.end)],
+    ["summary", "პარტნიორების ბალანსი", "", totals.partnerBaseCash || 0, totals.partnerServiceFees || 0, totals.totalPartnerCash || 0, totals.partnerPaymentDue || 0, totals.partnerNetBalance || 0, "", totals.adjustedProfit, totals.partnerAdjustments || 0, formatDateRangeLabel(range.start, range.end)],
+    ["summary", "კომპანიის მოგება", totals.delivered, "", totals.deliveryFees || 0, "", "", "", totals.totalCourierPay, totals.adjustedProfit, "", formatDateRangeLabel(range.start, range.end)],
     ...courierSummaries.map(({ courier, summary }) => [
       "courier",
       userDisplayName(courier),
@@ -2100,32 +1942,39 @@ function exportAdminDailyBalanceCsv(report) {
       "",
       "",
       "",
+      "",
+      "",
       summary.finalPay,
+      "",
+      summary.adjustmentTotal,
+      formatDateRangeLabel(range.start, range.end),
+    ]),
+    ...partnerSummaries.map(({ partner, summary }) => [
+      "partner",
+      partnerName(partner),
+      summary.deliveredOrders.length,
+      summary.outstandingCash ?? summary.baseCash,
+      summary.outstandingServiceFees ?? summary.serviceFees,
+      summary.partnerReturnDue,
+      summary.partnerPaymentDue,
+      summary.netBalance,
       "",
       "",
       summary.adjustmentTotal,
       formatDateRangeLabel(range.start, range.end),
     ]),
-    ...(partnerPayoutSummaries || []).map(({ partner, summary }) => [
-      "partner",
-      partnerName(partner),
-      summary.deliveredOrders.length,
-      summary.serviceTotal,
-      summary.paidTotal,
-      summary.due,
-      "",
-      "",
-      formatDateRangeLabel(range.start, range.end),
-    ]),
     ...deliveredOrders.map((order) => {
+      const cod = getPaymentAmount(order);
       const serviceFee = getPartnerOrderServiceFee(order);
       return [
         "order",
         order.fullName || "",
         1,
+        cod,
         serviceFee,
-        "",
-        "",
+        Math.max(0, safeMoney(cod - serviceFee)),
+        Math.max(0, safeMoney(serviceFee - cod)),
+        safeMoney(cod - serviceFee),
         getCourierPay(order),
         getAdminProfit(order),
         "",
