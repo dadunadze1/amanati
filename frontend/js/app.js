@@ -391,8 +391,10 @@ function bindCourierStatsSheetEvents() {
 
 
 function canSwipeCloseCourierSurface(event) {
-  if (!state.currentUser || state.isAdmin || state.isPartner) return false;
-  if (!els.appShell?.classList.contains("is-courier-mobile")) return false;
+  if (!state.currentUser || state.isPartner) return false;
+  const isCourierMobile = els.appShell?.classList.contains("is-courier-mobile");
+  const isAdminMobile = state.isAdmin && isMobileViewport();
+  if (!isCourierMobile && !isAdminMobile) return false;
   return Boolean(event.target.closest("#dialogModal.active .modal-card, #nearestParcelCard:not([hidden])"));
 }
 
