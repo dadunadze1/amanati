@@ -212,7 +212,7 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   await expect(page.locator("#dialogBody")).toContainText(result.partnerCodName);
   await expect(page.locator("#dialogBody")).toContainText(result.partnerNoCodName);
   await expect(page.locator("#dialogBody")).not.toContainText(result.partnerUnusedName);
-  await expect(page.locator("#dialogBody")).toContainText("გადასახდელი");
+  await expect(page.locator("#dialogBody")).toContainText("ჩასარიცხი");
   await expect(page.locator("#dialogBody")).toContainText("10.00");
   await expect(page.locator("#dialogBody")).not.toContainText("90.00");
 
@@ -246,9 +246,9 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
 
   await page.evaluate(() => window.openFinanceDashboard());
   await page.locator("[data-finance-dashboard-tab-select]").selectOption("partners");
-  const partnerBadgeText = await page.locator(".finance-list-panel .partner-filter-row").textContent();
-  expect(partnerBadgeText).toContain("გადასახდელი: 20.00");
-  expect(partnerBadgeText).toContain("კომპანია: 2");
+  const partnerBadgeText = await page.locator("#dialogBody").textContent();
+  expect(partnerBadgeText).toContain("ჩასარიცხი: 20.00");
+  expect(partnerBadgeText).toContain("100.00");
 });
 
 test("admin partner management uses a tall scrollable list", async ({ page }) => {
