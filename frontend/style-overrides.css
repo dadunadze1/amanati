@@ -1,0 +1,46 @@
+/* Mobile layout fixes for the admin summary and device safe area. */
+@media (max-width: 960px) {
+  body:has(.app-shell.is-admin-dashboard),
+  body:has(.app-shell.is-courier-mobile) {
+    background: #edf2f8;
+  }
+
+  .app-shell.is-admin-dashboard::before,
+  .app-shell.is-courier-mobile::before {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: env(safe-area-inset-top);
+    content: "";
+    background: #edf2f8;
+    pointer-events: none;
+  }
+
+  .app-shell.is-admin-dashboard .menu-button {
+    top: calc(10px + env(safe-area-inset-top)) !important;
+  }
+
+  .app-shell.is-admin-dashboard .dashboard-card[data-action="adminFinance"] {
+    grid-column: 1 / -1;
+    min-height: 58px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .app-shell.is-admin-dashboard .dashboard-card[data-action="adminFinance"] span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .app-shell.is-admin-dashboard .dashboard-card[data-action="adminFinance"] strong {
+    max-width: 52vw;
+    overflow: visible;
+    font-size: clamp(1rem, 4.8vw, 1.35rem);
+    text-align: right;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+}
