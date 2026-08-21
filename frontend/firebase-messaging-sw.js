@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_CACHE_NAME = "swift-delivery-app-shell-v16";
+const APP_CACHE_NAME = "swift-delivery-app-shell-v17";
 const DEFAULT_PUSH_VIBRATE = [220, 90, 220, 90, 320];
 const APP_CACHE_ASSETS = [
   "./",
@@ -17,18 +17,18 @@ const APP_CACHE_ASSETS = [
   "./js/notifications.js?v=22",
   "./js/api.js?v=23",
   "./js/address-directory.js?v=13",
-  "./js/map.js?v=12",
+  "./js/map.js?v=13",
   "./js/auth.js?v=11",
   "./js/zones.js?v=3",
   "./js/photo-import.js?v=1",
-  "./js/parcels.js?v=24",
+  "./js/parcels.js?v=25",
   "./js/admin.js?v=13",
   "./js/courier.js?v=6",
   "./js/partner.js?v=35",
   "./js/finance.js?v=21",
   "./js/history.js?v=7",
   "./js/tariffs.js?v=2",
-  "./js/app.js?v=34",
+  "./js/app.js?v=35",
 ];
 
 self.addEventListener("install", (event) => {
