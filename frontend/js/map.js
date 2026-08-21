@@ -644,7 +644,8 @@ function getClusteredPinGroups(pins) {
 
 
 function shouldKeepPinOutOfClusters(pin) {
-  return pin?.status === "pending" || pin?.status === "delivered";
+  const color = getPinMarkerColor(pin);
+  return color === "#2563eb" || color === "#16a34a";
 }
 
 
