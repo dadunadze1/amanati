@@ -2070,8 +2070,9 @@ async function handleApi(request, response, url) {
     const beforePartnerCashAdjustments = getPartnerCashAdjustments(db).length;
     db.parcels = db.parcels.filter((parcel) => {
       if (!parcel.archivedAt) return true;
-      const retentionCutoff = isPartnerParcel(parcel) && partnerOrderCutoffDate ? partnerOrderCutoffDate : cutoffDate;
-      return !isRetentionParcelExpired(parcel, retentionCutoff);
+      // Partner order history is part of the unpaid service ledger.
+      if (isPartnerParcel(parcel)) return true;
+      return !isRetentionParcelExpired(parcel, cutoffDate);
     });
     setPartnerCashAdjustments(db, getPartnerCashAdjustments(db).filter((adjustment) => !isRetentionAdjustmentExpired(adjustment, partnerOrderCutoffDate || cutoffDate)));
     const now = new Date().toISOString();
