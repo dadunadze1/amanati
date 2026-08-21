@@ -248,6 +248,7 @@ async function renderCalendarDialog(username, title) {
         </div>
         <button class="calendar-nav-button history-ledger-nav" type="button" data-action="nextMonth" aria-label="შემდეგი თვე">▦</button>
       </div>
+      <div class="history-ledger-index">
       <div class="history-ledger-table" role="table" aria-label="${escapeAttr(title)}">
         <div class="history-ledger-head" role="row">
           <span>თარიღი</span>
@@ -263,7 +264,14 @@ async function renderCalendarDialog(username, title) {
         <span>სულ მიღებული (ამ პერიოდის ჯამი)</span>
         <strong>${escapeHtml(formatMoney(periodTotal))}</strong>
       </div>
-      <div id="calendarResults" class="history-results history-ledger-details"></div>
+      </div>
+      <div id="calendarResults" class="history-results history-ledger-details">
+        <div class="history-ledger-detail-toolbar">
+          <button class="history-ledger-back" type="button" aria-label="დღეების სიაში დაბრუნება">&lt; უკან</button>
+          <strong>დღის დეტალები</strong>
+        </div>
+        <div class="history-ledger-detail-content"></div>
+      </div>
     </div>
   `;
 
@@ -286,9 +294,21 @@ function bindCalendarActions(username, title) {
         await renderCalendarDialog(username, title);
         return;
       }
+      showHistoryLedgerDetailView();
       await renderHistoryForDate(username, button.dataset.value);
     });
   });
+  els.dialogBody.querySelector(".history-ledger-back")?.addEventListener("click", showHistoryLedgerIndexView);
+}
+
+
+function showHistoryLedgerDetailView() {
+  els.dialogBody.querySelector(".history-ledger-screen")?.classList.add("is-detail-view");
+}
+
+
+function showHistoryLedgerIndexView() {
+  els.dialogBody.querySelector(".history-ledger-screen")?.classList.remove("is-detail-view");
 }
 
 
@@ -316,16 +336,19 @@ async function renderHistoryForDate(username, dateKey) {
     const dateLabel = item.archivedAt || item.completedAt || item.deliveredAt || item.failedAt || item.updatedAt || item.createdAt;
     return `
       <tr>
-        <td>${renderAppTableText(item.fullName || "უსახელო მიმღები", item.phone || "ტელეფონი არ არის")}</td>
-        <td>${renderAppTableText(address || STRINGS.addressMissing, item.status === "failed" && failureReason ? `მიზეზი: ${failureReason}` : "")}</td>
-        <td>${renderAppStatusBadge(item.status, getStatusLabel(item.status))}</td>
-        <td>${renderAppTableText(payment > 0 ? formatMoney(payment) : "არ აქვს", `კურიერი: ${formatMoney(itemCourierPay)}`)}</td>
-        <td>${escapeHtml(formatDateTime(dateLabel))}</td>
+        <td data-label="მიმღები">${renderAppTableText(item.fullName || "უსახელო მიმღები", item.phone || "ტელეფონი არ არის")}</td>
+        <td data-label="მისამართი">${renderAppTableText(address || STRINGS.addressMissing, item.status === "failed" && failureReason ? `მიზეზი: ${failureReason}` : "")}</td>
+        <td data-label="სტატუსი">${renderAppStatusBadge(item.status, getStatusLabel(item.status))}</td>
+        <td data-label="თანხა">${renderAppTableText(payment > 0 ? formatMoney(payment) : "არ აქვს", `კურიერი: ${formatMoney(itemCourierPay)}`)}</td>
+        <td data-label="თარიღი">${escapeHtml(formatDateTime(dateLabel))}</td>
       </tr>
   `;
   })));
 
-  document.getElementById("calendarResults").innerHTML = `
+  const results = document.getElementById("calendarResults");
+  if (!results) return;
+  const detailContent = results.querySelector(".history-ledger-detail-content");
+  (detailContent || results).innerHTML = `
     <div class="history-summary">
       <strong>${dateKey}</strong>
       <div class="history-metrics">
