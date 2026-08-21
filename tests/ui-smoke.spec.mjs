@@ -212,8 +212,9 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   await expect(page.locator("#dialogBody")).toContainText(result.partnerCodName);
   await expect(page.locator("#dialogBody")).toContainText(result.partnerNoCodName);
   await expect(page.locator("#dialogBody")).not.toContainText(result.partnerUnusedName);
-  await expect(page.locator("#dialogBody")).toContainText("90.00");
+  await expect(page.locator("#dialogBody")).toContainText("გადასახდელი");
   await expect(page.locator("#dialogBody")).toContainText("10.00");
+  await expect(page.locator("#dialogBody")).not.toContainText("90.00");
 
   const resetSummary = await page.evaluate(async ({ username }) => {
     await window.resetPartnerCashAdjustment(username);
@@ -246,10 +247,8 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   await page.evaluate(() => window.openFinanceDashboard());
   await page.locator("[data-finance-dashboard-tab-select]").selectOption("partners");
   const partnerBadgeText = await page.locator(".finance-list-panel .partner-filter-row").textContent();
-  expect(partnerBadgeText).toContain("COD: 0.00");
-  expect(partnerBadgeText).toContain("მომსახურება: 0.00");
-  expect(partnerBadgeText).toContain("გადასარიცხი: 0.00");
-  expect(partnerBadgeText).toContain("მისაღები: 0.00");
+  expect(partnerBadgeText).toContain("გადასახდელი: 20.00");
+  expect(partnerBadgeText).toContain("კომპანია: 2");
 });
 
 test("admin partner management uses a tall scrollable list", async ({ page }) => {
