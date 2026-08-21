@@ -327,8 +327,6 @@ async function handlePendingMarkerDragEnd(event) {
 
 
 async function handleMapClick(event) {
-  const mapClickTarget = event?.originalEvent?.target;
-  if (mapClickTarget?.closest?.(".dispatch-pin-marker, .selected-pin-marker, .pin-label-card, .pin-label-icon, .courier-location-marker")) return;
   if (state.mode === "editingPartnerPickup") {
     if (!event.latlng || typeof setPartnerPickupLocationCoords !== "function") return;
     await setPartnerPickupLocationCoords(toCoords(event.latlng), { reopen: true });

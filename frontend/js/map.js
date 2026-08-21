@@ -620,7 +620,7 @@ function getClusteredPinGroups(pins) {
   const clusterRadius = getMapZoom() <= 13 ? 58 : 44;
   const clusters = [];
   sourcePins.forEach((pin) => {
-    if (pin.id && pin.id === state.selectedPinId) {
+    if ((pin.id && pin.id === state.selectedPinId) || shouldKeepPinOutOfClusters(pin)) {
       clusters.push({ pins: [pin], point: state.map.latLngToLayerPoint(toLeafletLatLng(pin)), locked: true });
       return;
     }
@@ -640,6 +640,11 @@ function getClusteredPinGroups(pins) {
   });
 
   return clusters.map((cluster) => cluster.pins);
+}
+
+
+function shouldKeepPinOutOfClusters(pin) {
+  return pin?.status === "pending" || pin?.status === "delivered";
 }
 
 
