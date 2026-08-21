@@ -46,6 +46,33 @@
 }
 
 @media (max-width: 720px) {
+  .modal-card:has(.finance-workbench) .dialog-body {
+    display: block !important;
+    flex: 1 1 auto !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+
+  .modal-card:has(.finance-workbench) .finance-modal,
+  .modal-card:has(.finance-workbench) .finance-panel {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .modal-card:has(.finance-workbench) .finance-modal-content-sections,
+  .modal-card:has(.finance-workbench) .modal-content-sections {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
   .modal-card:has(.finance-workbench) {
     width: calc(100vw - 12px) !important;
     max-width: calc(100vw - 12px) !important;

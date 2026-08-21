@@ -1,13 +1,13 @@
 "use strict";
 
-const APP_CACHE_NAME = "swift-delivery-app-shell-v23";
+const APP_CACHE_NAME = "swift-delivery-app-shell-v24";
 const DEFAULT_PUSH_VIBRATE = [220, 90, 220, 90, 320];
 const APP_CACHE_ASSETS = [
   "./",
   "./index.html",
   "./manifest.json?v=2",
   "./style.min.css?v=28",
-  "./style-overrides.css?v=2",
+  "./style-overrides.css?v=3",
   "./icons/favicon-v2.png",
   "./icons/icon-192-v2.png",
   "./icons/icon-512-v2.png",
