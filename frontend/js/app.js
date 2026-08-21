@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=19";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=20";
 const ADMIN_AUTO_REFRESH_MS = 30000;
 
 function cacheElements() {
@@ -98,6 +98,7 @@ function bindEvents() {
   bindCourierSheetEvents();
   bindCourierStatsSheetEvents();
   bindAdminDashboardSwipeEvents();
+  bindAdminDashboardEdgeSwipeEvents();
   bindCourierSwipeCloseEvents();
   bindAdminDrawerEvents();
   document.addEventListener("click", (event) => {
@@ -413,6 +414,40 @@ function bindAdminDashboardSwipeEvents() {
 
   document.addEventListener("pointercancel", () => {
     dragging = false;
+  }, { passive: true });
+}
+
+
+function bindAdminDashboardEdgeSwipeEvents() {
+  let startX = 0;
+  let startY = 0;
+  let startedFromLeftEdge = false;
+  let startedInDashboard = false;
+
+  document.addEventListener("touchstart", (event) => {
+    if (!state.isAdmin || !isMobileViewport() || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    startedFromLeftEdge = startX <= 28;
+    startedInDashboard = Boolean(event.target.closest("#adminDashboard"));
+  }, { passive: true });
+
+  document.addEventListener("touchend", (event) => {
+    if (!state.isAdmin || !isMobileViewport() || !event.changedTouches.length) return;
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - startX;
+    const deltaY = touch.clientY - startY;
+    const isHorizontalSwipe = Math.abs(deltaX) > 56 && Math.abs(deltaY) < 80;
+
+    if (isHorizontalSwipe && startedFromLeftEdge && deltaX > 0 && state.adminDashboardHidden) {
+      showAdminDashboard();
+    } else if (isHorizontalSwipe && startedInDashboard && deltaX < 0 && !state.adminDashboardHidden) {
+      hideAdminDashboard();
+    }
+
+    startedFromLeftEdge = false;
+    startedInDashboard = false;
   }, { passive: true });
 }
 
