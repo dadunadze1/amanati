@@ -807,7 +807,7 @@ async function renderCourierStatsCard(pins = state.activePins) {
 function createCircleMarker(coords, options) {
   return L.circleMarker(toLeafletLatLng(coords), {
     interactive: true,
-    bubblingMouseEvents: false,
+    bubblingMouseEvents: options.bubblingMouseEvents ?? shouldBubbleCircleMarkerEvents(options),
     radius: options.radius || 10,
     fillColor: options.fillColor,
     fillOpacity: options.fillOpacity ?? 1,
@@ -816,6 +816,12 @@ function createCircleMarker(coords, options) {
     weight: options.weight || 2,
     className: options.className || "",
   }).addTo(state.map);
+}
+
+
+function shouldBubbleCircleMarkerEvents(options = {}) {
+  const className = String(options.className || "");
+  return /\b(dispatch-pin-marker|selected-pin-marker|courier-location-marker)\b/.test(className);
 }
 
 
