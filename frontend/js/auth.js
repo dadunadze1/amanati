@@ -99,6 +99,7 @@ function completeLogin(payload) {
     resetMapViewportForLogin();
     if (!state.isPartner) startLocationWatch();
     if (!state.isPartner) startCourierLocationServices();
+    if (typeof startAdminAutoRefresh === "function") startAdminAutoRefresh();
     if (!state.isPartner) {
       runAutoRetentionCleanup().catch((error) => {
         console.warn("Retention cleanup failed", error);
@@ -158,6 +159,7 @@ async function logout() {
       console.warn("Push deactivation failed", error);
     });
   }
+  if (typeof stopAdminAutoRefresh === "function") stopAdminAutoRefresh();
   await stopCourierLocationServices({ markOffline: true });
   await api("/api/logout", { method: "POST" }).catch(() => {});
   if (state.watchId) navigator.geolocation.clearWatch(state.watchId);

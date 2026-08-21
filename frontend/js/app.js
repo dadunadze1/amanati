@@ -4,7 +4,8 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=14";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=15";
+const ADMIN_AUTO_REFRESH_MS = 30000;
 
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
@@ -176,7 +177,7 @@ function renderActions() {
   ];
   const actions = state.isAdmin
     ? [
-        ["adminMap", "რუკა", "⌖", "რუკა და ფილტრები"],
+        ["refreshAdminMap", "რეფრეში", "↻", getAdminRefreshHint()],
         ["addParcel", "ამანათები", "+", "ახალი ამანათის დამატება"],
         ["adminFinance", "ფინანსები", "₾", "ფინანსური პანელი"],
         ["adminPartnersHub", "პარტნიორები", "◫", "პარტნიორები და შეკვეთები"],
@@ -236,6 +237,13 @@ function renderActions() {
         </button>`
       : actions.map((item, index) => renderActionButton(item, "bottom-nav-item", index === 0)).join("");
   }
+}
+
+
+function getAdminRefreshHint() {
+  return state.adminLastMapRefreshAt
+    ? `ბოლო განახლება: ${formatDateTime(state.adminLastMapRefreshAt)}`
+    : "რუკისა და ფინანსების განახლება";
 }
 
 
@@ -619,6 +627,50 @@ function hideAdminDashboard() {
 }
 
 
+async function refreshAdminMapAndFinance({ silent = false } = {}) {
+  if (!state.isAdmin || !state.currentUser) return;
+  await refreshPins();
+  if (state.activeDialogTitle === "ფინანსები" && typeof openFinanceDashboard === "function") {
+    await openFinanceDashboard({ preserveSearch: true });
+  }
+  state.adminLastMapRefreshAt = new Date().toISOString();
+  renderActions();
+  if (!silent) showToast(`განახლდა: ${formatDateTime(state.adminLastMapRefreshAt)}`);
+}
+
+
+function startAdminAutoRefresh() {
+  stopAdminAutoRefresh();
+  if (!state.isAdmin || !state.currentUser) return;
+  state.adminMapAutoRefreshTimer = window.setInterval(async () => {
+    if (!state.isAdmin || !state.currentUser || document.hidden || state.adminMapAutoRefreshInFlight) return;
+    state.adminMapAutoRefreshInFlight = true;
+    try {
+      await refreshAdminMapAndFinance({ silent: true });
+    } catch (error) {
+      console.warn("Admin auto refresh failed", error);
+    } finally {
+      state.adminMapAutoRefreshInFlight = false;
+    }
+  }, ADMIN_AUTO_REFRESH_MS);
+}
+
+
+function stopAdminAutoRefresh() {
+  if (state.adminMapAutoRefreshTimer) window.clearInterval(state.adminMapAutoRefreshTimer);
+  state.adminMapAutoRefreshTimer = null;
+  state.adminMapAutoRefreshInFlight = false;
+}
+
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !state.isAdmin || !state.currentUser) return;
+  refreshAdminMapAndFinance({ silent: true }).catch((error) => {
+    console.warn("Admin visibility refresh failed", error);
+  });
+});
+
+
 function refreshAdminDashboardFilterState() {
   if (!els.adminDashboard || !state.isAdmin) return;
   const filters = getAdminMapFilters();
@@ -652,6 +704,7 @@ const ADMIN_PIN_CONTEXT_KEEP_ACTIONS = new Set([
   "cancelParcelLocation",
   "confirmParcelLocation",
   "confirmParcelDelete",
+  "refreshAdminMap",
 ]);
 
 
@@ -711,6 +764,7 @@ async function handleAction(action, value, sourceElement) {
     pushInbox: openPushInboxDialog,
     liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
+    refreshAdminMap: refreshAdminMapAndFinance,
     adminParcels: openAdminParcelsHub,
     adminCouriers: openAdminCouriersHub,
     adminPartnersHub: openAdminPartnersHub,

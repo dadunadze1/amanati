@@ -1571,13 +1571,13 @@ function bindFinanceDashboardEvents(report) {
 }
 
 
-async function openFinanceDashboard() {
+async function openFinanceDashboard(options = {}) {
   if (!state.isAdmin) {
     await openFinanceCourier(state.currentUser);
     return;
   }
   state.financeAdminView = getFinanceAdminView(state.financeAdminView);
-  state.financeAdminSearch = "";
+  if (!options.preserveSearch) state.financeAdminSearch = "";
   const report = await getFinanceAdminReport();
   const filters = renderFinanceAdminFilters(report, state.financeAdminView);
   const content = renderFinanceDashboardWorkbench(report);
