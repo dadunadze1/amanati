@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=18";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=19";
 const ADMIN_AUTO_REFRESH_MS = 30000;
 
 function cacheElements() {
@@ -97,6 +97,7 @@ function bindEvents() {
   els.dialogModal?.addEventListener("click", handleDialogBackdropClick);
   bindCourierSheetEvents();
   bindCourierStatsSheetEvents();
+  bindAdminDashboardSwipeEvents();
   bindCourierSwipeCloseEvents();
   bindAdminDrawerEvents();
   document.addEventListener("click", (event) => {
@@ -387,6 +388,32 @@ function bindCourierStatsSheetEvents() {
     pointerId = null;
     els.courierStatsCard.classList.remove("is-dragging");
   });
+}
+
+
+function bindAdminDashboardSwipeEvents() {
+  let startY = 0;
+  let dragging = false;
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!state.isAdmin || !isMobileViewport() || !els.adminDashboard || els.adminDashboard.hidden) return;
+    if (!event.target.closest("#adminDashboard")) return;
+    startY = event.clientY;
+    dragging = true;
+  }, { passive: true });
+
+  document.addEventListener("pointerup", (event) => {
+    if (!dragging) return;
+    dragging = false;
+    const delta = event.clientY - startY;
+    if (Math.abs(delta) < 24) return;
+    if (delta < 0) showAdminDashboard();
+    if (delta > 0) hideAdminDashboard();
+  }, { passive: true });
+
+  document.addEventListener("pointercancel", () => {
+    dragging = false;
+  }, { passive: true });
 }
 
 
