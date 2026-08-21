@@ -44,3 +44,208 @@
     white-space: nowrap;
   }
 }
+
+@media (max-width: 720px) {
+  .modal-card:has(.finance-workbench) {
+    width: calc(100vw - 12px) !important;
+    max-width: calc(100vw - 12px) !important;
+    max-height: calc(100dvh - 12px) !important;
+    padding: 8px !important;
+  }
+
+  .modal-card:has(.finance-workbench) .dialog-body {
+    min-width: 0;
+    padding: 8px !important;
+  }
+
+  .finance-workbench {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .finance-workbench .finance-admin-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: 4px 0 8px;
+    background: #fff;
+  }
+
+  .finance-workbench .finance-admin-tab {
+    min-width: 0;
+    min-height: 40px;
+    padding: 7px 5px;
+    overflow-wrap: anywhere;
+  }
+
+  .finance-workbench .finance-workbench-topline,
+  .finance-workbench .finance-workbench-selects,
+  .finance-workbench .finance-workbench-range {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-workbench .finance-workbench-range .mini-button,
+  .finance-workbench .finance-workbench-select,
+  .finance-workbench .finance-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .finance-workbench .finance-action-queue {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .finance-workbench .finance-action-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .finance-workbench .finance-action-card .mini-button {
+    width: 100%;
+  }
+
+  .finance-workbench .partner-panel-head {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 8px 2px;
+  }
+
+  .finance-workbench .partner-panel-head h2 {
+    font-size: 1rem;
+  }
+
+  .finance-workbench .partner-filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .finance-workbench .partner-table-wrap {
+    width: 100%;
+    overflow: visible;
+  }
+
+  .finance-workbench .partner-order-table,
+  .finance-workbench .partner-order-table thead,
+  .finance-workbench .partner-order-table tbody,
+  .finance-workbench .partner-order-table tr,
+  .finance-workbench .partner-order-table th,
+  .finance-workbench .partner-order-table td {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .finance-workbench .partner-order-table {
+    border-spacing: 0;
+  }
+
+  .finance-workbench .partner-order-table thead {
+    display: none;
+  }
+
+  .finance-workbench .partner-order-table tbody {
+    display: grid;
+    gap: 10px;
+    padding: 0;
+  }
+
+  .finance-workbench .partner-order-table tr {
+    display: grid;
+    gap: 2px;
+    padding: 10px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(226, 232, 240, 0.96);
+    border-radius: 10px;
+  }
+
+  .finance-workbench .partner-order-table td {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border: 0;
+    font-size: 0.8rem;
+  }
+
+  .finance-workbench .partner-order-table td::before {
+    content: attr(data-label);
+    min-width: 0;
+    color: #667085;
+    font-size: 0.7rem;
+    font-weight: 850;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .finance-workbench .partner-order-table td > *,
+  .finance-workbench .partner-order-table td strong,
+  .finance-workbench .partner-order-table td small,
+  .finance-workbench .partner-order-table td a {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .finance-workbench .partner-order-table td[data-label="მოქმედება"],
+  .finance-workbench .partner-order-table td[data-label="გადახდა"] {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .finance-workbench .partner-order-table td[data-label="მოქმედება"]::before,
+  .finance-workbench .partner-order-table td[data-label="გადახდა"]::before {
+    display: block;
+  }
+
+  .finance-workbench .partner-order-table td:empty {
+    display: none;
+  }
+
+  .finance-workbench .partner-order-table .row-actions,
+  .finance-workbench .partner-order-table .finance-detail-chips {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .finance-workbench .partner-order-table .row-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-workbench .partner-order-table .finance-detail-chips {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .finance-workbench .partner-order-table .finance-detail-chip,
+  .finance-workbench .partner-order-table .finance-settlement {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .finance-workbench .partner-order-table button,
+  .finance-workbench .partner-order-table .mini-button {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .finance-workbench .finance-close-strip {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .finance-workbench .finance-close-strip button {
+    width: 100%;
+  }
+}
