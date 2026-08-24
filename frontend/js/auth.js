@@ -43,6 +43,8 @@ async function initializeAuth() {
 
 async function handleAdminSetup(event) {
   event.preventDefault();
+  if (!(await requestRequiredPushPermissionFromSubmit(els.setupError))) return;
+
   const username = els.setupUsername.value.trim();
   const password = els.setupPassword.value;
   if (!username || !password) return setMessage(els.setupError, STRINGS.emptyFields, true);
@@ -59,6 +61,8 @@ async function handleAdminSetup(event) {
 
 async function handleLogin(event) {
   event.preventDefault();
+  if (!(await requestRequiredPushPermissionFromSubmit(els.loginError))) return;
+
   const username = els.loginUsername.value.trim();
   const password = els.loginPassword.value;
 
@@ -69,6 +73,28 @@ async function handleLogin(event) {
   } catch {
     els.loginError.textContent = STRINGS.invalidLogin;
   }
+}
+
+
+async function requestRequiredPushPermissionFromSubmit(messageElement) {
+  if (typeof Notification === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    setMessage(messageElement, "ფუშ შეტყობინებები აუცილებელია, მაგრამ ამ ბრაუზერში ხელმისაწვდომი არ არის.", true);
+    return false;
+  }
+  if (Notification.permission === "granted") return true;
+  if (Notification.permission === "denied") {
+    setMessage(messageElement, "ფუშ შეტყობინებები დაბლოკილია. ჩართეთ Notifications ამ აპისთვის Settings-იდან და თავიდან სცადეთ.", true);
+    return false;
+  }
+
+  setMessage(messageElement, "ფუშ შეტყობინებების ჩართვა აუცილებელია.", false);
+  const permission = await Notification.requestPermission();
+  if (permission === "granted") {
+    setMessage(messageElement, "", false);
+    return true;
+  }
+  setMessage(messageElement, "ფუშ შეტყობინებებზე Allow აუცილებელია სისტემაში შესასვლელად.", true);
+  return false;
 }
 
 

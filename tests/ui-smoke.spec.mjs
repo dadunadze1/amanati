@@ -2,6 +2,47 @@ import { expect, test } from "@playwright/test";
 
 async function installLeafletMock(page) {
   await page.addInitScript(() => {
+    const notificationApi = {
+      permission: "default",
+      async requestPermission() {
+        notificationApi.permission = "granted";
+        return "granted";
+      },
+    };
+    Object.defineProperty(window, "Notification", {
+      configurable: true,
+      value: notificationApi,
+    });
+    Object.defineProperty(window, "PushManager", {
+      configurable: true,
+      value: function PushManager() {},
+    });
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: {
+        async register() {
+          return {
+            async update() {},
+            pushManager: {
+              async getSubscription() { return null; },
+              async subscribe() {
+                return {
+                  endpoint: "https://example.test/push-subscription",
+                  options: {},
+                  toJSON() {
+                    return {
+                      endpoint: this.endpoint,
+                      keys: { p256dh: "test-p256dh", auth: "test-auth" },
+                    };
+                  },
+                };
+              },
+            },
+          };
+        },
+        async getRegistration() { return null; },
+      },
+    });
     const createLayer = () => ({
       addTo() { return this; },
       bindPopup() { return this; },
