@@ -647,12 +647,15 @@ async function renderAdminDashboard(pins = state.activePins) {
   const todayKey = toDateKey(new Date());
   const dailyCash = calculateFinanceSummary({ records: pins }, { startDate: todayKey, endDate: todayKey }).cashReceived;
   const filters = getAdminMapFilters();
-  const unassignedCount = pins.filter((pin) => !pin.courierUsername).length;
+  const livePins = typeof getCourierLivePins === "function"
+    ? getCourierLivePins(pins)
+    : pins.filter((pin) => pin?.status !== "delivered" && !pin?.archivedAt && !pin?.deletedAt);
+  const unassignedCount = livePins.filter((pin) => !pin.courierUsername).length;
   const cards = [
-    { label: "სულ პინები", value: pins.length, tone: "primary", action: "showAllAdminPins", active: filters.status === "all" },
-    { label: "პროცესში", value: pins.filter((pin) => pin.status === "pending").length, tone: "neutral", action: "adminMapSetStatus", dataValue: "pending", active: filters.status === "pending" },
-    { label: "ჩაბარებული", value: pins.filter((pin) => pin.status === "delivered").length, tone: "success", action: "adminMapSetStatus", dataValue: "delivered", active: filters.status === "delivered" },
-    { label: "ვერ ჩაბარებული", value: pins.filter((pin) => pin.status === "failed").length, tone: "danger", action: "adminMapSetStatus", dataValue: "failed", active: filters.status === "failed" },
+    { label: "სულ პინები", value: livePins.length, tone: "primary", action: "showAllAdminPins", active: filters.status === "all" },
+    { label: "პროცესში", value: livePins.filter((pin) => pin.status === "pending").length, tone: "neutral", action: "adminMapSetStatus", dataValue: "pending", active: filters.status === "pending" },
+    { label: "ჩაბარებული", value: livePins.filter((pin) => pin.status === "delivered").length, tone: "success", action: "adminMapSetStatus", dataValue: "delivered", active: filters.status === "delivered" },
+    { label: "ვერ ჩაბარებული", value: livePins.filter((pin) => pin.status === "failed").length, tone: "danger", action: "adminMapSetStatus", dataValue: "failed", active: filters.status === "failed" },
     { label: "მიუბმელი", value: unassignedCount, tone: "warning", action: "showUnassignedAdminPins", active: filters.showUnassigned && filters.status === "all" && !filters.selectedCouriers.length },
     ...(CONFIG.enableCourierLiveTracking === false ? [] : [{ label: "ონლაინ", value: onlineCourierCount, tone: "success", action: "liveCouriers" }]),
     { label: "კურიერები", value: courierCount, tone: "primary", action: "adminUsers" },

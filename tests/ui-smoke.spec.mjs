@@ -115,6 +115,29 @@ test("admin tariff settings expose volume and express prices", async ({ page }) 
   await expect(page.locator("#dialogBody")).toContainText("ექსპრეს დელივერი");
 });
 
+test("admin summary bar counts only live orders", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const totals = await page.evaluate(async () => {
+    await window.renderAdminDashboard([
+      { id: "pending-1", status: "pending", courierUsername: "courier" },
+      { id: "failed-1", status: "failed", courierUsername: "courier" },
+      { id: "delivered-1", status: "delivered", courierUsername: "courier" },
+      { id: "archived-1", status: "pending", archivedAt: new Date().toISOString(), courierUsername: "courier" },
+    ]);
+    return [...document.querySelectorAll("#adminDashboard .dashboard-card")].map((card) => ({
+      label: card.querySelector("span")?.textContent || "",
+      value: card.querySelector("strong")?.textContent || "",
+    }));
+  });
+
+  expect(totals[0].value).toBe("2");
+  expect(totals[1].value).toBe("1");
+  expect(totals[2].value).toBe("0");
+  expect(totals[3].value).toBe("1");
+});
+
 test("finance dashboard lists partner service balances", async ({ page }) => {
   await page.goto("/");
   await ensureAdminSession(page);
