@@ -59,6 +59,7 @@ async function loadStaticBootstrap() {
   archiveStaticCompletedParcels(loadStaticBootstrap.cache);
   runStaticAutomaticCleanup(loadStaticBootstrap.cache);
   await backfillStaticPartnerOrderLocations(loadStaticBootstrap.cache);
+  backfillStaticPartnerPickupZones(loadStaticBootstrap.cache);
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
   await saveStaticBootstrap({ immediate: true, requireFirebase: true });
   startStaticRealtimeSync();
@@ -471,9 +472,10 @@ async function applyFirebaseStaticStoreUpdate(store) {
   if (!store || typeof store !== "object") return;
   const normalizedStore = normalizeStaticStore(mergeStaticStores(loadStaticBootstrap.cache, store));
   const backfilled = await backfillStaticPartnerOrderLocations(normalizedStore);
+  const pickupZonesBackfilled = backfillStaticPartnerPickupZones(normalizedStore);
   loadStaticBootstrap.cache = normalizedStore;
   refreshStaticCurrentUserProfile(normalizedStore);
-  if (backfilled && typeof saveFirebaseStaticStore === "function") {
+  if ((backfilled || pickupZonesBackfilled) && typeof saveFirebaseStaticStore === "function") {
     saveFirebaseStaticStore(normalizedStore, { requireFirebase: false }).catch((error) => {
       console.warn("Firebase static store save failed", error);
     });
@@ -937,8 +939,8 @@ function parseOptionalStaticPickupCoordinate(value) {
 
 
 function getStaticPartnerPickupCoords(partner) {
-  const lat = parseOptionalStaticPickupCoordinate(partner?.pickupLat ?? partner?.pickupLatitude);
-  const lng = parseOptionalStaticPickupCoordinate(partner?.pickupLng ?? partner?.pickupLongitude);
+  const lat = parseOptionalStaticPickupCoordinate(partner?.pickupLat ?? partner?.pickupLatitude ?? partner?.lat ?? partner?.latitude);
+  const lng = parseOptionalStaticPickupCoordinate(partner?.pickupLng ?? partner?.pickupLongitude ?? partner?.lng ?? partner?.longitude);
   if (lat === null || lng === null) return null;
   const coords = { lat, lng };
   return isStaticTbilisiCoords(coords) ? coords : null;
@@ -950,6 +952,20 @@ function getStaticPartnerPickupZoneId(partner) {
   const coords = getStaticPartnerPickupCoords(partner);
   if (!coords || typeof coordsMatchZone !== "function") return "";
   return (DEFAULT_ZONES || []).find((zone) => coordsMatchZone(coords, zone))?.id || "";
+}
+
+function backfillStaticPartnerPickupZones(store) {
+  if (!store || !Array.isArray(store.users)) return false;
+  let changed = false;
+  store.users.forEach((user) => {
+    if (!user || user.role !== "partner") return;
+    const zoneId = getStaticPartnerPickupZoneId(user);
+    if (!zoneId || user.pickupZoneId === zoneId) return;
+    user.pickupZoneId = zoneId;
+    user.pickupZoneName = user.pickupZoneName || getStaticZoneNames([zoneId]) || "";
+    changed = true;
+  });
+  return changed;
 }
 
 function getStaticParcelCreatedTime(parcel) {
