@@ -36,6 +36,8 @@ const NOTIFICATION_TITLE_PREFIXES = {
 const VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate";
 const MAX_STICKER_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
 const googleAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+const STICKER_ADDRESS_START_PATTERN = /(თბილისი|რუსთავი|ორთაჭალ(?:ა|აში)?|გლდანი|ვაკე|საბურთალო|ისანი|სამგორი|დიღომი|ვარკეთილი|ვერა|მთაწმინდა|გულუა(?:ს)?)/i;
+const STICKER_AMOUNT_KEYWORD_PATTERN = /(თანხ|ქეშ|კოდ\b|cod\b|cash\b|გადასახდ|გადახდ|ფასი|ლარი|კურიერთან)/i;
 
 class NoPushDevicesError extends Error {
   constructor(notification) {
@@ -767,7 +769,7 @@ function extractStickerAmount(lines) {
     if (match) return normalizeStickerMoney(match[1]);
   }
 
-  const keywordLines = lines.filter((line) => !looksLikePhoneLine(line) && /თანხ|ქეშ|გადასახდ|ფასი/i.test(line));
+  const keywordLines = lines.filter((line) => !looksLikePhoneLine(line) && STICKER_AMOUNT_KEYWORD_PATTERN.test(line));
   const bottomLines = lines
     .filter((line) => !looksLikePhoneLine(line) && !looksLikeBareBuildingLine(line))
     .slice(-3)
@@ -797,14 +799,41 @@ function extractStickerName(lines, phone, paymentAmount) {
 }
 
 function extractStickerAddress(lines, phone, paymentAmount, fullName) {
-  const candidates = lines
+  const addressLines = lines
     .map((line) => stripStickerLineNoise(line, phone, paymentAmount))
     .filter((line) => line && line !== fullName && !looksLikePhoneLine(line) && !looksLikeAmountLine(line))
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => !looksLikeBareBuildingLine(line))
+    .map(cleanStickerAddressCandidate)
+    .filter(Boolean);
+  const combinedAddressLines = addressLines.flatMap((line, index) => (
+    index > 0 ? [`${addressLines[index - 1]} ${line}`, line] : [line]
+  ));
+  const candidates = combinedAddressLines
+    .map(cleanStickerAddressCandidate)
+    .filter((line) => line && !looksLikeBareBuildingLine(line))
     .filter((line) => scoreAddressLine(line) >= 5);
   const addressLine = candidates.sort((a, b) => scoreAddressLine(b) - scoreAddressLine(a))[0] || "";
   return normalizeStickerAddress(addressLine);
+}
+
+function cleanStickerAddressCandidate(line) {
+  let value = String(line || "")
+    .replace(/\b\d{1,2}[:.]\d{2}\s*(?:საათამდე|მდე)?/gi, " ")
+    .replace(/\b(?:საათამდე|საათზე|მოიტანე|მოიტანენ|მომიტანე|მოგვიტანე|თუ|მაქ|აქ)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const addressStart = value.search(STICKER_ADDRESS_START_PATTERN);
+  if (addressStart > 0) value = value.slice(addressStart).trim();
+  value = value
+    .replace(/^(?:ინ|ში|მისამართი|მის\.?|address)\s*[:\-]?\s*/i, "")
+    .replace(/ორთაჭალაში/gi, "ორთაჭალა")
+    .replace(/გულუა(?:ს)?\s*(?:ქუჩა|ქ\.?|ქ)?\s*(?:№|#|ნომერი|n)?\s*(\d{1,4}[ა-ჰa-z]?)/gi, "გულუას ქ. $1")
+    .replace(/(^|[\s,])ქ\s*\.?\s*/gi, "$1ქ. ")
+    .replace(/\s*(?:№|#)\s*/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
+  value = value.replace(/^(ორთაჭალა)\s+(?!,)/i, "$1, ");
+  return value.replace(/^[,.\-:; ]+|[,.\-:; ]+$/g, "").trim();
 }
 
 function stripStickerLineNoise(line, phone, paymentAmount) {
@@ -824,7 +853,7 @@ function looksLikePhoneLine(line) {
 }
 
 function looksLikeAmountLine(line) {
-  return /(?:ლარი|ლ\b|gel\b|₾|თანხ|ქეშ|ფასი|გადასახდ)/i.test(String(line || ""));
+  return /(?:ლარი|ლ\b|gel\b|₾|თანხ|ქეშ|კოდ\b|cod\b|cash\b|ფასი|გადასახდ|გადახდ|კურიერთან)/i.test(String(line || ""));
 }
 
 function looksLikeBareBuildingLine(line) {
@@ -840,7 +869,7 @@ function scoreAddressLine(line) {
   let score = 0;
   if (/\d/.test(value)) score += 3;
   if (/(ქუჩა|ქ\.?|გამზირი|გამზ\.?|ჩიხი|შესახვევი|გზატკეცილი|პროსპექტი|№|#|n\s?\d)/i.test(value)) score += 5;
-  if (/(თბილისი|რუსთავი|ვაკე|საბურთალო|ისანი|სამგორი|გლდანი|დიღომი|ვარკეთილი|ვერა|მთაწმინდა)/i.test(value)) score += 2;
+  if (/(თბილისი|რუსთავი|ორთაჭალა|გულუა|ვაკე|საბურთალო|ისანი|სამგორი|გლდანი|დიღომი|ვარკეთილი|ვერა|მთაწმინდა)/i.test(value)) score += 2;
   if (countGeorgianLetters(value) >= 4) score += 1;
   if (value.length > 80) score -= 2;
   return score;
@@ -855,7 +884,7 @@ function scoreNameLine(line) {
 }
 
 function normalizeStickerAddress(value) {
-  const address = String(value || "")
+  const address = cleanStickerAddressCandidate(value)
     .replace(/^[,.\-:; ]+|[,.\-:; ]+$/g, "")
     .replace(/\s+(№|#)\s*/g, " ")
     .replace(/\s+/g, " ")
@@ -910,4 +939,10 @@ function httpError(status, publicMessage, code = "request-failed", internalMessa
   error.publicMessage = publicMessage;
   error.code = code;
   return error;
+}
+
+if (process.env.DELIVERY_FUNCTIONS_TEST_EXPORTS === "1") {
+  exports.__test = {
+    parseStickerText,
+  };
 }
