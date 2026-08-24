@@ -80,14 +80,34 @@ function completeLogin(payload) {
   state.isAdmin = payload.user.role === "admin";
   state.isPartner = payload.user.role === "partner";
   state.courierPresenceStatus = state.isAdmin || state.isPartner ? "offline" : "online";
+  state.authenticatedAppStarted = false;
+  state.pushGateInProgress = false;
+  hideModal(els.setupModal);
+  hideModal(els.authModal);
+  hideModal(els.registerModal);
+  if (requiresPushGateForCurrentUser()) {
+    enforceRequiredPushBeforeAppStart().catch((error) => {
+      console.warn("Required push gate failed", error);
+      state.adminPushStatus = "error";
+      state.adminPushLastError = error.message || "ფუშების ჩართვა ვერ მოხერხდა.";
+      showRequiredPushGate();
+    });
+    return;
+  }
+  startAuthenticatedApp();
+}
+
+
+function startAuthenticatedApp() {
+  if (state.authenticatedAppStarted) return;
+  state.authenticatedAppStarted = true;
+  state.pushGateInProgress = false;
+  hideModal(els.pushGateModal);
   state.adminDashboardHidden = false;
   els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   updateAppViewportVars();
   state.mapViewportResetToken += 1;
   state.mapViewportResetPending = false;
-  hideModal(els.setupModal);
-  hideModal(els.authModal);
-  hideModal(els.registerModal);
   resetMapSelectionUi();
   renderActions();
   Promise.allSettled([
@@ -109,11 +129,6 @@ function completeLogin(payload) {
       console.warn("Pin refresh failed", error);
       fitMapToPinsOrDefault([]);
     });
-    if (state.currentUser && typeof activatePushForAuthorizedUser === "function") {
-      activatePushForAuthorizedUser().catch((error) => {
-        console.warn("Push initialization failed", error);
-      });
-    }
     if (typeof openInitialPushRouteIfNeeded === "function") {
       openInitialPushRouteIfNeeded().catch((error) => {
         console.warn("Initial push route failed", error);
@@ -123,6 +138,98 @@ function completeLogin(payload) {
     scheduleMapInvalidateSize(120);
     scheduleMidnightRefresh();
   });
+}
+
+
+function requiresPushGateForCurrentUser() {
+  return Boolean(state.currentUser && ["admin", "partner", "courier"].includes(state.currentUserProfile?.role || ""));
+}
+
+
+async function enforceRequiredPushBeforeAppStart() {
+  state.pushGateInProgress = true;
+  const ready = await registerRequiredPushForCurrentDevice({ requestPermission: false });
+  if (ready) {
+    startAuthenticatedApp();
+    return;
+  }
+  state.pushGateInProgress = false;
+  showRequiredPushGate();
+}
+
+
+async function handleRequiredPushEnable() {
+  if (state.pushGateInProgress) return;
+  state.pushGateInProgress = true;
+  if (els.pushGateEnableButton) {
+    els.pushGateEnableButton.disabled = true;
+    els.pushGateEnableButton.setAttribute("aria-busy", "true");
+  }
+  if (els.pushGateMessage) {
+    setMessage(els.pushGateMessage, "ფუშების ჩართვა მიმდინარეობს...", false);
+  }
+
+  try {
+    const ready = await registerRequiredPushForCurrentDevice({ requestPermission: true });
+    if (ready) {
+      startAuthenticatedApp();
+      return;
+    }
+    showRequiredPushGate();
+  } catch (error) {
+    console.warn("Required push registration failed", error);
+    state.adminPushStatus = "error";
+    state.adminPushLastError = error.message || "ფუშების ჩართვა ვერ მოხერხდა.";
+    showRequiredPushGate();
+  } finally {
+    state.pushGateInProgress = false;
+    if (els.pushGateEnableButton) {
+      els.pushGateEnableButton.disabled = false;
+      els.pushGateEnableButton.setAttribute("aria-busy", "false");
+    }
+  }
+}
+
+
+async function registerRequiredPushForCurrentDevice(options = {}) {
+  if (!requiresPushGateForCurrentUser()) return true;
+  if (typeof canUseAdminPush !== "function" || !canUseAdminPush()) {
+    state.adminPushStatus = "unsupported";
+    state.adminPushLastError = typeof getAdminPushCapabilityMessage === "function"
+      ? getAdminPushCapabilityMessage()
+      : "ამ მოწყობილობაზე ფუშები ხელმისაწვდომი არ არის.";
+    return false;
+  }
+
+  if (Notification.permission === "granted") {
+    return typeof registerAdminPushToken === "function" ? registerAdminPushToken() : false;
+  }
+  if (Notification.permission === "denied") {
+    state.adminPushStatus = "denied";
+    state.adminPushLastError = "ფუშ შეტყობინებები დაბლოკილია. ჩართეთ Notifications ამ აპისთვის Settings-იდან და თავიდან სცადეთ.";
+    return false;
+  }
+  if (options.requestPermission && typeof requestAdminPushNotifications === "function") {
+    return requestAdminPushNotifications({ silent: true });
+  }
+
+  state.adminPushStatus = "permission-needed";
+  state.adminPushLastError = "გასაგრძელებლად დააჭირეთ ფუშების ჩართვას და ბრაუზერის ფანჯარაში აირჩიეთ Allow.";
+  return false;
+}
+
+
+function showRequiredPushGate() {
+  hideModal(els.setupModal);
+  hideModal(els.authModal);
+  hideModal(els.registerModal);
+  const message = state.adminPushLastError || "ფუშ შეტყობინებები აუცილებელია სისტემაში მუშაობისთვის.";
+  if (els.pushGateMessage) setMessage(els.pushGateMessage, message, state.adminPushStatus !== "permission-needed");
+  if (els.pushGateEnableButton) {
+    els.pushGateEnableButton.disabled = false;
+    els.pushGateEnableButton.setAttribute("aria-busy", "false");
+  }
+  showModal(els.pushGateModal);
 }
 
 
@@ -175,6 +282,9 @@ async function logout() {
   state.adminPushStatus = "unknown";
   state.adminPushToken = "";
   state.adminPushLastError = "";
+  state.pushGateInProgress = false;
+  state.authenticatedAppStarted = false;
+  if (els.pushGateModal) hideModal(els.pushGateModal);
   state.courierPresenceStatus = "offline";
   state.hasCurrentPosition = false;
   state.activePins = [];

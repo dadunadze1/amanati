@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_CACHE_NAME = "swift-delivery-app-shell-v37";
+const APP_CACHE_NAME = "swift-delivery-app-shell-v38";
 const DEFAULT_PUSH_VIBRATE = [220, 90, 220, 90, 320];
 const APP_CACHE_ASSETS = [
   "./",
@@ -12,24 +12,24 @@ const APP_CACHE_ASSETS = [
   "./icons/icon-192-v2.png",
   "./icons/icon-512-v2.png",
   "./js/config.js?v=5",
-  "./js/state.js?v=14",
-  "./js/utils.js?v=6",
+  "./js/state.js?v=15",
+  "./js/utils.js?v=8",
   "./js/storage.js?v=9",
-  "./js/notifications.js?v=28",
-  "./js/api.js?v=29",
+  "./js/notifications.js?v=29",
+  "./js/api.js?v=31",
   "./js/address-directory.js?v=13",
   "./js/map.js?v=15",
-  "./js/auth.js?v=11",
+  "./js/auth.js?v=12",
   "./js/zones.js?v=3",
   "./js/photo-import.js?v=1",
-  "./js/parcels.js?v=26",
-  "./js/admin.js?v=13",
+  "./js/parcels.js?v=27",
+  "./js/admin.js?v=15",
   "./js/courier.js?v=6",
   "./js/partner.js?v=35",
   "./js/finance.js?v=21",
   "./js/history.js?v=8",
   "./js/tariffs.js?v=2",
-  "./js/app.js?v=39",
+  "./js/app.js?v=42",
 ];
 
 self.addEventListener("install", (event) => {

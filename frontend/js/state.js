@@ -45,6 +45,8 @@ const state = {
   adminPushStatus: "unknown",
   adminPushToken: "",
   adminPushLastError: "",
+  pushGateInProgress: false,
+  authenticatedAppStarted: false,
   selectedCourierLocationUsername: "",
   routeLayer: null,
   routePinId: null,

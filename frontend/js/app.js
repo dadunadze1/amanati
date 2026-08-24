@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=29";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=30";
 const ADMIN_AUTO_REFRESH_MS = 30000;
 
 function cacheElements() {
@@ -15,7 +15,8 @@ function cacheElements() {
     "setupModal", "setupForm", "setupUsername", "setupPassword",
     "setupError", "authModal", "loginForm", "loginUsername", "loginPassword",
     "loginError", "showRegisterButton", "registerModal", "registerForm", "regUsername",
-    "regFirstName", "regLastName", "regPhone", "regPassword", "regError", "backToLoginButton", "dialogModal", "dialogTitle",
+    "regFirstName", "regLastName", "regPhone", "regPassword", "regError", "backToLoginButton", "pushGateModal",
+    "pushGateMessage", "pushGateEnableButton", "pushGateLogoutButton", "dialogModal", "dialogTitle",
     "dialogBody", "dialogActions",
   ].forEach((id) => {
     els[id] = document.getElementById(id);
@@ -75,6 +76,8 @@ function bindEvents() {
   els.registerForm.addEventListener("submit", handleRegistration);
   els.showRegisterButton?.addEventListener("click", () => switchModal("register"));
   els.backToLoginButton.addEventListener("click", () => switchModal("login"));
+  els.pushGateEnableButton?.addEventListener("click", handleRequiredPushEnable);
+  els.pushGateLogoutButton?.addEventListener("click", logout);
   document.addEventListener("click", (event) => {
     const toggle = event.target.closest("[data-password-toggle]");
     if (!toggle) return;
@@ -166,7 +169,6 @@ function renderActions() {
         state.adminDashboardHidden
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
-        ["enablePush", "ფუშის ჩართვა", "●", "ამ მოწყობილობაზე ფუშების ჩართვა"],
         ["pushInbox", "ფუშები", "✉", "გაგზავნილი შეტყობინებები"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
@@ -176,7 +178,6 @@ function renderActions() {
   ];
   const partnerActions = [
     ["partnerNewOrder", "ახალი", "+"],
-    ["enablePush", "ფუში", "●"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
@@ -191,7 +192,6 @@ function renderActions() {
       : [
         ["courierParcels", "ჩემი ამანათები", "□"],
         ["history", "ისტორია", "↺"],
-        ["enablePush", "ფუში", "●"],
         ["logout", "გასვლა", "←"],
       ];
 
@@ -1065,6 +1065,8 @@ async function logout() {
   state.adminPushStatus = "unknown";
   state.adminPushToken = "";
   state.adminPushLastError = "";
+  state.pushGateInProgress = false;
+  state.authenticatedAppStarted = false;
   state.hasCurrentPosition = false;
   state.activePins = [];
   state.adminDashboardHidden = false;
@@ -1086,6 +1088,7 @@ async function logout() {
     els.actionPanel.textContent = "";
     els.actionPanel.classList.remove("show");
   }
+  if (els.pushGateModal) hideModal(els.pushGateModal);
   if (els.courierDashboard) {
     els.courierDashboard.hidden = true;
     els.courierDashboard.textContent = "";

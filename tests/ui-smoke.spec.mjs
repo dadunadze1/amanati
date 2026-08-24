@@ -68,6 +68,7 @@ async function ensureAdminSession(page) {
     await page.locator("#setupPassword").fill("pass123");
     await page.locator("#setupForm button[type='submit']").click();
     await expect(page.locator("#setupModal")).not.toHaveClass(/active/);
+    await completeRequiredPushGate(page);
     return;
   }
 
@@ -76,7 +77,18 @@ async function ensureAdminSession(page) {
     await page.locator("#loginPassword").fill("pass123");
     await page.locator("#loginForm button[type='submit']").click();
     await expect(page.locator("#authModal")).not.toHaveClass(/active/);
+    await completeRequiredPushGate(page);
   }
+}
+
+async function completeRequiredPushGate(page) {
+  if (!(await page.locator("#pushGateModal.active").isVisible())) return;
+  await expect(page.locator("#pushGateTitle")).toContainText("ფუშ შეტყობინებები აუცილებელია");
+  await page.evaluate(() => {
+    window.registerRequiredPushForCurrentDevice = async () => true;
+  });
+  await page.locator("#pushGateEnableButton").click();
+  await expect(page.locator("#pushGateModal")).not.toHaveClass(/active/);
 }
 
 test("admin app shell keeps the map and opens the push list", async ({ page }) => {
@@ -91,8 +103,10 @@ test("admin app shell keeps the map and opens the push list", async ({ page }) =
   await page.locator("#setupForm button[type='submit']").click();
 
   await expect(page.locator("#setupModal")).not.toHaveClass(/active/);
+  await completeRequiredPushGate(page);
   await expect(page.locator("#actionPanel")).toBeVisible();
   await expect(page.locator("#actionPanel")).toContainText("ფუშები");
+  await expect(page.locator("#actionPanel [data-action='enablePush']")).toHaveCount(0);
 
   await page.locator("#actionPanel [data-action='pushInbox']").click();
   await expect(page.locator("#dialogModal")).toHaveClass(/active/);

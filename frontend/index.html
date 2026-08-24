@@ -18,14 +18,14 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js" defer></script>
   <script src="js/config.js?v=5" defer></script>
-  <script src="js/state.js?v=14" defer></script>
+  <script src="js/state.js?v=15" defer></script>
   <script src="js/utils.js?v=8" defer></script>
   <script src="js/storage.js?v=9" defer></script>
-  <script src="js/notifications.js?v=28" defer></script>
+  <script src="js/notifications.js?v=29" defer></script>
   <script src="js/api.js?v=31" defer></script>
   <script src="js/address-directory.js?v=13" defer></script>
   <script src="js/map.js?v=15" defer></script>
-  <script src="js/auth.js?v=11" defer></script>
+  <script src="js/auth.js?v=12" defer></script>
   <script src="js/zones.js?v=3" defer></script>
   <script src="js/photo-import.js?v=1" defer></script>
   <script src="js/parcels.js?v=27" defer></script>
@@ -35,7 +35,7 @@
   <script src="js/finance.js?v=21" defer></script>
   <script src="js/history.js?v=8" defer></script>
   <script src="js/tariffs.js?v=2" defer></script>
-  <script src="js/app.js?v=40" defer></script>
+  <script src="js/app.js?v=42" defer></script>
 </head>
 <body class="auth-loading">
   <main class="app-shell" aria-label="საკურიერო რუკა">
@@ -195,6 +195,20 @@
       <button id="backToLoginButton" class="link-button" type="button">შესვლაზე დაბრუნება</button>
       <p id="regError" class="form-message" role="alert"></p>
     </form>
+  </section>
+
+  <section id="pushGateModal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="pushGateTitle">
+    <div class="modal-card">
+      <h2 id="pushGateTitle">ფუშ შეტყობინებები აუცილებელია</h2>
+      <div class="dialog-body">
+        <p>აპლიკაციაში მუშაობისთვის ფუშ შეტყობინებები უნდა იყოს ჩართული ამ მოწყობილობაზე.</p>
+        <p id="pushGateMessage" class="form-message" role="alert"></p>
+      </div>
+      <div class="dialog-actions">
+        <button id="pushGateEnableButton" class="button primary" type="button">ფუშების ჩართვა</button>
+        <button id="pushGateLogoutButton" class="button secondary" type="button">გასვლა</button>
+      </div>
+    </div>
   </section>
 
   <section id="dialogModal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="dialogTitle">
