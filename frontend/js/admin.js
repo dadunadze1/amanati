@@ -81,17 +81,63 @@ async function openDeviceRecoveryDialog() {
   `;
   showDialog("მონაცემების გადარჩენა", body, [
     { label: "ატვირთვა", variant: "primary", action: recoverDeviceStaticData },
+    { label: "ექსპორტი", variant: "secondary", action: exportDeviceRecoveryData },
     { label: "გაუქმება", variant: "secondary", action: closeDialog },
   ]);
 }
 
 async function recoverDeviceStaticData() {
   const message = document.getElementById("deviceRecoveryMessage");
-  if (message) message.textContent = "იტვირთება Firebase-ში...";
-  const result = await recoverLocalStaticStoreToFirebase();
-  closeDialog();
-  await refreshPins().catch((error) => console.warn("Recovery refresh failed", error));
-  showToast(`აიტვირთა: ${result.after.parcels} აქტიური პინი, ${result.after.history} ისტორია.`);
+  try {
+    if (message) message.textContent = "იტვირთება Firebase-ში...";
+    const result = await recoverLocalStaticStoreToFirebase();
+    closeDialog();
+    await refreshPins().catch((error) => console.warn("Recovery refresh failed", error));
+    showToast(`აიტვირთა: ${result.after.parcels} აქტიური პინი, ${result.after.history} ისტორია.`);
+  } catch (error) {
+    console.warn("Device recovery upload failed", error);
+    if (message) message.textContent = error.message || "Firebase-ში ატვირთვა ვერ მოხერხდა. სცადეთ ექსპორტი.";
+  }
+}
+
+async function exportDeviceRecoveryData() {
+  const message = document.getElementById("deviceRecoveryMessage");
+  try {
+    const store = getLocalStaticRecoveryStore();
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      source: "device-recovery",
+      summary: getStaticStoreRecoverySummary(store),
+      store,
+    };
+    const json = JSON.stringify(payload);
+    const fileName = `amanati-recovery-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    const blob = new Blob([json], { type: "application/json" });
+    const file = typeof File === "function" ? new File([blob], fileName, { type: "application/json" }) : null;
+
+    if (file && navigator.canShare?.({ files: [file] }) && navigator.share) {
+      await navigator.share({ files: [file], title: "Amanati recovery data" });
+      if (message) message.textContent = "ექსპორტი გაიგზავნა Share მენიუში.";
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 15000);
+
+    if (navigator.clipboard?.writeText && json.length < 1000000) {
+      await navigator.clipboard.writeText(json).catch(() => {});
+    }
+    if (message) message.textContent = `ექსპორტი მომზადდა: ${fileName}`;
+  } catch (error) {
+    console.warn("Device recovery export failed", error);
+    if (message) message.textContent = error.message || "ექსპორტი ვერ მოხერხდა.";
+  }
 }
 
 
