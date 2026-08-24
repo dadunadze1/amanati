@@ -81,10 +81,7 @@ function mergeStaticStores(...stores) {
       .filter((user) => !isDemoStaticUser(user));
     const parcels = (Array.isArray(store.parcels) ? store.parcels : []).filter((parcel) => !isDemoStaticParcel(parcel)).map(normalizeStaticParcelFinance);
     const history = (Array.isArray(store.history) ? store.history : []).filter((parcel) => !isDemoStaticParcel(parcel)).map(normalizeStaticParcelFinance);
-    const adminNotifications = {
-      ...(merged.adminNotifications && typeof merged.adminNotifications === "object" ? merged.adminNotifications : {}),
-      ...(store.adminNotifications && typeof store.adminNotifications === "object" ? store.adminNotifications : {}),
-    };
+    const adminNotifications = mergeStaticAdminNotifications(merged.adminNotifications, store.adminNotifications);
 
     return {
       users: mergeStaticRecordsByKey(merged.users, users, getStaticUserKey, resolveStaticUserRecord),
@@ -240,6 +237,42 @@ function mergeStaticFinanceData(baseFinance, nextFinance) {
     payAdjustments: mergeStaticRecordsByKey(base.payAdjustments, next.payAdjustments, getStaticAdjustmentKey),
     dailyBalanceLedger: mergeStaticRecordsByKey(base.dailyBalanceLedger, next.dailyBalanceLedger, getStaticAdjustmentKey),
   };
+}
+
+function mergeStaticAdminNotifications(baseNotifications, nextNotifications) {
+  const merged = { ...(baseNotifications && typeof baseNotifications === "object" ? baseNotifications : {}) };
+  const next = nextNotifications && typeof nextNotifications === "object" ? nextNotifications : {};
+  Object.entries(next).forEach(([key, notification]) => {
+    if (!notification || typeof notification !== "object") return;
+    const current = merged[key];
+    merged[key] = current ? resolveStaticAdminNotificationRecord(current, notification) : notification;
+  });
+  return merged;
+}
+
+function resolveStaticAdminNotificationRecord(current, next) {
+  const currentStatusRank = getStaticNotificationStatusRank(current?.deliveryStatus);
+  const nextStatusRank = getStaticNotificationStatusRank(next?.deliveryStatus);
+  if (currentStatusRank !== nextStatusRank) {
+    return currentStatusRank > nextStatusRank ? { ...next, ...current } : { ...current, ...next };
+  }
+  const currentTime = getStaticRecordTimestamp(current, ["sentAt", "updatedAt", "lastAttemptAt", "createdAt"]);
+  const nextTime = getStaticRecordTimestamp(next, ["sentAt", "updatedAt", "lastAttemptAt", "createdAt"]);
+  const primary = nextTime >= currentTime ? next : current;
+  const secondary = primary === next ? current : next;
+  return {
+    ...secondary,
+    ...primary,
+    attempts: Math.max(Number(current?.attempts || 0), Number(next?.attempts || 0)),
+  };
+}
+
+function getStaticNotificationStatusRank(status) {
+  const value = String(status || "pending");
+  if (value === "sent") return 4;
+  if (value === "processing") return 3;
+  if (value === "failed") return 2;
+  return 1;
 }
 
 function clearLegacyStaticBootstrapStores() {
@@ -912,14 +945,9 @@ function staticPickupVisibleAfterAck(parcel, acknowledgedAt) {
 }
 
 function getStaticActivePartnerPickupParcels(store, partner, acknowledgedAt = partner?.lastPickupAcknowledgedAt || "") {
-  const partnerId = partner?.id || partner?.username || "";
-  const username = normalizeUsername(partner?.username);
   return (Array.isArray(store.parcels) ? store.parcels : [])
     .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && !isPickedUpStaticPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
-    .filter((parcel) => (
-      (partnerId && parcel.partnerId === partnerId)
-      || (username && normalizeUsername(parcel.partnerUsername) === username)
-    ))
+    .filter((parcel) => staticParcelBelongsToPartner(parcel, partner))
     .filter((parcel) => staticPickupVisibleAfterAck(parcel, acknowledgedAt));
 }
 
@@ -936,6 +964,8 @@ function buildStaticActivePartnerPickupParcelGroups(store) {
     .filter((parcel) => !parcel.archivedAt && !isStaticDeletedParcel(parcel) && !isPickedUpStaticPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
     .forEach((parcel) => {
       addStaticPartnerPickupParcelGroup(groups, parcel.partnerId, parcel);
+      const partnerIdUsername = normalizeUsername(parcel.partnerId);
+      if (partnerIdUsername) addStaticPartnerPickupParcelGroup(groups, `username:${partnerIdUsername}`, parcel);
       const username = normalizeUsername(parcel.partnerUsername);
       if (username) addStaticPartnerPickupParcelGroup(groups, `username:${username}`, parcel);
     });
@@ -1042,10 +1072,7 @@ function canDeleteStaticParcel(parcel) {
   const partner = state.currentUserProfile || {};
   return Boolean(
     isStaticPartnerParcel(parcel)
-    && (
-      (partner.id && parcel.partnerId === partner.id)
-      || normalizeUsername(parcel.partnerUsername) === normalizeUsername(partner.username || state.currentUser)
-    )
+    && staticParcelBelongsToPartner(parcel, partner)
   );
 }
 
@@ -1202,6 +1229,26 @@ function normalizeStaticAddressLookupToken(value) {
 
 function isStaticPartnerParcel(parcel) {
   return Boolean(parcel?.partnerId || parcel?.partnerUsername || parcel?.createdByRole === "partner");
+}
+
+function staticParcelBelongsToPartner(parcel, partner = {}) {
+  if (!parcel || !partner) return false;
+  const id = String(partner.id || "").trim();
+  const username = String(partner.username || state.currentUser || "").trim();
+  const partnerId = String(parcel.partnerId || "").trim();
+  const partnerUsername = String(parcel.partnerUsername || "").trim();
+  return Boolean(
+    (id && (partnerId === id || normalizeUsername(partnerUsername) === normalizeUsername(id)))
+    || (username && (normalizeUsername(partnerId) === normalizeUsername(username) || normalizeUsername(partnerUsername) === normalizeUsername(username)))
+  );
+}
+
+function staticParcelMatchesPartnerFilter(parcel, partnerId) {
+  const value = String(partnerId || "").trim();
+  if (!value) return true;
+  return String(parcel?.partnerId || "") === value
+    || normalizeUsername(parcel?.partnerId) === normalizeUsername(value)
+    || normalizeUsername(parcel?.partnerUsername) === normalizeUsername(value);
 }
 
 function hasStaticParcelCoords(parcel) {
@@ -1435,8 +1482,8 @@ async function staticApi(path, options = {}) {
     const parcels = store.parcels
       .filter((parcel) => {
         if (parcel.archivedAt || isStaticDeletedParcel(parcel)) return false;
-        if (state.isPartner) return parcel.partnerId === state.currentUserProfile?.id;
-        if (partnerId && parcel.partnerId !== partnerId) return false;
+        if (state.isPartner) return staticParcelBelongsToPartner(parcel, state.currentUserProfile || {});
+        if (!staticParcelMatchesPartnerFilter(parcel, partnerId)) return false;
         return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
       })
       .map((parcel) => publicStaticParcel(store, parcel));
@@ -1447,6 +1494,7 @@ async function staticApi(path, options = {}) {
     const courier = url.searchParams.get("courier") || "";
     const history = mergeStaticRecordsByKey([], [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)], getStaticParcelKey, resolveStaticParcelRecord)
       .filter((parcel) => !isStaticDeletedParcel(parcel))
+      .filter((parcel) => !state.isPartner || staticParcelBelongsToPartner(parcel, state.currentUserProfile || {}))
       .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
       .map((parcel) => publicStaticParcel(store, parcel));
     return staticPaginatedPayload("history", history, getStaticPaginationOptions(url));

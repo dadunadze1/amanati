@@ -180,11 +180,13 @@ async function saveFirebaseStaticStore(store) {
   try {
     const storeJson = JSON.stringify(store);
     if (storeJson && storeJson === lastFirebaseStoreJson) return true;
-    lastFirebaseStoreJson = storeJson;
-    await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).set({
-      ...buildFirebaseStaticStorePayload(store),
-      updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    const docRef = db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC);
+    const savedStore = await saveFirebaseStaticStoreTransaction(db, docRef, store);
+    lastFirebaseStoreJson = JSON.stringify(savedStore || store);
+    if (savedStore && typeof loadStaticBootstrap === "function" && loadStaticBootstrap.cache) {
+      loadStaticBootstrap.cache = savedStore;
+      saveData(STATIC_DEPLOY_STORAGE_KEY, savedStore);
+    }
     console.log("[firebase] static store saved");
     markFirebaseSyncOk();
     return true;
@@ -193,6 +195,27 @@ async function saveFirebaseStaticStore(store) {
     markFirebaseSyncIssue("Firebase-ში შენახვა ვერ მოხერხდა. ცვლილება ამ მოწყობილობაზე დარჩა.");
     return false;
   }
+}
+
+async function saveFirebaseStaticStoreTransaction(db, docRef, store) {
+  if (typeof mergeStaticStores !== "function" || typeof normalizeStaticStore !== "function") {
+    await docRef.set({
+      ...buildFirebaseStaticStorePayload(store),
+      updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return store;
+  }
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(docRef);
+    const remoteStore = snapshot.exists ? extractFirebaseStaticStore(snapshot.data() || {}) : {};
+    const mergedStore = normalizeStaticStore(mergeStaticStores(remoteStore, store));
+    transaction.set(docRef, {
+      ...buildFirebaseStaticStorePayload(mergedStore),
+      updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return mergedStore;
+  });
 }
 
 async function startFirebaseStaticStoreListener(onStoreChange) {

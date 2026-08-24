@@ -166,6 +166,7 @@ function renderActions() {
         state.adminDashboardHidden
           ? ["showAdminDashboard", "შეჯამება", "▥", "შეჯამების ბარის გახსნა"]
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
+        ["enablePush", "ფუშის ჩართვა", "●", "ამ მოწყობილობაზე ფუშების ჩართვა"],
         ["pushInbox", "ფუშები", "✉", "გაგზავნილი შეტყობინებები"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
@@ -175,6 +176,7 @@ function renderActions() {
   ];
   const partnerActions = [
     ["partnerNewOrder", "ახალი", "+"],
+    ["enablePush", "ფუში", "●"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
@@ -189,6 +191,7 @@ function renderActions() {
       : [
         ["courierParcels", "ჩემი ამანათები", "□"],
         ["history", "ისტორია", "↺"],
+        ["enablePush", "ფუში", "●"],
         ["logout", "გასვლა", "←"],
       ];
 
@@ -817,12 +820,22 @@ async function openInitialPushRouteIfNeeded() {
 }
 
 
+async function enablePushNotificationsForCurrentDevice() {
+  if (typeof requestAdminPushNotifications !== "function") {
+    showToast("ფუშების ჩართვა ამ ვერსიაში ხელმისაწვდომი არ არის.");
+    return false;
+  }
+  return requestAdminPushNotifications();
+}
+
+
 async function handleAction(action, value, sourceElement) {
   closeActions();
   closeAdminPinContextForAction(action);
 
   const handlers = {
     pending: openPendingRequests,
+    enablePush: enablePushNotificationsForCurrentDevice,
     adminRegister: openAdminRegisterDialog,
     adminStats: openAdminStatsUsers,
     pushInbox: openPushInboxDialog,

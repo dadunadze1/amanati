@@ -57,7 +57,8 @@ async function activatePushForAuthorizedUser() {
     state.adminPushStatus = "denied";
     return false;
   }
-  return requestAdminPushNotifications({ silent: true });
+  state.adminPushStatus = "permission-needed";
+  return false;
 }
 
 async function requestAdminPushNotifications(options = {}) {
@@ -87,7 +88,7 @@ async function requestAdminPushNotifications(options = {}) {
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=24", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=25", { scope: "./" });
     await registration.update().catch(() => {});
     const subscription = await createAdminStandardWebPushSubscription(registration);
 

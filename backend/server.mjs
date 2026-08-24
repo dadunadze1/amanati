@@ -399,14 +399,9 @@ function isPickupVisibleAfterAck(parcel, acknowledgedAt) {
 }
 
 function getActivePartnerPickupParcels(db, partner, acknowledgedAt = partner?.lastPickupAcknowledgedAt || "") {
-  const partnerId = partnerCashIdentity(partner);
-  const username = normalizeUsername(partner?.username);
   return db.parcels
     .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && !isPickedUpPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
-    .filter((parcel) => (
-      (partnerId && parcel.partnerId === partnerId)
-      || (username && normalizeUsername(parcel.partnerUsername) === username)
-    ))
+    .filter((parcel) => parcelBelongsToPartner(parcel, partner))
     .filter((parcel) => isPickupVisibleAfterAck(parcel, acknowledgedAt));
 }
 
@@ -423,6 +418,8 @@ function buildActivePartnerPickupParcelGroups(db) {
     .filter((parcel) => !parcel.archivedAt && !isDeletedParcel(parcel) && !isPickedUpPartnerParcel(parcel) && parcel.status !== "delivered" && parcel.status !== "failed")
     .forEach((parcel) => {
       addPartnerPickupParcelGroup(groups, parcel.partnerId, parcel);
+      const partnerIdUsername = normalizeUsername(parcel.partnerId);
+      if (partnerIdUsername) addPartnerPickupParcelGroup(groups, `username:${partnerIdUsername}`, parcel);
       const username = normalizeUsername(parcel.partnerUsername);
       if (username) addPartnerPickupParcelGroup(groups, `username:${username}`, parcel);
     });
@@ -868,9 +865,17 @@ function parcelBelongsToPartner(parcel, partner) {
   const partnerId = partnerCashIdentity(partner);
   const username = partner.username || "";
   return Boolean(
-    (partnerId && parcel.partnerId === partnerId)
-    || (username && normalizeUsername(parcel.partnerUsername) === normalizeUsername(username))
+    (partnerId && (parcel.partnerId === partnerId || normalizeUsername(parcel.partnerUsername) === normalizeUsername(partnerId)))
+    || (username && (normalizeUsername(parcel.partnerId) === normalizeUsername(username) || normalizeUsername(parcel.partnerUsername) === normalizeUsername(username)))
   );
+}
+
+function parcelMatchesPartnerFilter(parcel, partnerId) {
+  const value = String(partnerId || "").trim();
+  if (!value) return true;
+  return String(parcel?.partnerId || "") === value
+    || normalizeUsername(parcel?.partnerId) === normalizeUsername(value)
+    || normalizeUsername(parcel?.partnerUsername) === normalizeUsername(value);
 }
 
 function canDeleteParcel(session, db, parcel) {
@@ -1652,7 +1657,7 @@ async function handleApi(request, response, url) {
     }
     user.updatedAt = new Date().toISOString();
     db.parcels.forEach((parcel) => {
-      if (parcel.partnerId === user.id || normalizeUsername(parcel.partnerUsername) === normalizeUsername(user.username)) {
+      if (parcelBelongsToPartner(parcel, user)) {
         parcel.partnerName = partnerDisplayName(user);
       }
     });
@@ -1786,8 +1791,8 @@ async function handleApi(request, response, url) {
     const parcels = db.parcels
       .filter((parcel) => {
         if (parcel.archivedAt || isDeletedParcel(parcel)) return false;
-        if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
-        if (session.role === "admin" && partnerId && parcel.partnerId !== partnerId) return false;
+        if (session.role === "partner") return parcelBelongsToPartner(parcel, partnerUser);
+        if (session.role === "admin" && !parcelMatchesPartnerFilter(parcel, partnerId)) return false;
         return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
       })
       .map((parcel) => publicParcel(db, parcel));
@@ -2107,7 +2112,7 @@ async function handleApi(request, response, url) {
       .filter((parcel) => {
         if (!parcel.archivedAt) return false;
         if (isDeletedParcel(parcel)) return false;
-        if (session.role === "partner") return parcel.partnerId === partnerUser?.id;
+        if (session.role === "partner") return parcelBelongsToPartner(parcel, partnerUser);
         return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
       })
       .map((parcel) => publicParcel(db, parcel));

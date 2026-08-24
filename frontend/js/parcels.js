@@ -129,7 +129,8 @@ function parcelBelongsToCurrentPartner(parcel) {
   if (!parcel || !state.isPartner) return false;
   const partner = state.currentUserProfile || {};
   return Boolean(
-    (partner.id && parcel.partnerId === partner.id)
+    (partner.id && (parcel.partnerId === partner.id || normalizeUsername(parcel.partnerUsername) === normalizeUsername(partner.id)))
+    || normalizeUsername(parcel.partnerId) === normalizeUsername(partner.username || state.currentUser)
     || normalizeUsername(parcel.partnerUsername) === normalizeUsername(partner.username || state.currentUser)
   );
 }
