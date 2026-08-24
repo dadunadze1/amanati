@@ -36,6 +36,15 @@ const NOTIFICATION_TITLE_PREFIXES = {
 const VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate";
 const MAX_STICKER_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
 const googleAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+
+class NoPushDevicesError extends Error {
+  constructor(notification) {
+    super("push-no-devices-registered");
+    this.code = "push-no-devices-registered";
+    this.noDevices = true;
+    this.notificationId = notification?.id || "";
+  }
+}
 const ALLOWED_ORIGINS = new Set([
   "https://dadunadze1.github.io",
   "https://dadunadze1.github.io/amanati",
@@ -101,6 +110,11 @@ exports.sendAdminNotification = onDocumentCreated({
     await markAdminNotificationSent(notification, result);
     await markAdminNotificationDocument(event.data.ref, "sent", result);
   } catch (error) {
+    if (isNoPushDevicesError(error)) {
+      await markAdminNotificationDeferred(notification, error);
+      await markAdminNotificationDocument(event.data.ref, "pending", { noDevices: true }, error);
+      return;
+    }
     await markAdminNotificationFailed(notification, error);
     await markAdminNotificationDocument(event.data.ref, "failed", {}, error);
     throw error;
@@ -123,8 +137,8 @@ exports.retryStaticStorePushNotifications = onSchedule({
   secrets: [WEB_PUSH_PRIVATE_KEY],
 }, async () => {
   const snapshot = await db.doc(STATIC_STORE_REF).get();
-  if (!snapshot.exists) return;
-  await processStaticStoreNotifications(snapshot.data() || {}, {});
+  if (snapshot.exists) await processStaticStoreNotifications(snapshot.data() || {}, {});
+  await processAdminNotificationCollection();
 });
 
 async function processStaticStoreNotifications(after, before = {}) {
@@ -156,9 +170,12 @@ async function processStaticStoreNotifications(after, before = {}) {
       sentUpdates[`adminNotifications.${notification.id}.nextAttemptAt`] = FieldValue.delete();
       sentUpdates[`adminNotifications.${notification.id}.updatedAt`] = new Date().toISOString();
     } catch (error) {
-      await markAdminNotificationFailed(notification, error);
-      const finalFailure = attempt >= PUSH_MAX_ATTEMPTS;
+      const noDevices = isNoPushDevicesError(error);
+      if (noDevices) await markAdminNotificationDeferred(notification, error);
+      else await markAdminNotificationFailed(notification, error);
+      const finalFailure = !noDevices && attempt >= PUSH_MAX_ATTEMPTS;
       sentUpdates[`adminNotifications.${notification.id}.deliveryStatus`] = finalFailure ? "failed" : "pending";
+      sentUpdates[`adminNotifications.${notification.id}.attempts`] = noDevices ? Number(notification.attempts || 0) : attempt;
       sentUpdates[`adminNotifications.${notification.id}.lastError`] = getErrorMessage(error);
       sentUpdates[`adminNotifications.${notification.id}.nextAttemptAt`] = finalFailure ? FieldValue.delete() : new Date(Date.now() + PUSH_RETRY_DELAY_MS).toISOString();
       sentUpdates[`adminNotifications.${notification.id}.updatedAt`] = new Date().toISOString();
@@ -168,12 +185,52 @@ async function processStaticStoreNotifications(after, before = {}) {
   if (Object.keys(sentUpdates).length) await db.doc(STATIC_STORE_REF).set(sentUpdates, { merge: true });
 }
 
+async function processAdminNotificationCollection() {
+  const snapshot = await db.collection(ADMIN_NOTIFICATION_COLLECTION).limit(100).get().catch((error) => {
+    logger.warn("Admin notification retry collection read failed", error);
+    return null;
+  });
+  if (!snapshot || snapshot.empty) return;
+
+  for (const doc of snapshot.docs) {
+    const raw = doc.data() || {};
+    if (!shouldProcessCollectionNotification(doc.id, raw)) continue;
+    const notification = normalizeNotification(raw, doc.id);
+    if (!notification) continue;
+    if (!(await claimAdminNotificationSend(notification))) continue;
+    const attempt = Number(notification.attempts || 0) + 1;
+    await doc.ref.set({
+      deliveryStatus: "processing",
+      attempts: attempt,
+      lastAttemptAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    try {
+      const result = await sendToAdminDevices(notification);
+      await markAdminNotificationSent(notification, result);
+      await markAdminNotificationDocument(doc.ref, "sent", result);
+    } catch (error) {
+      const noDevices = isNoPushDevicesError(error);
+      if (noDevices) await markAdminNotificationDeferred(notification, error);
+      else await markAdminNotificationFailed(notification, error);
+      const finalFailure = !noDevices && attempt >= PUSH_MAX_ATTEMPTS;
+      await doc.ref.set({
+        deliveryStatus: finalFailure ? "failed" : "pending",
+        attempts: noDevices ? Number(notification.attempts || 0) : attempt,
+        lastError: getErrorMessage(error),
+        nextAttemptAt: finalFailure ? FieldValue.delete() : new Date(Date.now() + PUSH_RETRY_DELAY_MS).toISOString(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  }
+}
+
 async function sendToAdminDevices(notification) {
   const tokens = await loadAdminPushTokens(notification);
   const subscriptions = await loadAdminWebPushSubscriptions(notification);
   if (!tokens.length && !subscriptions.length) {
     logger.warn("No push devices registered", { notificationId: notification.id, partnerId: notification.partnerId });
-    return { fcmSuccessCount: 0, fcmFailureCount: 0, webPushSuccessCount: 0, webPushFailureCount: 0, noDevices: true };
+    throw new NoPushDevicesError(notification);
   }
 
   let fcmResult = { successCount: 0, failureCount: 0 };
@@ -262,6 +319,14 @@ async function markAdminNotificationFailed(notification, error) {
   }, { merge: true });
 }
 
+async function markAdminNotificationDeferred(notification, error) {
+  await db.collection("adminNotificationSendLocks").doc(notification.id).set({
+    deferredAt: FieldValue.serverTimestamp(),
+    processingAt: FieldValue.delete(),
+    lastError: getErrorMessage(error),
+  }, { merge: true });
+}
+
 async function markAdminNotificationDocument(ref, deliveryStatus, result = {}, error = null) {
   if (!ref) return;
   const payload = {
@@ -276,6 +341,11 @@ async function markAdminNotificationDocument(ref, deliveryStatus, result = {}, e
   if (deliveryStatus === "failed") {
     payload.failedAt = FieldValue.serverTimestamp();
     payload.lastError = getErrorMessage(error);
+    payload.deliveryResult = result;
+  }
+  if (deliveryStatus === "pending") {
+    payload.lastError = error ? getErrorMessage(error) : FieldValue.delete();
+    payload.nextAttemptAt = new Date(Date.now() + PUSH_RETRY_DELAY_MS).toISOString();
     payload.deliveryResult = result;
   }
   await ref.set(payload, { merge: true }).catch((writeError) => {
@@ -464,6 +534,20 @@ function shouldProcessStaticNotification(id, value, sent = {}, beforeSent = {}) 
   return !Number.isFinite(nextAttemptMs) || nextAttemptMs <= Date.now();
 }
 
+function shouldProcessCollectionNotification(id, value) {
+  if (!id || !value || typeof value !== "object") return false;
+  const deliveryStatus = String(value.deliveryStatus || "pending");
+  if (deliveryStatus === "sent" || deliveryStatus === "failed") return false;
+  if (deliveryStatus === "processing") {
+    const processingMs = getTimestampMs(value.updatedAt || value.lastAttemptAt);
+    if (!Number.isFinite(processingMs) || Date.now() - processingMs < PUSH_LOCK_STALE_MS) return false;
+  }
+  const attempts = Number(value.attempts || 0);
+  if (Number.isFinite(attempts) && attempts >= PUSH_MAX_ATTEMPTS) return false;
+  const nextAttemptMs = getTimestampMs(value.nextAttemptAt);
+  return !Number.isFinite(nextAttemptMs) || nextAttemptMs <= Date.now();
+}
+
 function getTimestampMs(value) {
   if (!value) return 0;
   if (typeof value.toMillis === "function") return value.toMillis();
@@ -474,6 +558,10 @@ function getTimestampMs(value) {
 
 function getErrorMessage(error) {
   return String(error?.message || error?.code || error || "unknown-error").slice(0, 500);
+}
+
+function isNoPushDevicesError(error) {
+  return Boolean(error?.noDevices || error?.code === "push-no-devices-registered" || error?.message === "push-no-devices-registered");
 }
 
 async function deactivateInvalidTokens(tokens, responses) {
