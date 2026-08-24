@@ -8,6 +8,10 @@ service cloud.firestore {
 
     match /deliveryApp/staticStore {
       allow read, write: if signedIn();
+
+      match /segments/{segmentId} {
+        allow read, write: if signedIn();
+      }
     }
 
     match /adminPushTokens/{tokenId} {

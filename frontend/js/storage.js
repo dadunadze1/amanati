@@ -2,6 +2,7 @@
 
 const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
+const FIREBASE_STATIC_STORE_SEGMENTS_COLLECTION = "segments";
 const FIREBASE_STATIC_STORE_SPLIT_KEYS = ["users", "pending", "parcels", "history", "zones", "financeData", "adminNotifications", "settings"];
 const FIREBASE_SYNC_TOAST_THROTTLE_MS = 60 * 1000;
 const FIREBASE_SYNC_TIMEOUT_MS = 12000;
@@ -99,14 +100,36 @@ function extractFirebaseStaticStore(data = {}) {
 
 function buildFirebaseStaticStorePayload(store) {
   const payload = {
-    store,
-    storeSchemaVersion: 2,
+    storeSchemaVersion: 3,
     storeUpdatedAt: new Date().toISOString(),
   };
-  FIREBASE_STATIC_STORE_SPLIT_KEYS.forEach((key) => {
-    if (store[key] !== undefined) payload[key] = store[key];
-  });
   return payload;
+}
+
+function buildFirebaseStaticStoreSegmentPayload(key, store) {
+  return {
+    key,
+    value: store?.[key],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function getFirebaseStaticStoreSegmentRef(docRef, key) {
+  return docRef.collection(FIREBASE_STATIC_STORE_SEGMENTS_COLLECTION).doc(key);
+}
+
+function mergeFirebaseSegmentStore(baseStore, segmentSnapshots = []) {
+  const segmentStore = {};
+  let hasSegments = false;
+  segmentSnapshots.forEach((snapshot) => {
+    if (!snapshot?.exists) return;
+    const data = snapshot.data() || {};
+    const key = data.key || snapshot.id;
+    if (!FIREBASE_STATIC_STORE_SPLIT_KEYS.includes(key)) return;
+    segmentStore[key] = data.value;
+    hasSegments = true;
+  });
+  return hasSegments ? { ...baseStore, ...segmentStore } : baseStore;
 }
 
 async function initializeFirebaseStorage() {
@@ -157,13 +180,18 @@ async function loadFirebaseStaticStore(options = {}) {
   }
 
   try {
-    const snapshot = await withFirebaseTimeout(db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).get(), "Firebase load");
+    const docRef = db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC);
+    const snapshot = await withFirebaseTimeout(docRef.get(), "Firebase load");
     if (!snapshot.exists) {
       console.log("[firebase] static store empty");
       return null;
     }
     const data = snapshot.data() || {};
-    const store = extractFirebaseStaticStore(data);
+    const segmentSnapshots = await withFirebaseTimeout(
+      Promise.all(FIREBASE_STATIC_STORE_SPLIT_KEYS.map((key) => getFirebaseStaticStoreSegmentRef(docRef, key).get())),
+      "Firebase segments load",
+    );
+    const store = mergeFirebaseSegmentStore(extractFirebaseStaticStore(data), segmentSnapshots);
     lastFirebaseStoreJson = JSON.stringify(store);
     console.log("[firebase] static store loaded");
     markFirebaseSyncOk();
@@ -212,21 +240,37 @@ async function saveFirebaseStaticStore(store, options = {}) {
 
 async function saveFirebaseStaticStoreTransaction(db, docRef, store) {
   if (typeof mergeStaticStores !== "function" || typeof normalizeStaticStore !== "function") {
-    await docRef.set({
+    const batch = db.batch();
+    batch.set(docRef, {
       ...buildFirebaseStaticStorePayload(store),
+      store: window.firebase.firestore.FieldValue.delete(),
+      ...Object.fromEntries(FIREBASE_STATIC_STORE_SPLIT_KEYS.map((key) => [key, window.firebase.firestore.FieldValue.delete()])),
       updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+    FIREBASE_STATIC_STORE_SPLIT_KEYS.forEach((key) => {
+      batch.set(getFirebaseStaticStoreSegmentRef(docRef, key), buildFirebaseStaticStoreSegmentPayload(key, store), { merge: true });
+    });
+    await batch.commit();
     return store;
   }
 
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(docRef);
-    const remoteStore = snapshot.exists ? extractFirebaseStaticStore(snapshot.data() || {}) : {};
+    const segmentRefs = FIREBASE_STATIC_STORE_SPLIT_KEYS.map((key) => getFirebaseStaticStoreSegmentRef(docRef, key));
+    const segmentSnapshots = await Promise.all(segmentRefs.map((ref) => transaction.get(ref)));
+    const remoteStore = snapshot.exists
+      ? mergeFirebaseSegmentStore(extractFirebaseStaticStore(snapshot.data() || {}), segmentSnapshots)
+      : mergeFirebaseSegmentStore({}, segmentSnapshots);
     const mergedStore = normalizeStaticStore(mergeStaticStores(remoteStore, store));
     transaction.set(docRef, {
       ...buildFirebaseStaticStorePayload(mergedStore),
+      store: window.firebase.firestore.FieldValue.delete(),
+      ...Object.fromEntries(FIREBASE_STATIC_STORE_SPLIT_KEYS.map((key) => [key, window.firebase.firestore.FieldValue.delete()])),
       updatedAt: window.firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+    FIREBASE_STATIC_STORE_SPLIT_KEYS.forEach((key, index) => {
+      transaction.set(segmentRefs[index], buildFirebaseStaticStoreSegmentPayload(key, mergedStore), { merge: true });
+    });
     return mergedStore;
   });
 }
@@ -239,11 +283,13 @@ async function startFirebaseStaticStoreListener(onStoreChange) {
   firebaseStoreUnsubscribe = db
     .collection(FIREBASE_STATIC_STORE_COLLECTION)
     .doc(FIREBASE_STATIC_STORE_DOC)
-    .onSnapshot((snapshot) => {
+    .onSnapshot(async (snapshot) => {
       if (snapshot.metadata?.hasPendingWrites) return;
       if (!snapshot.exists) return;
       const data = snapshot.data() || {};
-      const store = extractFirebaseStaticStore(data);
+      const docRef = db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC);
+      const segmentSnapshots = await Promise.all(FIREBASE_STATIC_STORE_SPLIT_KEYS.map((key) => getFirebaseStaticStoreSegmentRef(docRef, key).get()));
+      const store = mergeFirebaseSegmentStore(extractFirebaseStaticStore(data), segmentSnapshots);
       const storeJson = JSON.stringify(store);
       if (!storeJson || storeJson === lastFirebaseStoreJson) return;
       lastFirebaseStoreJson = storeJson;
