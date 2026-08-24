@@ -4,7 +4,7 @@
 
 const CLIENT_ERROR_STORAGE_KEY = "deliveryClientErrors:v1";
 const CLIENT_ERROR_LIMIT = 25;
-const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=24";
+const APP_SERVICE_WORKER_URL = "./firebase-messaging-sw.js?v=25";
 const ADMIN_AUTO_REFRESH_MS = 30000;
 
 function cacheElements() {
@@ -168,6 +168,7 @@ function renderActions() {
           : ["hideAdminDashboard", "შეჯამება", "▤", "შეჯამების ბარის დახურვა"],
         ["enablePush", "ფუშის ჩართვა", "●", "ამ მოწყობილობაზე ფუშების ჩართვა"],
         ["pushInbox", "ფუშები", "✉", "გაგზავნილი შეტყობინებები"],
+        ["recoverDeviceSync", "გადარჩენა", "⇧", "ამ მოწყობილობის მონაცემების საერთო ბაზაში ატვირთვა"],
         ...(CONFIG.enableCourierLiveTracking === false ? [] : [["liveCouriers", "Live სია", "●", "კურიერების live სტატუსი"]]),
         ["changePassword", "პაროლი", "⚙", "პაროლის შეცვლა"],
         ["logout", "გასვლა", "←", "სისტემიდან გასვლა"],
@@ -839,6 +840,7 @@ async function handleAction(action, value, sourceElement) {
     adminRegister: openAdminRegisterDialog,
     adminStats: openAdminStatsUsers,
     pushInbox: openPushInboxDialog,
+    recoverDeviceSync: openDeviceRecoveryDialog,
     liveCouriers: openLiveCouriersDialog,
     adminMap: openAdminMap,
     refreshAdminMap: refreshAdminMapAndFinance,
