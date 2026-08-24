@@ -57,8 +57,7 @@ async function activatePushForAuthorizedUser() {
     state.adminPushStatus = "denied";
     return false;
   }
-  state.adminPushStatus = "permission-needed";
-  return false;
+  return requestAdminPushNotifications({ silent: true });
 }
 
 async function requestAdminPushNotifications(options = {}) {
