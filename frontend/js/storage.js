@@ -4,7 +4,6 @@ const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
 const FIREBASE_STATIC_STORE_SPLIT_KEYS = ["users", "pending", "parcels", "history", "zones", "financeData", "adminNotifications", "settings"];
 const FIREBASE_SYNC_TOAST_THROTTLE_MS = 60 * 1000;
-const FIREBASE_STATIC_STORE_SAVE_TIMEOUT_MS = 12000;
 const FIREBASE_SYNC_REQUIRED_MESSAGE = "საერთო სინქი ვერ შესრულდა. ცვლილება არ გავრცელდა სხვა მოწყობილობებზე, ინტერნეტი შეამოწმეთ და თავიდან სცადეთ.";
 
 let firebaseInitPromise = null;
@@ -91,128 +90,6 @@ function buildFirebaseStaticStorePayload(store) {
   return payload;
 }
 
-function withFirebaseTimeout(promise, ms, label) {
-  let timeoutId = null;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = window.setTimeout(() => reject(new Error(`${label || "firebase"} timeout`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  });
-}
-
-function encodeFirestoreRestValue(value) {
-  if (value === null || value === undefined) return { nullValue: null };
-  if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeFirestoreRestValue) } };
-  if (typeof value === "boolean") return { booleanValue: value };
-  if (typeof value === "number") {
-    if (Number.isInteger(value)) return { integerValue: String(value) };
-    return { doubleValue: Number.isFinite(value) ? value : 0 };
-  }
-  if (typeof value === "object") {
-    return {
-      mapValue: {
-        fields: Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encodeFirestoreRestValue(item)])),
-      },
-    };
-  }
-  return { stringValue: String(value) };
-}
-
-function encodeFirestoreRestFields(data) {
-  return Object.fromEntries(Object.entries(data || {}).map(([key, value]) => [key, encodeFirestoreRestValue(value)]));
-}
-
-function decodeFirestoreRestValue(value) {
-  if (!value || typeof value !== "object") return value;
-  if (Object.prototype.hasOwnProperty.call(value, "nullValue")) return null;
-  if (Object.prototype.hasOwnProperty.call(value, "stringValue")) return value.stringValue;
-  if (Object.prototype.hasOwnProperty.call(value, "integerValue")) return Number(value.integerValue);
-  if (Object.prototype.hasOwnProperty.call(value, "doubleValue")) return Number(value.doubleValue);
-  if (Object.prototype.hasOwnProperty.call(value, "booleanValue")) return Boolean(value.booleanValue);
-  if (Object.prototype.hasOwnProperty.call(value, "timestampValue")) return value.timestampValue;
-  if (Object.prototype.hasOwnProperty.call(value, "arrayValue")) {
-    return (value.arrayValue.values || []).map(decodeFirestoreRestValue);
-  }
-  if (Object.prototype.hasOwnProperty.call(value, "mapValue")) {
-    return Object.fromEntries(Object.entries(value.mapValue.fields || {}).map(([key, item]) => [key, decodeFirestoreRestValue(item)]));
-  }
-  return value;
-}
-
-function decodeFirestoreRestDocument(documentData = {}) {
-  return Object.fromEntries(Object.entries(documentData.fields || {}).map(([key, value]) => [key, decodeFirestoreRestValue(value)]));
-}
-
-async function getFirebaseRestIdToken() {
-  try {
-    const app = window.firebase?.apps?.length ? window.firebase.app() : null;
-    const currentUser = app && window.firebase?.auth ? window.firebase.auth(app).currentUser : null;
-    if (currentUser?.getIdToken) return currentUser.getIdToken();
-  } catch (error) {
-    console.warn("[firebase] sdk token unavailable for rest fallback", error);
-  }
-
-  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(firebaseConfig.apiKey)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ returnSecureToken: true }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.idToken) throw new Error(payload.error?.message || "firebase rest auth failed");
-  return payload.idToken;
-}
-
-async function saveFirebaseStaticStoreViaRest(store) {
-  if (!hasFirebaseConfig() || !store || typeof store !== "object") return null;
-  const token = await getFirebaseRestIdToken();
-  const documentName = `projects/${firebaseConfig.projectId}/databases/(default)/documents/${FIREBASE_STATIC_STORE_COLLECTION}/${FIREBASE_STATIC_STORE_DOC}`;
-  const documentUrl = `https://firestore.googleapis.com/v1/${documentName}`;
-  let remoteStore = {};
-
-  const currentResponse = await fetch(documentUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (currentResponse.ok) {
-    const currentDocument = await currentResponse.json().catch(() => ({}));
-    remoteStore = extractFirebaseStaticStore(decodeFirestoreRestDocument(currentDocument));
-  } else if (currentResponse.status !== 404) {
-    const payload = await currentResponse.json().catch(() => ({}));
-    throw new Error(payload.error?.message || "firebase rest read failed");
-  }
-
-  const mergedStore = typeof mergeStaticStores === "function" && typeof normalizeStaticStore === "function"
-    ? normalizeStaticStore(mergeStaticStores(remoteStore, store))
-    : store;
-  const payload = buildFirebaseStaticStorePayload(mergedStore);
-  const fieldPaths = Object.keys(payload);
-  const commitResponse = await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents:commit`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      writes: [
-        {
-          update: {
-            name: documentName,
-            fields: encodeFirestoreRestFields(payload),
-          },
-          updateMask: { fieldPaths },
-          updateTransforms: [
-            { fieldPath: "updatedAt", setToServerValue: "REQUEST_TIME" },
-          ],
-        },
-      ],
-    }),
-  });
-  const commitPayload = await commitResponse.json().catch(() => ({}));
-  if (!commitResponse.ok) throw new Error(commitPayload.error?.message || "firebase rest write failed");
-  console.log("[firebase] static store saved with rest fallback");
-  return mergedStore;
-}
-
 async function initializeFirebaseStorage() {
   if (firebaseAuthUnavailable) firebaseAuthUnavailable = false;
   if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
@@ -277,24 +154,8 @@ async function loadFirebaseStaticStore() {
 }
 
 async function saveFirebaseStaticStore(store, options = {}) {
-  const db = await withFirebaseTimeout(initializeFirebaseStorage(), FIREBASE_STATIC_STORE_SAVE_TIMEOUT_MS, "firebase init").catch((error) => {
-    console.warn("[firebase] init timed out before save", error);
-    return null;
-  });
+  const db = await initializeFirebaseStorage();
   if (!db || !store || typeof store !== "object") {
-    const restSavedStore = await saveFirebaseStaticStoreViaRest(store).catch((error) => {
-      console.warn("[firebase] rest fallback save failed", error);
-      return null;
-    });
-    if (restSavedStore) {
-      lastFirebaseStoreJson = JSON.stringify(restSavedStore);
-      if (typeof loadStaticBootstrap === "function" && loadStaticBootstrap.cache) {
-        loadStaticBootstrap.cache = restSavedStore;
-        saveData(STATIC_DEPLOY_STORAGE_KEY, restSavedStore);
-      }
-      markFirebaseSyncOk();
-      return true;
-    }
     if (options.requireFirebase) throw new Error(FIREBASE_SYNC_REQUIRED_MESSAGE);
     return false;
   }
@@ -303,11 +164,7 @@ async function saveFirebaseStaticStore(store, options = {}) {
     const storeJson = JSON.stringify(store);
     if (storeJson && storeJson === lastFirebaseStoreJson) return true;
     const docRef = db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC);
-    const savedStore = await withFirebaseTimeout(saveFirebaseStaticStoreTransaction(db, docRef, store), FIREBASE_STATIC_STORE_SAVE_TIMEOUT_MS, "firebase save")
-      .catch(async (error) => {
-        console.warn("[firebase] sdk save timed out or failed; trying rest fallback", error);
-        return saveFirebaseStaticStoreViaRest(store);
-      });
+    const savedStore = await saveFirebaseStaticStoreTransaction(db, docRef, store);
     lastFirebaseStoreJson = JSON.stringify(savedStore || store);
     if (savedStore && typeof loadStaticBootstrap === "function" && loadStaticBootstrap.cache) {
       loadStaticBootstrap.cache = savedStore;
