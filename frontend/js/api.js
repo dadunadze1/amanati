@@ -67,7 +67,7 @@ async function loadStaticBootstrap() {
   runStaticAutomaticCleanup(loadStaticBootstrap.cache);
   await backfillStaticPartnerOrderLocations(loadStaticBootstrap.cache);
   hydrateStaticFinanceStorage(loadStaticBootstrap.cache.financeData);
-  saveStaticBootstrap({ immediate: true });
+  await saveStaticBootstrap({ immediate: true });
   startStaticRealtimeSync();
   return loadStaticBootstrap.cache;
 }
@@ -405,14 +405,20 @@ function getStaticAdjustmentKey(adjustment) {
   ].join("|");
 }
 
-function persistStaticBootstrapNow() {
-  if (!loadStaticBootstrap.cache) return;
+async function persistStaticBootstrapNow(options = {}) {
+  if (!loadStaticBootstrap.cache) return false;
   saveData(STATIC_DEPLOY_STORAGE_KEY, loadStaticBootstrap.cache);
   if (typeof saveFirebaseStaticStore === "function") {
-    saveFirebaseStaticStore(loadStaticBootstrap.cache).catch((error) => {
+    try {
+      return await saveFirebaseStaticStore(loadStaticBootstrap.cache, { requireFirebase: Boolean(options.requireFirebase) });
+    } catch (error) {
       console.warn("Firebase static store save failed", error);
-    });
+      if (options.requireFirebase) throw error;
+      return false;
+    }
   }
+  if (options.requireFirebase) throw new Error("საერთო სინქი ვერ შესრულდა. ცვლილება არ გავრცელდა სხვა მოწყობილობებზე, ინტერნეტი შეამოწმეთ და თავიდან სცადეთ.");
+  return true;
 }
 
 function flushStaticBootstrapSave() {
@@ -422,24 +428,26 @@ function flushStaticBootstrapSave() {
   }
   if (!loadStaticBootstrap.cache || !staticBootstrapSavePending) return;
   staticBootstrapSavePending = false;
-  persistStaticBootstrapNow();
+  persistStaticBootstrapNow().catch((error) => {
+    console.warn("Firebase static store save failed", error);
+  });
 }
 
-function saveStaticBootstrap(options = {}) {
-  if (!loadStaticBootstrap.cache) return;
+async function saveStaticBootstrap(options = {}) {
+  if (!loadStaticBootstrap.cache) return false;
   if (options.immediate || typeof window === "undefined") {
     staticBootstrapSavePending = false;
     if (staticBootstrapSaveTimer) {
       window.clearTimeout(staticBootstrapSaveTimer);
       staticBootstrapSaveTimer = null;
     }
-    persistStaticBootstrapNow();
-    return;
+    return persistStaticBootstrapNow(options);
   }
 
   staticBootstrapSavePending = true;
-  if (staticBootstrapSaveTimer) return;
+  if (staticBootstrapSaveTimer) return true;
   staticBootstrapSaveTimer = window.setTimeout(flushStaticBootstrapSave, STATIC_BOOTSTRAP_SAVE_DEBOUNCE_MS);
+  return true;
 }
 
 if (typeof window !== "undefined") {
@@ -631,7 +639,34 @@ function getStaticFinanceData() {
 function saveStaticFinanceData(financeData) {
   if (!loadStaticBootstrap.cache) return;
   loadStaticBootstrap.cache.financeData = financeData && typeof financeData === "object" ? financeData : {};
-  saveStaticBootstrap();
+  saveStaticBootstrap({ immediate: true }).catch((error) => {
+    console.warn("Static finance data sync failed", error);
+  });
+}
+
+function cloneStaticStoreSnapshot(store) {
+  if (!store || typeof store !== "object") return null;
+  try {
+    return JSON.parse(JSON.stringify(store));
+  } catch {
+    return null;
+  }
+}
+
+function restoreStaticStoreSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  loadStaticBootstrap.cache = snapshot;
+  saveData(STATIC_DEPLOY_STORAGE_KEY, snapshot);
+  const financeData = snapshot.financeData && typeof snapshot.financeData === "object" ? snapshot.financeData : {};
+  [
+    [CONFIG.cashAdjustmentsStorageKey, financeData.cashAdjustments],
+    [CONFIG.partnerCashAdjustmentsStorageKey, financeData.partnerCashAdjustments],
+    [CONFIG.payAdjustmentsStorageKey, financeData.payAdjustments],
+    [CONFIG.dailyBalanceLedgerStorageKey, financeData.dailyBalanceLedger],
+  ].forEach(([key, value]) => {
+    if (Array.isArray(value)) saveData(key, value);
+    else clearData(key);
+  });
 }
 
 function addDaysToDateKey(dateKey, days) {
@@ -1327,6 +1362,20 @@ async function staticApi(path, options = {}) {
   const url = new URL(path, window.location.href);
   const apiPath = url.pathname.replace(/^\/amanati/, "");
   const body = parseStaticBody(options);
+  const requiresSharedSync = method !== "GET" && method !== "HEAD" && apiPath !== "/api/logout";
+  const rollbackStore = requiresSharedSync ? cloneStaticStoreSnapshot(store) : null;
+  const commitStaticWrite = async (result, commitOptions = {}) => {
+    try {
+      await saveStaticBootstrap({
+        immediate: true,
+        requireFirebase: commitOptions.requireFirebase !== false && isStaticDeploy(),
+      });
+      return result;
+    } catch (error) {
+      restoreStaticStoreSnapshot(rollbackStore);
+      throw error;
+    }
+  };
 
   if (method === "GET" && apiPath === "/api/bootstrap") {
     return {
@@ -1352,8 +1401,7 @@ async function staticApi(path, options = {}) {
     const user = { id: `user-${Date.now()}`, username, password: body.password || "", role: "admin", status: "active", createdAt: new Date().toISOString() };
     store.users.push(user);
     store.settings.defaultUser = username;
-    saveStaticBootstrap();
-    return { ...saveStaticSession(user), staticMode: true };
+    return commitStaticWrite({ ...saveStaticSession(user), staticMode: true });
   }
 
   if (method === "POST" && apiPath === "/api/register") {
@@ -1374,8 +1422,7 @@ async function staticApi(path, options = {}) {
       createdAt: now,
     };
     store.pending.push(user);
-    saveStaticBootstrap();
-    return { ok: true, user: publicStaticUser(user) };
+    return commitStaticWrite({ ok: true, user: publicStaticUser(user) });
   }
 
   if (method === "POST" && apiPath === "/api/logout") {
@@ -1419,8 +1466,7 @@ async function staticApi(path, options = {}) {
       partnerCashAdjustments: [...adjustments, adjustment],
     };
     saveData(CONFIG.partnerCashAdjustmentsStorageKey, store.financeData.partnerCashAdjustments);
-    saveStaticBootstrap();
-    return { adjustment };
+    return commitStaticWrite({ adjustment });
   }
 
   if (method === "GET" && apiPath === "/api/daily-balance-ledger") {
@@ -1444,8 +1490,7 @@ async function staticApi(path, options = {}) {
       dailyBalanceLedger: [...entries.filter((item) => item.id !== entry.id), entry],
     };
     saveData(CONFIG.dailyBalanceLedgerStorageKey, store.financeData.dailyBalanceLedger);
-    saveStaticBootstrap();
-    return { entry };
+    return commitStaticWrite({ entry });
   }
 
   const dailyBalanceMatch = apiPath.match(/^\/api\/daily-balance-ledger\/([^/]+)$/);
@@ -1459,8 +1504,7 @@ async function staticApi(path, options = {}) {
       dailyBalanceLedger: entries.filter((entry) => entry.id !== id),
     };
     saveData(CONFIG.dailyBalanceLedgerStorageKey, store.financeData.dailyBalanceLedger);
-    saveStaticBootstrap();
-    return { ok: true };
+    return commitStaticWrite({ ok: true });
   }
 
   if (method === "GET" && apiPath === "/api/couriers") {
@@ -1482,13 +1526,12 @@ async function staticApi(path, options = {}) {
     store.settings.tariffs = normalizeStaticTariffSettings(body.tariffs || body);
     store.settings.tariffsUpdatedAt = new Date().toISOString();
     store.settings.tariffsUpdatedBy = state.currentUser || "";
-    saveStaticBootstrap();
-    return { tariffs: store.settings.tariffs };
+    return commitStaticWrite({ tariffs: store.settings.tariffs });
   }
 
   if (method === "GET" && apiPath === "/api/workday") {
     const workday = ensureStaticWorkdayState(store);
-    saveStaticBootstrap();
+    await saveStaticBootstrap({ immediate: true, requireFirebase: false });
     return { workday };
   }
 
@@ -1577,8 +1620,7 @@ async function staticApi(path, options = {}) {
       updatedAt: now,
     };
     store.users.push(user);
-    saveStaticBootstrap();
-    return { user: publicStaticUser(user) };
+    return commitStaticWrite({ user: publicStaticUser(user) });
   }
 
   if (method === "POST" && apiPath === "/api/partners") {
@@ -1609,8 +1651,7 @@ async function staticApi(path, options = {}) {
       updatedAt: now,
     };
     store.users.push(user);
-    saveStaticBootstrap();
-    return { partner: publicStaticUser(user) };
+    return commitStaticWrite({ partner: publicStaticUser(user) });
   }
 
   const pendingMatch = apiPath.match(/^\/api\/pending\/([^/]+)$/);
@@ -1620,15 +1661,14 @@ async function staticApi(path, options = {}) {
     if (pending) {
       store.pending = store.pending.filter((item) => normalizeUsername(item.username) !== normalizeUsername(username));
       store.users.push({ ...pending, role: "courier", status: "active", approvedAt: new Date().toISOString() });
-      saveStaticBootstrap();
+      await commitStaticWrite({ ok: true });
     }
     return { ok: true };
   }
   if (pendingMatch && method === "DELETE") {
     const username = decodeURIComponent(pendingMatch[1]);
     store.pending = store.pending.filter((item) => normalizeUsername(item.username) !== normalizeUsername(username));
-    saveStaticBootstrap();
-    return { ok: true };
+    return commitStaticWrite({ ok: true });
   }
 
   const userMatch = apiPath.match(/^\/api\/users\/([^/]+)$/);
@@ -1659,13 +1699,12 @@ async function staticApi(path, options = {}) {
       lastPickupAcknowledgedByRole: currentProfile.role || "",
       updatedAt: now,
     });
-    saveStaticBootstrap();
-    return {
+    return commitStaticWrite({
       partner: publicStaticUser(user),
       acknowledgedAt: now,
       acknowledgedCount: activeParcels.length,
       pickup: publicStaticPartnerPickup(store, user, getStaticActivePartnerPickupParcels(store, user)),
-    };
+    });
   }
   if (partnerMatch && method === "PUT") {
     const username = decodeURIComponent(partnerMatch[1]);
@@ -1693,22 +1732,19 @@ async function staticApi(path, options = {}) {
       });
       if (body.password) user.password = body.password;
     }
-    saveStaticBootstrap();
-    return { partner: user ? publicStaticUser(user) : null };
+    return commitStaticWrite({ partner: user ? publicStaticUser(user) : null });
   }
 
   if (userMatch && method === "PUT") {
     const username = decodeURIComponent(userMatch[1]);
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
     if (user) Object.assign(user, body, { updatedAt: new Date().toISOString() });
-    saveStaticBootstrap();
-    return { user: user ? publicStaticUser(user) : null };
+    return commitStaticWrite({ user: user ? publicStaticUser(user) : null });
   }
   if (userMatch && method === "DELETE") {
     const username = decodeURIComponent(userMatch[1]);
     store.users = store.users.filter((item) => normalizeUsername(item.username) !== normalizeUsername(username));
-    saveStaticBootstrap();
-    return { ok: true };
+    return commitStaticWrite({ ok: true });
   }
 
   const zoneMatch = apiPath.match(/^\/api\/users\/([^/]+)\/zone$/);
@@ -1721,8 +1757,7 @@ async function staticApi(path, options = {}) {
       zoneId: zoneIds[0] || "",
       zoneName: body.zoneName || getStaticZoneNames(zoneIds) || "",
     });
-    saveStaticBootstrap();
-    return { user: user ? publicStaticUser(user) : null };
+    return commitStaticWrite({ user: user ? publicStaticUser(user) : null });
   }
 
   const courierPasswordMatch = apiPath.match(/^\/api\/couriers\/([^/]+)\/password$/);
@@ -1732,8 +1767,7 @@ async function staticApi(path, options = {}) {
     if (!user || user.role !== "courier") throw new Error("კურიერი ვერ მოიძებნა.");
     user.password = String(body.password || "");
     user.updatedAt = new Date().toISOString();
-    saveStaticBootstrap();
-    return { ok: true };
+    return commitStaticWrite({ ok: true });
   }
 
   if (method === "POST" && apiPath === "/api/parcels") {
@@ -1799,8 +1833,7 @@ async function staticApi(path, options = {}) {
     };
     store.parcels.push(parcel);
     if (state.isPartner) queueStaticPushNotification(store, buildStaticParcelCreatedNotification(parcel));
-    saveStaticBootstrap();
-    return { parcel: publicStaticParcel(store, parcel) };
+    return commitStaticWrite({ parcel: publicStaticParcel(store, parcel) });
   }
 
   if (method === "PATCH" && apiPath === "/api/parcels/assign") {
@@ -1818,8 +1851,7 @@ async function staticApi(path, options = {}) {
         if (parcel.courierUsername) queueStaticPushNotification(store, buildStaticParcelAssignedNotification(parcel, parcel.courierUsername));
       }
     });
-    saveStaticBootstrap();
-    return { assigned: parcelIds.length };
+    return commitStaticWrite({ assigned: parcelIds.length });
   }
 
   const statusMatch = apiPath.match(/^\/api\/parcels\/([^/]+)\/status$/);
@@ -1859,8 +1891,7 @@ async function staticApi(path, options = {}) {
     if (["delivered", "failed"].includes(parcel.status)) {
       queueStaticPushNotification(store, buildStaticParcelStatusNotification(parcel, parcel.status, body));
     }
-    saveStaticBootstrap();
-    return { parcel: publicStaticParcel(store, parcel) };
+    return commitStaticWrite({ parcel: publicStaticParcel(store, parcel) });
   }
 
   const deleteMatch = apiPath.match(/^\/api\/parcels\/([^/]+)$/);
@@ -1874,8 +1905,7 @@ async function staticApi(path, options = {}) {
     parcel.deletedByRole = state.isAdmin ? "admin" : state.isPartner ? "partner" : "";
     parcel.deleteReason = String(body.reason || "").trim();
     parcel.updatedAt = now;
-    saveStaticBootstrap();
-    return { deleted: 1, parcel: publicStaticParcel(store, parcel) };
+    return commitStaticWrite({ deleted: 1, parcel: publicStaticParcel(store, parcel) });
   }
 
   if (method === "POST" && apiPath === "/api/parcels/archive") {
@@ -1915,8 +1945,7 @@ async function staticApi(path, options = {}) {
     }
     archiveStaticCompletedParcels(store);
     pruneStaticPushEvents(store);
-    saveStaticBootstrap();
-    return { archived, workday: nextWorkday, closedWorkdayKey: closeWorkday ? closeWorkdayKey : "" };
+    return commitStaticWrite({ archived, workday: nextWorkday, closedWorkdayKey: closeWorkday ? closeWorkdayKey : "" });
   }
 
   const locationMatch = apiPath.match(/^\/api\/parcels\/([^/]+)\/location$/);
@@ -1939,8 +1968,7 @@ async function staticApi(path, options = {}) {
       locationUpdatedAt: now,
       updatedAt: now,
     });
-    saveStaticBootstrap();
-    return { parcel: publicStaticParcel(store, parcel) };
+    return commitStaticWrite({ parcel: publicStaticParcel(store, parcel) });
   }
 
   if (method === "POST" && apiPath === "/api/maintenance/retention") {
@@ -1956,14 +1984,13 @@ async function staticApi(path, options = {}) {
     store.settings.retentionMonths = Number(body.retentionMonths || CONFIG.dataRetentionMonths || 8);
     store.settings.partnerOrderRetentionCutoffDate = partnerOrderCutoffDate;
     store.settings.partnerOrderRetentionMonths = Number(body.partnerOrderRetentionMonths || CONFIG.partnerOrderRetentionMonths || 1);
-    saveStaticBootstrap();
-    return {
+    return commitStaticWrite({
       ...result,
       cutoffDate,
       retentionMonths: store.settings.retentionMonths,
       partnerOrderCutoffDate,
       partnerOrderRetentionMonths: store.settings.partnerOrderRetentionMonths,
-    };
+    });
   }
 
   console.warn("Static API fallback returned empty response for", method, apiPath);

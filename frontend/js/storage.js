@@ -3,9 +3,8 @@
 const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
 const FIREBASE_STATIC_STORE_SPLIT_KEYS = ["users", "pending", "parcels", "history", "zones", "financeData", "adminNotifications", "settings"];
-const FIREBASE_AUTH_DISABLED_STORAGE_KEY = "deliveryFirebaseAuthDisabled:v1";
-const FIREBASE_AUTH_DISABLED_RETRY_MS = 6 * 60 * 60 * 1000;
 const FIREBASE_SYNC_TOAST_THROTTLE_MS = 60 * 1000;
+const FIREBASE_SYNC_REQUIRED_MESSAGE = "საერთო სინქი ვერ შესრულდა. ცვლილება არ გავრცელდა სხვა მოწყობილობებზე, ინტერნეტი შეამოწმეთ და თავიდან სცადეთ.";
 
 let firebaseInitPromise = null;
 let firebaseStoreUnsubscribe = null;
@@ -38,26 +37,6 @@ function hasFirebaseConfig() {
 
 function hasFirebaseSdk() {
   return Boolean(window.firebase?.initializeApp && window.firebase?.firestore);
-}
-
-function isFirebaseAuthDisabledLocally() {
-  const saved = loadData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
-  if (saved?.projectId !== firebaseConfig?.projectId) return false;
-  const savedAt = Date.parse(saved.savedAt || "");
-  if (!Number.isFinite(savedAt) || Date.now() - savedAt > FIREBASE_AUTH_DISABLED_RETRY_MS) {
-    clearData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
-    return false;
-  }
-  return true;
-}
-
-function markFirebaseAuthDisabled() {
-  firebaseAuthUnavailable = true;
-  saveData(FIREBASE_AUTH_DISABLED_STORAGE_KEY, {
-    projectId: firebaseConfig?.projectId || "",
-    reason: "anonymous-auth-failed",
-    savedAt: new Date().toISOString(),
-  });
 }
 
 function markFirebaseSyncIssue(message) {
@@ -112,7 +91,7 @@ function buildFirebaseStaticStorePayload(store) {
 }
 
 async function initializeFirebaseStorage() {
-  if (firebaseAuthUnavailable || isFirebaseAuthDisabledLocally()) return null;
+  if (firebaseAuthUnavailable) firebaseAuthUnavailable = false;
   if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
   if (firebaseInitPromise) return firebaseInitPromise;
 
@@ -126,12 +105,12 @@ async function initializeFirebaseStorage() {
         try {
           await auth.signInAnonymously();
         } catch (error) {
-          markFirebaseAuthDisabled();
+          firebaseInitPromise = null;
           if (!firebaseAuthWarningShown) {
             firebaseAuthWarningShown = true;
-            console.warn("[firebase] anonymous auth failed; using static local mode", error);
+            console.warn("[firebase] anonymous auth failed", error);
           }
-          markFirebaseSyncIssue("Firebase ავტორიზაცია ვერ ჩაირთო. საერთო სინქი დროებით გამორთულია.");
+          markFirebaseSyncIssue("Firebase ავტორიზაცია ვერ ჩაირთო. საერთო სინქი არ მუშაობს.");
           return null;
         }
       }
@@ -142,6 +121,7 @@ async function initializeFirebaseStorage() {
     console.log("[firebase] initialized", firebaseConfig.projectId);
     return db;
   }).catch((error) => {
+    firebaseInitPromise = null;
     console.warn("[firebase] init failed", error);
     markFirebaseSyncIssue("Firebase ვერ ჩაირთო. ინტერნეტი ან Firebase პარამეტრები შეამოწმე.");
     return null;
@@ -173,9 +153,12 @@ async function loadFirebaseStaticStore() {
   }
 }
 
-async function saveFirebaseStaticStore(store) {
+async function saveFirebaseStaticStore(store, options = {}) {
   const db = await initializeFirebaseStorage();
-  if (!db || !store || typeof store !== "object") return false;
+  if (!db || !store || typeof store !== "object") {
+    if (options.requireFirebase) throw new Error(FIREBASE_SYNC_REQUIRED_MESSAGE);
+    return false;
+  }
 
   try {
     const storeJson = JSON.stringify(store);
@@ -193,6 +176,7 @@ async function saveFirebaseStaticStore(store) {
   } catch (error) {
     console.warn("[firebase] static store save failed", error);
     markFirebaseSyncIssue("Firebase-ში შენახვა ვერ მოხერხდა. ცვლილება ამ მოწყობილობაზე დარჩა.");
+    if (options.requireFirebase) throw new Error(FIREBASE_SYNC_REQUIRED_MESSAGE);
     return false;
   }
 }
