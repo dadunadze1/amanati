@@ -49,7 +49,7 @@ function markFirebaseSyncIssue(message) {
   const now = Date.now();
   if (now - state.lastFirebaseSyncToastAt < FIREBASE_SYNC_TOAST_THROTTLE_MS) return;
   state.lastFirebaseSyncToastAt = now;
-  showToast(message || "Firebase სინქი დროებით ვერ მუშაობს. ცვლილება ლოკალურად შეინახა.");
+  showToast(message || "Firebase სინქი დროებით ვერ მუშაობს. ცვლილება არ შეინახა.");
 }
 
 function markFirebaseSyncOk() {

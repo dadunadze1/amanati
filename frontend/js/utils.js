@@ -304,10 +304,16 @@ function getDefaultTariffSettings() {
 function normalizeDefaultTariffRow(row = {}, fallback) {
   return {
     id: fallback.id,
-    label: row?.label || fallback.label,
+    label: isBrokenText(row?.label) ? fallback.label : row?.label || fallback.label,
     partnerPrice: safeMoney(row?.partnerPrice ?? fallback.partnerPrice),
     courierPay: safeMoney(row?.courierPay ?? fallback.courierPay),
   };
+}
+
+
+function isBrokenText(value) {
+  const text = String(value || "").trim();
+  return Boolean(text && /^[?\s]+$/.test(text));
 }
 
 

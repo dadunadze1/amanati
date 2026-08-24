@@ -288,7 +288,6 @@ function clearStaticLocalDataStores() {
 function normalizeStaticParcelFinance(parcel, store = loadStaticBootstrap.cache) {
   if (!parcel || typeof parcel !== "object") return parcel;
   const paymentAmount = getStaticParcelPaymentAmount(parcel);
-  const isDelivered = parcel.status === "delivered";
   const finance = getStaticParcelFinanceSnapshot(parcel, store);
   return {
     ...parcel,
@@ -296,9 +295,9 @@ function normalizeStaticParcelFinance(parcel, store = loadStaticBootstrap.cache)
     cashAmount: paymentAmount,
     tariffId: finance.tariffId,
     tariffLabel: finance.tariffLabel,
-    deliveryTotalPrice: isDelivered ? finance.deliveryTotalPrice : getStaticOptionalMoney(parcel.deliveryTotalPrice),
-    courierPay: isDelivered ? finance.courierPay : getStaticOptionalMoney(parcel.courierPay),
-    adminProfit: isDelivered ? finance.adminProfit : getStaticOptionalMoney(parcel.adminProfit),
+    deliveryTotalPrice: finance.deliveryTotalPrice,
+    courierPay: finance.courierPay,
+    adminProfit: finance.adminProfit,
   };
 }
 
@@ -320,11 +319,16 @@ function normalizeStaticTariffItem(input = {}, fallback) {
   const courierPay = getStaticMoney(input.courierPay ?? input.courierDeliveryPay ?? fallback.courierPay);
   return {
     id: fallback.id,
-    label: fallback.label,
+    label: isStaticBrokenText(input.label) ? fallback.label : input.label || fallback.label,
     partnerPrice,
     courierPay,
     companyProfit: getStaticMoney(Math.max(0, partnerPrice - courierPay)),
   };
+}
+
+function isStaticBrokenText(value) {
+  const text = String(value || "").trim();
+  return Boolean(text && /^[?\s]+$/.test(text));
 }
 
 function normalizeStaticTariffSettings(settings = {}) {
