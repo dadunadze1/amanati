@@ -972,7 +972,10 @@ function filterPinsForAdminMap(pins = state.activePins, options = {}) {
     const pinStatus = pin.status || "pending";
     const hasCourier = Boolean(pin.courierUsername);
 
-    if (!options.ignoreStatus && filters.status !== "all" && pinStatus !== filters.status) return false;
+    if (!options.ignoreStatus) {
+      if (filters.status === "all" && pinStatus === "delivered") return false;
+      if (filters.status !== "all" && pinStatus !== filters.status) return false;
+    }
     if (!hasCourier) return Boolean(filters.showUnassigned);
     if (filters.includeAllCouriers) return true;
     if (!selected.size) return false;
