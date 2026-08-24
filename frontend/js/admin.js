@@ -61,39 +61,6 @@ async function openPushInboxDialog(filter = state.pushInboxFilter || "all") {
   });
 }
 
-async function openDeviceRecoveryDialog() {
-  const store = typeof getLocalStaticRecoveryStore === "function" ? getLocalStaticRecoveryStore() : null;
-  const summary = typeof getStaticStoreRecoverySummary === "function"
-    ? getStaticStoreRecoverySummary(store)
-    : {};
-  const body = `
-    <div class="history-summary">
-      <strong>ამ მოწყობილობის მონაცემები</strong>
-      <div class="history-metrics">
-        <span><b>${escapeHtml(summary.parcels || 0)}</b> აქტიური პინი</span>
-        <span><b>${escapeHtml(summary.history || 0)}</b> ისტორია</span>
-        <span><b>${escapeHtml((summary.cashAdjustments || 0) + (summary.payAdjustments || 0) + (summary.partnerCashAdjustments || 0))}</b> ფინანსური ჩანაწერი</span>
-        <span><b>${escapeHtml(summary.dailyBalanceLedger || 0)}</b> დღის ლეჯერი</span>
-      </div>
-    </div>
-    <p class="history-empty history-empty-card">ეს მოქმედება ამ iPhone-ში შენახულ პინებს და ფინანსურ ჩანაწერებს საერთო Firebase ბაზაში merge-ით ატვირთავს. არსებული cloud მონაცემი არ წაიშლება.</p>
-    <p class="form-message" id="deviceRecoveryMessage" role="alert"></p>
-  `;
-  showDialog("მონაცემების გადარჩენა", body, [
-    { label: "ატვირთვა", variant: "primary", action: recoverDeviceStaticData },
-    { label: "გაუქმება", variant: "secondary", action: closeDialog },
-  ]);
-}
-
-async function recoverDeviceStaticData() {
-  const message = document.getElementById("deviceRecoveryMessage");
-  if (message) message.textContent = "იტვირთება Firebase-ში...";
-  const result = await recoverLocalStaticStoreToFirebase();
-  closeDialog();
-  await refreshPins().catch((error) => console.warn("Recovery refresh failed", error));
-  showToast(`აიტვირთა: ${result.after.parcels} აქტიური პინი, ${result.after.history} ისტორია.`);
-}
-
 
 async function loadPushInboxNotifications() {
   const [firestoreItems, staticItems] = await Promise.all([
