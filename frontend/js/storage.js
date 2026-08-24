@@ -3,9 +3,9 @@
 const FIREBASE_STATIC_STORE_COLLECTION = "deliveryApp";
 const FIREBASE_STATIC_STORE_DOC = "staticStore";
 const FIREBASE_STATIC_STORE_SPLIT_KEYS = ["users", "pending", "parcels", "history", "zones", "financeData", "adminNotifications", "settings"];
-const FIREBASE_AUTH_DISABLED_STORAGE_KEY = "deliveryFirebaseAuthDisabled:v1";
-const FIREBASE_AUTH_DISABLED_RETRY_MS = 6 * 60 * 60 * 1000;
 const FIREBASE_SYNC_TOAST_THROTTLE_MS = 60 * 1000;
+const FIREBASE_SYNC_TIMEOUT_MS = 12000;
+const FIREBASE_SYNC_REQUIRED_MESSAGE = "საერთო Firebase სინქი ვერ შესრულდა. ცვლილება არ შეინახა. შეამოწმეთ ინტერნეტი და თავიდან სცადეთ.";
 
 let firebaseInitPromise = null;
 let firebaseStoreUnsubscribe = null;
@@ -40,26 +40,6 @@ function hasFirebaseSdk() {
   return Boolean(window.firebase?.initializeApp && window.firebase?.firestore);
 }
 
-function isFirebaseAuthDisabledLocally() {
-  const saved = loadData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
-  if (saved?.projectId !== firebaseConfig?.projectId) return false;
-  const savedAt = Date.parse(saved.savedAt || "");
-  if (!Number.isFinite(savedAt) || Date.now() - savedAt > FIREBASE_AUTH_DISABLED_RETRY_MS) {
-    clearData(FIREBASE_AUTH_DISABLED_STORAGE_KEY);
-    return false;
-  }
-  return true;
-}
-
-function markFirebaseAuthDisabled() {
-  firebaseAuthUnavailable = true;
-  saveData(FIREBASE_AUTH_DISABLED_STORAGE_KEY, {
-    projectId: firebaseConfig?.projectId || "",
-    reason: "anonymous-auth-failed",
-    savedAt: new Date().toISOString(),
-  });
-}
-
 function markFirebaseSyncIssue(message) {
   if (typeof state !== "object") return;
   state.firebaseSyncStatus = "error";
@@ -78,6 +58,24 @@ function markFirebaseSyncOk() {
   if (wasError && state.currentUser && typeof showToast === "function") {
     showToast("Firebase სინქი აღდგა.");
   }
+}
+
+function withFirebaseTimeout(promise, label = "Firebase") {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(`${label} timeout`)), FIREBASE_SYNC_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) window.clearTimeout(timer);
+  });
+}
+
+function throwRequiredFirebaseSync(error) {
+  const syncError = new Error(FIREBASE_SYNC_REQUIRED_MESSAGE);
+  syncError.code = "firebase_sync_required";
+  syncError.status = 503;
+  syncError.cause = error;
+  throw syncError;
 }
 
 function extractFirebaseStaticStore(data = {}) {
@@ -112,7 +110,7 @@ function buildFirebaseStaticStorePayload(store) {
 }
 
 async function initializeFirebaseStorage() {
-  if (firebaseAuthUnavailable || isFirebaseAuthDisabledLocally()) return null;
+  if (firebaseAuthUnavailable) return null;
   if (!hasFirebaseConfig() || !hasFirebaseSdk()) return null;
   if (firebaseInitPromise) return firebaseInitPromise;
 
@@ -124,12 +122,12 @@ async function initializeFirebaseStorage() {
       const auth = window.firebase.auth(app);
       if (!auth.currentUser) {
         try {
-          await auth.signInAnonymously();
+          await withFirebaseTimeout(auth.signInAnonymously(), "Firebase auth");
         } catch (error) {
-          markFirebaseAuthDisabled();
+          firebaseAuthUnavailable = true;
           if (!firebaseAuthWarningShown) {
             firebaseAuthWarningShown = true;
-            console.warn("[firebase] anonymous auth failed; using static local mode", error);
+            console.warn("[firebase] anonymous auth failed", error);
           }
           markFirebaseSyncIssue("Firebase ავტორიზაცია ვერ ჩაირთო. საერთო სინქი დროებით გამორთულია.");
           return null;
@@ -150,12 +148,16 @@ async function initializeFirebaseStorage() {
   return firebaseInitPromise;
 }
 
-async function loadFirebaseStaticStore() {
+async function loadFirebaseStaticStore(options = {}) {
+  const requireFirebase = options.requireFirebase === true;
   const db = await initializeFirebaseStorage();
-  if (!db) return null;
+  if (!db) {
+    if (requireFirebase) throwRequiredFirebaseSync();
+    return null;
+  }
 
   try {
-    const snapshot = await db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).get();
+    const snapshot = await withFirebaseTimeout(db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC).get(), "Firebase load");
     if (!snapshot.exists) {
       console.log("[firebase] static store empty");
       return null;
@@ -168,31 +170,42 @@ async function loadFirebaseStaticStore() {
     return store;
   } catch (error) {
     console.warn("[firebase] static store load failed", error);
+    if (requireFirebase) {
+      markFirebaseSyncIssue(FIREBASE_SYNC_REQUIRED_MESSAGE);
+      throwRequiredFirebaseSync(error);
+    }
     markFirebaseSyncIssue("Firebase მონაცემების ჩატვირთვა ვერ მოხერხდა.");
     return null;
   }
 }
 
-async function saveFirebaseStaticStore(store) {
+async function saveFirebaseStaticStore(store, options = {}) {
+  const requireFirebase = options.requireFirebase === true;
   const db = await initializeFirebaseStorage();
-  if (!db || !store || typeof store !== "object") return false;
+  if (!db || !store || typeof store !== "object") {
+    if (requireFirebase) throwRequiredFirebaseSync();
+    return false;
+  }
 
   try {
     const storeJson = JSON.stringify(store);
     if (storeJson && storeJson === lastFirebaseStoreJson) return true;
     const docRef = db.collection(FIREBASE_STATIC_STORE_COLLECTION).doc(FIREBASE_STATIC_STORE_DOC);
-    const savedStore = await saveFirebaseStaticStoreTransaction(db, docRef, store);
+    const savedStore = await withFirebaseTimeout(saveFirebaseStaticStoreTransaction(db, docRef, store), "Firebase save");
     lastFirebaseStoreJson = JSON.stringify(savedStore || store);
     if (savedStore && typeof loadStaticBootstrap === "function" && loadStaticBootstrap.cache) {
       loadStaticBootstrap.cache = savedStore;
-      saveData(STATIC_DEPLOY_STORAGE_KEY, savedStore);
     }
     console.log("[firebase] static store saved");
     markFirebaseSyncOk();
     return true;
   } catch (error) {
     console.warn("[firebase] static store save failed", error);
-    markFirebaseSyncIssue("Firebase-ში შენახვა ვერ მოხერხდა. ცვლილება ამ მოწყობილობაზე დარჩა.");
+    if (requireFirebase) {
+      markFirebaseSyncIssue(FIREBASE_SYNC_REQUIRED_MESSAGE);
+      throwRequiredFirebaseSync(error);
+    }
+    markFirebaseSyncIssue("Firebase-ში შენახვა ვერ მოხერხდა. ცვლილება არ გავრცელდა.");
     return false;
   }
 }

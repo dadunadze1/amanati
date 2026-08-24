@@ -28,6 +28,10 @@ function partnerCodCollected(orders) {
 
 function readLocalPartnerCashAdjustments() {
   try {
+    if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof getStaticFinanceData === "function") {
+      const financeData = getStaticFinanceData();
+      return normalizeFinanceAdjustmentList(financeData.partnerCashAdjustments || [], "partnerCash");
+    }
     const parsed = typeof loadData === "function"
       ? loadData(CONFIG.partnerCashAdjustmentsStorageKey) || []
       : JSON.parse(localStorage.getItem(CONFIG.partnerCashAdjustmentsStorageKey) || "[]");
@@ -46,15 +50,17 @@ function readPartnerCashAdjustments() {
 }
 
 
-function writePartnerCashAdjustments(adjustments) {
+async function writePartnerCashAdjustments(adjustments) {
   const normalized = normalizeFinanceAdjustmentList(adjustments, "partnerCash");
   state.partnerCashAdjustments = normalized;
   state.partnerCashAdjustmentsLoaded = true;
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    await saveStaticFinanceData({ ...getStaticFinanceData(), partnerCashAdjustments: normalized });
+    return normalized;
+  }
   if (typeof saveData === "function") saveData(CONFIG.partnerCashAdjustmentsStorageKey, normalized);
   else localStorage.setItem(CONFIG.partnerCashAdjustmentsStorageKey, JSON.stringify(normalized));
-  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
-    saveStaticFinanceData({ ...getStaticFinanceData(), partnerCashAdjustments: normalized });
-  }
+  return normalized;
 }
 
 
@@ -64,9 +70,9 @@ async function loadPartnerCashAdjustments() {
     const adjustments = normalizeFinanceAdjustmentList(payload.adjustments || [], "partnerCash");
     state.partnerCashAdjustments = adjustments;
     state.partnerCashAdjustmentsLoaded = true;
-    if (typeof saveData === "function") saveData(CONFIG.partnerCashAdjustmentsStorageKey, adjustments);
     return adjustments;
-  } catch {
+  } catch (error) {
+    if (typeof isStaticDeploy === "function" && isStaticDeploy()) throw error;
     const adjustments = readLocalPartnerCashAdjustments();
     state.partnerCashAdjustments = adjustments;
     state.partnerCashAdjustmentsLoaded = true;
@@ -76,11 +82,6 @@ async function loadPartnerCashAdjustments() {
 
 
 async function savePartnerCashAdjustmentToServer(adjustment) {
-  if (typeof isStaticDeploy === "function" && isStaticDeploy()) {
-    const next = [...readPartnerCashAdjustments(), adjustment];
-    writePartnerCashAdjustments(next);
-    return adjustment;
-  }
   const payload = await api("/api/partner-cash-adjustments", { method: "POST", body: adjustment });
   const saved = normalizeFinanceAdjustment(payload.adjustment || adjustment, "partnerCash");
   state.partnerCashAdjustmentsLoaded = false;

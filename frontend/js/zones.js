@@ -164,6 +164,7 @@ function normalizeZoneText(value) {
 
 
 function readLocalZoneAssignments() {
+  if (typeof isStaticDeploy === "function" && isStaticDeploy()) return {};
   try {
     const parsed = typeof loadData === "function"
       ? loadData(CONFIG.zoneAssignmentsStorageKey) || {}
@@ -176,6 +177,7 @@ function readLocalZoneAssignments() {
 
 
 function writeLocalZoneAssignments(assignments) {
+  if (typeof isStaticDeploy === "function" && isStaticDeploy()) return;
   if (typeof saveData === "function") saveData(CONFIG.zoneAssignmentsStorageKey, assignments || {});
   else localStorage.setItem(CONFIG.zoneAssignmentsStorageKey, JSON.stringify(assignments || {}));
 }
@@ -453,15 +455,19 @@ async function updateCourierZone(username, zoneBody, message) {
 
 async function saveCourierZoneRequest(username, zoneBody) {
   if (!CONFIG.useUserZoneApi) {
+    if (typeof isStaticDeploy === "function" && isStaticDeploy()) {
+      return saveCourierZoneWithUserUpdate(username, zoneBody);
+    }
     return saveLocalCourierZone(username, zoneBody);
   }
 
   try {
     const result = await api(`/api/users/${encodeURIComponent(username)}/zone`, { method: "PUT", body: zoneBody });
-    saveLocalCourierZone(username, zoneBody);
+    if (!(typeof isStaticDeploy === "function" && isStaticDeploy())) saveLocalCourierZone(username, zoneBody);
     return result;
   } catch (error) {
     if (error.status !== 404) throw error;
+    if (typeof isStaticDeploy === "function" && isStaticDeploy()) throw error;
     return saveLocalCourierZone(username, zoneBody);
   }
 }

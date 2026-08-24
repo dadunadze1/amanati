@@ -213,6 +213,10 @@ function renderAdjustmentModeSelect(id) {
 
 function readCashAdjustments() {
   try {
+    if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof getStaticFinanceData === "function") {
+      const financeData = getStaticFinanceData();
+      return normalizeFinanceAdjustmentList(financeData.cashAdjustments || [], "cash");
+    }
     const parsed = typeof loadData === "function"
       ? loadData(CONFIG.cashAdjustmentsStorageKey) || []
       : JSON.parse(localStorage.getItem(CONFIG.cashAdjustmentsStorageKey) || "[]");
@@ -223,13 +227,15 @@ function readCashAdjustments() {
 }
 
 
-function writeCashAdjustments(adjustments) {
+async function writeCashAdjustments(adjustments) {
   const normalized = normalizeFinanceAdjustmentList(adjustments, "cash");
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    await saveStaticFinanceData({ ...getStaticFinanceData(), cashAdjustments: normalized });
+    return normalized;
+  }
   if (typeof saveData === "function") saveData(CONFIG.cashAdjustmentsStorageKey, normalized);
   else localStorage.setItem(CONFIG.cashAdjustmentsStorageKey, JSON.stringify(normalized));
-  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
-    saveStaticFinanceData({ ...getStaticFinanceData(), cashAdjustments: normalized });
-  }
+  return normalized;
 }
 
 
@@ -270,6 +276,10 @@ async function getAllFinanceRecords() {
 
 function readPayAdjustments() {
   try {
+    if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof getStaticFinanceData === "function") {
+      const financeData = getStaticFinanceData();
+      return normalizeFinanceAdjustmentList(financeData.payAdjustments || [], "pay");
+    }
     const parsed = typeof loadData === "function"
       ? loadData(CONFIG.payAdjustmentsStorageKey) || []
       : JSON.parse(localStorage.getItem(CONFIG.payAdjustmentsStorageKey) || "[]");
@@ -280,13 +290,15 @@ function readPayAdjustments() {
 }
 
 
-function writePayAdjustments(adjustments) {
+async function writePayAdjustments(adjustments) {
   const normalized = normalizeFinanceAdjustmentList(adjustments, "pay");
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    await saveStaticFinanceData({ ...getStaticFinanceData(), payAdjustments: normalized });
+    return normalized;
+  }
   if (typeof saveData === "function") saveData(CONFIG.payAdjustmentsStorageKey, normalized);
   else localStorage.setItem(CONFIG.payAdjustmentsStorageKey, JSON.stringify(normalized));
-  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
-    saveStaticFinanceData({ ...getStaticFinanceData(), payAdjustments: normalized });
-  }
+  return normalized;
 }
 
 
@@ -496,6 +508,10 @@ function normalizeDailyBalanceEntry(entry = {}) {
 
 function readDailyBalanceLedger() {
   try {
+    if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof getStaticFinanceData === "function") {
+      const financeData = getStaticFinanceData();
+      return (Array.isArray(financeData.dailyBalanceLedger) ? financeData.dailyBalanceLedger : []).map(normalizeDailyBalanceEntry);
+    }
     const parsed = typeof loadData === "function"
       ? loadData(CONFIG.dailyBalanceLedgerStorageKey) || []
       : JSON.parse(localStorage.getItem(CONFIG.dailyBalanceLedgerStorageKey) || "[]");
@@ -506,13 +522,14 @@ function readDailyBalanceLedger() {
 }
 
 
-function writeDailyBalanceLedger(entries) {
+async function writeDailyBalanceLedger(entries) {
   const normalized = (Array.isArray(entries) ? entries : []).map(normalizeDailyBalanceEntry);
+  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
+    await saveStaticFinanceData({ ...getStaticFinanceData(), dailyBalanceLedger: normalized });
+    return normalized;
+  }
   if (typeof saveData === "function") saveData(CONFIG.dailyBalanceLedgerStorageKey, normalized);
   else localStorage.setItem(CONFIG.dailyBalanceLedgerStorageKey, JSON.stringify(normalized));
-  if (typeof isStaticDeploy === "function" && isStaticDeploy() && typeof saveStaticFinanceData === "function") {
-    saveStaticFinanceData({ ...getStaticFinanceData(), dailyBalanceLedger: normalized });
-  }
   return normalized;
 }
 
@@ -521,7 +538,7 @@ async function loadDailyBalanceLedger() {
   try {
     const payload = await api("/api/daily-balance-ledger");
     const entries = (payload.entries || []).map(normalizeDailyBalanceEntry);
-    writeDailyBalanceLedger(entries);
+    await writeDailyBalanceLedger(entries);
     return entries;
   } catch {
     return readDailyBalanceLedger();
@@ -535,11 +552,12 @@ async function saveDailyBalanceEntry(entry) {
     const payload = await api("/api/daily-balance-ledger", { method: "POST", body: normalized });
     const saved = normalizeDailyBalanceEntry(payload.entry || normalized);
     const entries = readDailyBalanceLedger().filter((item) => item.id !== saved.id);
-    writeDailyBalanceLedger([...entries, saved]);
+    await writeDailyBalanceLedger([...entries, saved]);
     return saved;
   } catch (error) {
     const entries = readDailyBalanceLedger().filter((item) => item.id !== normalized.id);
-    writeDailyBalanceLedger([...entries, normalized]);
+    if (typeof isStaticDeploy === "function" && isStaticDeploy()) throw error;
+    await writeDailyBalanceLedger([...entries, normalized]);
     return normalized;
   }
 }
@@ -549,10 +567,10 @@ async function deleteDailyBalanceEntry(id) {
   if (!id) return;
   try {
     await api(`/api/daily-balance-ledger/${encodeURIComponent(id)}`, { method: "DELETE" });
-  } catch {
-    // Local fallback below keeps static/offline mode usable.
+  } catch (error) {
+    if (typeof isStaticDeploy === "function" && isStaticDeploy()) throw error;
   }
-  writeDailyBalanceLedger(readDailyBalanceLedger().filter((entry) => entry.id !== id));
+  await writeDailyBalanceLedger(readDailyBalanceLedger().filter((entry) => entry.id !== id));
 }
 
 
@@ -2452,7 +2470,7 @@ async function addCashAdjustment(username, amount, mode = "subtract") {
     timestamp: now,
     createdAt: now,
   };
-  writeCashAdjustments([...readCashAdjustments(), adjustment]);
+  await writeCashAdjustments([...readCashAdjustments(), adjustment]);
 }
 
 
@@ -2610,7 +2628,7 @@ async function addPayAdjustment(username, amount, mode = "subtract") {
     createdAt: now,
     updatedAt: now,
   };
-  writePayAdjustments([...readPayAdjustments(), adjustment]);
+  await writePayAdjustments([...readPayAdjustments(), adjustment]);
 }
 
 
