@@ -88,17 +88,34 @@ async function requestAdminPushNotifications(options = {}) {
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=25", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=26", { scope: "./" });
     await registration.update().catch(() => {});
-    const subscription = await createAdminStandardWebPushSubscription(registration);
+
+    let subscription = null;
+    let standardPushError = null;
+    try {
+      subscription = await createAdminStandardWebPushSubscription(registration);
+    } catch (error) {
+      standardPushError = error;
+      console.warn("[push] standard web push subscription failed; trying Firebase Messaging", error);
+    }
 
     const { app, db } = await initializeAdminPushFirebaseContext();
     if (!db) throw new Error("firebase-context-unavailable");
 
     const webPushRegistered = subscription ? await saveAdminWebPushSubscription(db, subscription.toJSON()) : false;
-    const fcmRegistered = webPushRegistered ? false : await registerAdminFirebaseMessaging(db, app, registration);
+    let fcmRegistered = false;
+    let fcmError = null;
+    if (!webPushRegistered) {
+      try {
+        fcmRegistered = await registerAdminFirebaseMessaging(db, app, registration);
+      } catch (error) {
+        fcmError = error;
+        console.warn("[push] Firebase Messaging token registration failed", error);
+      }
+    }
 
-    if (!webPushRegistered && !fcmRegistered) throw new Error("push-registration-no-token-or-subscription");
+    if (!webPushRegistered && !fcmRegistered) throw buildPushRegistrationError(standardPushError, fcmError);
     state.adminPushStatus = "enabled";
     state.adminPushLastError = "";
     return true;
@@ -109,6 +126,13 @@ async function registerAdminPushToken() {
     showToast(state.adminPushLastError);
     return false;
   }
+}
+
+function buildPushRegistrationError(standardPushError, fcmError) {
+  const details = [standardPushError, fcmError]
+    .map((error) => String(error?.code || error?.name || error?.message || error || "").trim())
+    .filter(Boolean);
+  return new Error(details.length ? `push-registration-no-token-or-subscription: ${details.join(" | ")}` : "push-registration-no-token-or-subscription");
 }
 
 async function initializeAdminPushFirebaseContext() {
@@ -583,6 +607,7 @@ function getAdminPushErrorMessage(error) {
   if (/push-registration-no-token-or-subscription/i.test(code)) return "ბრაუზერმა push subscription/token არ დააბრუნა.";
   if (/AbortError/i.test(code)) return "ბრაუზერმა push subscription შეწყვიტა. სცადეთ refresh და ხელახლა ფუშების ჩართვა.";
   if (/InvalidStateError/i.test(code)) return "ძველი push subscription დაზიანებულია. სცადეთ საიტის permissions/cache გასუფთავება და თავიდან ჩართვა.";
+  if (/InvalidAccessError|InvalidCharacterError|invalid-argument|invalid argument/i.test(code)) return "ბრაუზერმა push key არ მიიღო. გვერდი განაახლეთ და ფუში თავიდან ჩართეთ; თუ ისევ განმეორდა, ამ ბრაუზერზე Firebase Messaging fallback ჩაირთვება მხოლოდ მხარდაჭერის შემთხვევაში.";
   if (/ServiceWorker|service worker/i.test(code)) return "service worker ვერ დარეგისტრირდა. გვერდი სრულად დაარეფრეშეთ და სცადეთ თავიდან.";
   if (/unsupported|not supported/i.test(code)) return "ამ ბრაუზერს ეს ფუშ ტექნოლოგია არ უჭერს მხარს.";
   if (/firestore|permission|Missing or insufficient permissions/i.test(code)) return "Firebase-ში ფუშ token-ის შენახვა დაიბლოკა.";

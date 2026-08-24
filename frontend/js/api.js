@@ -461,6 +461,7 @@ async function applyFirebaseStaticStoreUpdate(store) {
   const normalizedStore = normalizeStaticStore(mergeStaticStores(loadStaticBootstrap.cache, store));
   const backfilled = await backfillStaticPartnerOrderLocations(normalizedStore);
   loadStaticBootstrap.cache = normalizedStore;
+  refreshStaticCurrentUserProfile(normalizedStore);
   saveData(STATIC_DEPLOY_STORAGE_KEY, normalizedStore);
   if (backfilled && typeof saveFirebaseStaticStore === "function") {
     saveFirebaseStaticStore(normalizedStore).catch((error) => {
@@ -476,6 +477,20 @@ async function applyFirebaseStaticStoreUpdate(store) {
       console.warn("Realtime refresh failed", error);
     });
   }, 350);
+}
+
+function refreshStaticCurrentUserProfile(store = loadStaticBootstrap.cache) {
+  if (!state.currentUser || !store || !Array.isArray(store.users)) return null;
+  const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(state.currentUser));
+  if (!user) return null;
+  const profile = publicStaticUser(user);
+  state.currentUserProfile = {
+    ...(state.currentUserProfile && typeof state.currentUserProfile === "object" ? state.currentUserProfile : {}),
+    ...profile,
+  };
+  state.isAdmin = profile.role === "admin";
+  state.isPartner = profile.role === "partner";
+  return state.currentUserProfile;
 }
 
 function hydrateStaticFinanceStorage(financeData = {}) {
@@ -1014,8 +1029,9 @@ function publicStaticPartnerPickup(store, partner, parcels) {
 }
 
 function getStaticPartnerPickupPinsForCurrentUser(store) {
-  const role = state.currentUserProfile?.role || "";
-  const currentZoneIds = new Set(getStaticUserZoneIds(state.currentUserProfile || {}));
+  const currentProfile = refreshStaticCurrentUserProfile(store) || state.currentUserProfile || {};
+  const role = currentProfile.role || "";
+  const currentZoneIds = new Set(getStaticUserZoneIds(currentProfile));
   const parcelGroups = buildStaticActivePartnerPickupParcelGroups(store);
   return (Array.isArray(store.users) ? store.users : [])
     .filter((user) => user.role === "partner" && user.status !== "inactive")
@@ -1622,16 +1638,17 @@ async function staticApi(path, options = {}) {
     const username = decodeURIComponent(partnerPickupAckMatch[1]);
     const user = store.users.find((item) => normalizeUsername(item.username) === normalizeUsername(username) && item.role === "partner");
     if (!user) return { partner: null, acknowledgedCount: 0 };
-    if (!["admin", "courier"].includes(state.currentUserProfile?.role || "")) throw new Error("წვდომა აკრძალულია.");
+    const currentProfile = refreshStaticCurrentUserProfile(store) || state.currentUserProfile || {};
+    if (!["admin", "courier"].includes(currentProfile.role || "")) throw new Error("წვდომა აკრძალულია.");
     const zoneId = getStaticPartnerPickupZoneId(user);
-    const currentZoneIds = new Set(getStaticUserZoneIds(state.currentUserProfile || {}));
-    if (state.currentUserProfile?.role === "courier" && (!zoneId || !currentZoneIds.has(zoneId))) throw new Error("ეს პარტნიორი თქვენს ზონაში არ არის.");
+    const currentZoneIds = new Set(getStaticUserZoneIds(currentProfile));
+    if (currentProfile.role === "courier" && (!zoneId || !currentZoneIds.has(zoneId))) throw new Error("ეს პარტნიორი თქვენს ზონაში არ არის.");
     const activeParcels = getStaticActivePartnerPickupParcels(store, user);
     const now = new Date().toISOString();
     activeParcels.forEach((parcel) => {
       parcel.pickedUpAt = now;
       parcel.pickedUpBy = state.currentUser || "";
-      parcel.pickedUpByRole = state.currentUserProfile?.role || "";
+      parcel.pickedUpByRole = currentProfile.role || "";
       parcel.partnerPickupAcknowledgedAt = now;
       parcel.partnerPickupAcknowledgedBy = state.currentUser || "";
       parcel.updatedAt = now;
@@ -1639,7 +1656,7 @@ async function staticApi(path, options = {}) {
     Object.assign(user, {
       lastPickupAcknowledgedAt: now,
       lastPickupAcknowledgedBy: state.currentUser || "",
-      lastPickupAcknowledgedByRole: state.currentUserProfile?.role || "",
+      lastPickupAcknowledgedByRole: currentProfile.role || "",
       updatedAt: now,
     });
     saveStaticBootstrap();
