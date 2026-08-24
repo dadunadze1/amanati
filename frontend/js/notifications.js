@@ -1,7 +1,7 @@
 "use strict";
 
 const ADMIN_PUSH_VAPID_KEY = "BA4FhG342cMhWZCPegnOw1NoZIb_4HhgL8DRAVsVrRqNxeMbXxg0On0G3eqpAslWwyerpOOWBQWk8trQeVenp7g";
-const ADMIN_WEB_PUSH_PUBLIC_KEY = "BAEuO5gXFaWrtcaxhWxvzgNc1hlvCYZoNtYdxJno43RqzgANahvbOvrQzaMV7rMTUsDXyGaqa_OW5FrxbYCK4MY";
+const ADMIN_WEB_PUSH_PUBLIC_KEY = "BOt7WZ1hnouutGnEJzmiiGHLt3NUVsHjp-EvOeIMktmPhYVzQNju3ssYBX51d7cmqddeQCh4p1n_nOL6HFNP57Q";
 const ADMIN_PUSH_TOKENS_COLLECTION = "adminPushTokens";
 const ADMIN_WEB_PUSH_SUBSCRIPTIONS_COLLECTION = "adminWebPushSubscriptions";
 const ADMIN_NOTIFICATIONS_COLLECTION = "adminNotifications";
@@ -88,7 +88,7 @@ async function requestAdminPushNotifications(options = {}) {
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=27", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=28", { scope: "./" });
     await registration.update().catch(() => {});
 
     let subscription = null;
