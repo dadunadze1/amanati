@@ -1690,6 +1690,7 @@ async function handleApi(request, response, url) {
       const password = String(body.password || "").trim();
       if (password) user.passwordHash = hashPassword(password);
     }
+    user.updatedAt = new Date().toISOString();
     await writeDb(db);
     sendJson(response, 200, { user: publicUser(user) });
     return;

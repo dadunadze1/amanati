@@ -314,6 +314,44 @@ test("admin can create a partner from the management form", async ({ page }) => 
   await expect(page.locator("#dialogBody")).toContainText("Form Partner");
 });
 
+test("admin can edit a courier profile", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const username = `courier-edit-${Date.now()}`;
+  await page.evaluate(async (courierUsername) => {
+    const response = await fetch("/api/users", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${state.authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username: courierUsername,
+        password: "pass123",
+        role: "courier",
+        firstName: "Old",
+        lastName: "Name",
+        phone: "555550001",
+      }),
+    });
+    if (!response.ok) throw new Error(`courier-create-${response.status}`);
+    await window.openUserEditDialog(courierUsername);
+  }, username);
+
+  await expect(page.locator("#dialogTitle")).toContainText("კურიერის რედაქტირება");
+  await page.locator("#userFirstName").fill("New");
+  await page.locator("#userLastName").fill("Courier");
+  await page.locator("#dialogActions .button.primary").click();
+
+  await expect.poll(async () => page.evaluate(async (courierUsername) => {
+    const users = await window.getUsers();
+    const user = users.find((item) => item.username === courierUsername);
+    return user ? `${user.firstName} ${user.lastName}` : "";
+  }, username)).toBe("New Courier");
+});
+
 test("partner pickup dialog acknowledges active pickup pins", async ({ page }) => {
   await page.goto("/");
   await ensureAdminSession(page);
