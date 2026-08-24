@@ -88,7 +88,7 @@ async function requestAdminPushNotifications(options = {}) {
 
 async function registerAdminPushToken() {
   try {
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=26", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js?v=27", { scope: "./" });
     await registration.update().catch(() => {});
 
     let subscription = null;
@@ -132,7 +132,7 @@ function buildPushRegistrationError(standardPushError, fcmError) {
   const details = [standardPushError, fcmError]
     .map((error) => String(error?.code || error?.name || error?.message || error || "").trim())
     .filter(Boolean);
-  return new Error(details.length ? `push-registration-no-token-or-subscription: ${details.join(" | ")}` : "push-registration-no-token-or-subscription");
+  return new Error(details.length ? `push-registration-details: ${details.join(" | ")}` : "push-registration-no-token-or-subscription");
 }
 
 async function initializeAdminPushFirebaseContext() {
@@ -166,13 +166,31 @@ async function createAdminStandardWebPushSubscription(registration) {
     subscription = null;
   }
   if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(ADMIN_WEB_PUSH_PUBLIC_KEY),
-    });
+    subscription = await subscribeAdminStandardWebPush(registration);
   }
 
   return subscription;
+}
+
+async function subscribeAdminStandardWebPush(registration) {
+  const keyBytes = urlBase64ToUint8Array(ADMIN_WEB_PUSH_PUBLIC_KEY);
+  const keyBuffer = keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength);
+  const keyVariants = [keyBuffer, keyBytes];
+  let lastError = null;
+
+  for (const applicationServerKey of keyVariants) {
+    try {
+      return await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+    } catch (error) {
+      lastError = error;
+      if (!isPushKeyArgumentError(error)) throw error;
+    }
+  }
+
+  throw lastError || new Error("push-subscribe-invalid-argument");
 }
 
 async function registerAdminFirebaseMessaging(db, app, registration) {
@@ -590,6 +608,10 @@ function urlBase64ToUint8Array(value) {
   const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(base64);
   return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
+}
+
+function isPushKeyArgumentError(error) {
+  return /InvalidAccessError|InvalidCharacterError|invalid-argument|invalid argument/i.test(String(error?.code || error?.name || error?.message || error || ""));
 }
 
 function subscriptionMatchesWebPushKey(subscription) {
