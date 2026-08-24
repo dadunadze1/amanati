@@ -105,10 +105,10 @@ function normalizeDateKey(value) {
 function getParcelStatsDateKey(parcel) {
   if (!parcel || typeof parcel !== "object") return "";
   const statusDates = parcel.status === "delivered"
-    ? [parcel.deliveredAt, parcel.completedAt, parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.archivedAt, parcel.updatedAt]
+    ? [parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
     : parcel.status === "failed"
-      ? [parcel.failedAt, parcel.completedAt, parcel.completedWorkdayKey, parcel.workdayKey, parcel.archivedAt, parcel.updatedAt]
-      : [parcel.assignedAt, parcel.createdAt, parcel.workdayKey, parcel.updatedAt];
+      ? [parcel.completedWorkdayKey, parcel.workdayKey, parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+      : [parcel.workdayKey, parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
   return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
 }
 
@@ -276,10 +276,9 @@ function formatMonthYear(date) {
 
 
 function getPaymentAmount(parcel) {
-  const value = [parcel?.paymentAmount, parcel?.cashAmount, parcel?.payment, parcel?.amount, parcel?.price, parcel?.codAmount]
-    .find((item) => item !== undefined && item !== null && item !== "");
-  const amount = safeMoney(value);
-  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+  return [parcel?.paymentAmount, parcel?.cashAmount, parcel?.payment, parcel?.amount, parcel?.price, parcel?.codAmount]
+    .map(safeMoney)
+    .find((amount) => Number.isFinite(amount) && amount > 0) || 0;
 }
 
 

@@ -1739,11 +1739,17 @@ async function runAutoDayClose(closeDate = getPreviousDateKey()) {
       return { archived: 0 };
     }
 
+    const shouldCloseWorkday = Boolean(
+      state.isAdmin
+      && deliveredPins.every((pin) => parcelCompletedDateKey(pin) === closeDate),
+    );
     const payload = await api("/api/parcels/archive", {
       method: "POST",
       body: {
         status: "delivered",
         autoClosedDate: closeDate,
+        closeWorkday: shouldCloseWorkday,
+        workdayKey: shouldCloseWorkday ? closeDate : "",
         parcelIds: deliveredPins.map((pin) => pin.id),
       },
     });

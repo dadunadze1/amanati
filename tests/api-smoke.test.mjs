@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -40,6 +40,20 @@ async function api(path, options = {}) {
     throw new Error(`${options.method || "GET"} ${path} failed with ${result.response.status}: ${JSON.stringify(result.payload)}`);
   }
   return result.payload;
+}
+
+async function readTestDb() {
+  return JSON.parse(await readFile(DB_FILE, "utf8"));
+}
+
+async function writeTestDb(db) {
+  await writeFile(DB_FILE, `${JSON.stringify(db, null, 2)}\n`, "utf8");
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
 }
 
 async function waitForServer() {
@@ -197,6 +211,24 @@ describe("local API smoke flow", () => {
     assert.equal(pending.parcels.length, 1);
     assert.equal(pending.parcels[0].id, createdParcel.id);
 
+    const legacyCodParcelId = `legacy-cod-${Date.now()}`;
+    const codDb = await readTestDb();
+    codDb.parcels.push({
+      ...createdParcel,
+      id: legacyCodParcelId,
+      paymentAmount: 0,
+      cashAmount: 0,
+      codAmount: 77,
+      status: "pending",
+      archivedAt: "",
+      deletedAt: "",
+      updatedAt: new Date().toISOString(),
+    });
+    await writeTestDb(codDb);
+    const legacyCodSearch = await api(`/api/parcels/search?status=pending&courier=${encodeURIComponent(courierUsername)}`, { token: adminToken });
+    const legacyCodParcel = legacyCodSearch.parcels.find((parcel) => parcel.id === legacyCodParcelId);
+    assert.equal(legacyCodParcel.paymentAmount, 77);
+
     const failed = await api(`/api/parcels/search?status=failed&courier=${encodeURIComponent(courierUsername)}`, { token: adminToken });
     assert.equal(failed.parcels.length, 0);
 
@@ -230,6 +262,9 @@ describe("local API smoke flow", () => {
     });
     assert.equal(volumeCreated.parcel.tariffId, "volume_5_10");
     assert.equal(volumeCreated.parcel.partnerName, "Smoke Partner");
+    assert.equal(volumeCreated.parcel.deliveryTotalPrice, 10);
+    assert.equal(volumeCreated.parcel.courierPay, 3.5);
+    assert.equal(volumeCreated.parcel.adminProfit, 6.5);
 
     const adminPickups = await api("/api/partner-pickups", { token: adminToken });
     const adminPickup = adminPickups.pickups.find((pickup) => pickup.partnerUsername === partnerUsername);
@@ -385,5 +420,54 @@ describe("local API smoke flow", () => {
       },
     });
     assert.equal(oldDayClose.archived, 0);
+
+    const liveWorkday = await api("/api/workday", { token: adminToken });
+    const calendarDateKey = liveWorkday.workday.calendarDateKey;
+    const staleWorkdayKey = addDaysToDateKey(calendarDateKey, -2);
+    const staleNextDayKey = addDaysToDateKey(staleWorkdayKey, 1);
+    const db = await readTestDb();
+    db.settings = {
+      ...(db.settings || {}),
+      currentWorkdayKey: staleWorkdayKey,
+      currentWorkdayStartedAt: `${staleWorkdayKey}T08:00:00.000Z`,
+    };
+    await writeTestDb(db);
+
+    const staleCreated = await api("/api/parcels", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        courierUsername,
+        city: "Tbilisi",
+        address: "Stale Workday Street 12",
+        fullAddress: "Tbilisi, Stale Workday Street 12",
+        fullName: "Stale Workday",
+        phone: "555121003",
+        paymentAmount: 30,
+        lat: 41.7151,
+        lng: 44.8271,
+      },
+    });
+    assert.equal(staleCreated.parcel.workdayKey, staleWorkdayKey);
+
+    const staleDelivered = await api(`/api/parcels/${staleCreated.parcel.id}/status`, {
+      method: "PATCH",
+      token: courierToken,
+      body: { status: "delivered", expectedUpdatedAt: staleCreated.parcel.updatedAt },
+    });
+    assert.equal(staleDelivered.parcel.financeDateKey, staleWorkdayKey);
+
+    const staleClose = await api("/api/parcels/archive", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        closeWorkday: true,
+        workdayKey: staleWorkdayKey,
+        parcelIds: [staleCreated.parcel.id],
+      },
+    });
+    assert.equal(staleClose.archived, 1);
+    assert.equal(staleClose.workday.currentWorkdayKey >= calendarDateKey, true);
+    assert.notEqual(staleClose.workday.currentWorkdayKey, staleNextDayKey);
   });
 });

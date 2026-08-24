@@ -221,7 +221,8 @@ function closeCurrentWorkday(db, workdayKey, now = new Date()) {
   const settings = getDbSettings(db);
   const state = ensureWorkdayState(db, now);
   const closedKey = isDateKey(workdayKey) ? workdayKey : state.currentWorkdayKey;
-  const nextWorkdayKey = addDaysToDateKey(closedKey, 1) || state.calendarDateKey;
+  const nextCandidateKey = addDaysToDateKey(closedKey, 1) || state.calendarDateKey;
+  const nextWorkdayKey = nextCandidateKey > state.calendarDateKey ? nextCandidateKey : state.calendarDateKey;
   settings.lastClosedWorkdayKey = closedKey;
   settings.lastWorkdayClosedAt = now.toISOString();
   if (!isDateKey(settings.currentWorkdayKey) || settings.currentWorkdayKey <= closedKey) {
@@ -279,16 +280,7 @@ function publicUser(user) {
 function publicParcel(db, parcel) {
   const courier = parcel.courierUsername ? findUser(db, parcel.courierUsername) : null;
   const paymentAmount = getParcelPaymentAmount(parcel);
-  const isDelivered = parcel.status === "delivered";
-  const finance = isDelivered
-    ? getParcelFinanceSnapshot(db, parcel)
-    : {
-        tariffId: getParcelTariffId(parcel),
-        tariffLabel: getParcelTariff(db, parcel).label,
-        deliveryTotalPrice: hasStoredMoney(parcel.deliveryTotalPrice) ? storedMoney(parcel.deliveryTotalPrice) : 0,
-        courierPay: hasStoredMoney(parcel.courierPay) ? storedMoney(parcel.courierPay) : 0,
-        adminProfit: hasStoredMoney(parcel.adminProfit) ? storedMoney(parcel.adminProfit) : 0,
-      };
+  const finance = getParcelFinanceSnapshot(db, parcel);
   return {
     ...parcel,
     paymentAmount,
@@ -1255,7 +1247,9 @@ function storedMoney(value) {
 }
 
 function getParcelPaymentAmount(parcel) {
-  return storedMoney(parcel?.paymentAmount ?? parcel?.cashAmount ?? parcel?.payment ?? parcel?.amount ?? parcel?.price ?? parcel?.codAmount);
+  return [parcel?.paymentAmount, parcel?.cashAmount, parcel?.payment, parcel?.amount, parcel?.price, parcel?.codAmount]
+    .map(storedMoney)
+    .find((amount) => Number.isFinite(amount) && amount > 0) || 0;
 }
 
 function applyDeliveredFinance(db, parcel) {

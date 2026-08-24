@@ -1534,7 +1534,7 @@ async function closeAdminDay() {
     : null;
   const currentWorkdayKey = workday?.currentWorkdayKey || toDateKey(new Date());
   const completedPins = pins.filter((pin) => isCompletedParcelStatus(pin) && parcelMatchesStatsDate(pin, currentWorkdayKey));
-  if (!completedPins.length) {
+  if (!completedPins.length && !workday?.isStale) {
     closeDialog();
     showToast("დასახური პინი არ არის.");
     return;

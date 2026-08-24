@@ -384,9 +384,9 @@ function getStaticParcelFinanceSnapshot(parcel = {}, store = loadStaticBootstrap
 }
 
 function getStaticParcelPaymentAmount(parcel) {
-  const value = parcel?.paymentAmount ?? parcel?.cashAmount ?? parcel?.payment ?? parcel?.amount ?? parcel?.price ?? parcel?.codAmount ?? 0;
-  const amount = getStaticMoney(value);
-  return amount > 0 ? amount : 0;
+  return [parcel?.paymentAmount, parcel?.cashAmount, parcel?.payment, parcel?.amount, parcel?.price, parcel?.codAmount]
+    .map(getStaticMoney)
+    .find((amount) => Number.isFinite(amount) && amount > 0) || 0;
 }
 
 function hasStaticMoneyValue(value) {
@@ -721,7 +721,8 @@ function ensureStaticWorkdayState(store, now = new Date()) {
 function closeStaticCurrentWorkday(store, workdayKey, now = new Date()) {
   const state = ensureStaticWorkdayState(store, now);
   const closedKey = isStaticDateKey(workdayKey) ? workdayKey : state.currentWorkdayKey;
-  const nextWorkdayKey = addStaticDaysToDateKey(closedKey, 1) || state.calendarDateKey;
+  const nextCandidateKey = addStaticDaysToDateKey(closedKey, 1) || state.calendarDateKey;
+  const nextWorkdayKey = nextCandidateKey > state.calendarDateKey ? nextCandidateKey : state.calendarDateKey;
   store.settings.lastClosedWorkdayKey = closedKey;
   store.settings.lastWorkdayClosedAt = now.toISOString();
   if (!isStaticDateKey(store.settings.currentWorkdayKey) || store.settings.currentWorkdayKey <= closedKey) {
