@@ -267,6 +267,8 @@ function normalizeAddressDirectoryText(value) {
     .replace(/ზღვის\s+უბანი/giu, "ზღვისუბანი")
     .replace(/თემქის/giu, "თემქა")
     .replace(/დიღმის\s+მასივის/giu, "დიღმის მასივი")
+    .replace(/ორთაჭალაში/giu, "ორთაჭალა")
+    .replace(/ვარკეთილში/giu, "ვარკეთილი")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim()

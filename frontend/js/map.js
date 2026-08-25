@@ -1283,6 +1283,10 @@ function normalizeAddressQueryStreet(value) {
   return normalizeGeocodeQuery(value)
     .replace(/[,]+/g, " ")
     .replace(/\b(tbilisi|rustavi|georgia|თბილისი|რუსთავი|საქართველო)\b/gi, " ")
+    .replace(/(^|[\s,])(თბილისი|რუსთავი|საქართველო)(?=$|[\s,])/gi, " ")
+    .replace(/(^|[\s,])(ქუჩა|ქ|გამზირი|გამზ|ჩიხი|შესახვევი|გზატკეცილი)(?=$|[\s,])/gi, " ")
+    .replace(/ორთაჭალაში/gi, "ორთაჭალა")
+    .replace(/ვარკეთილში/gi, "ვარკეთილი")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1336,6 +1340,18 @@ function searchLocalAddressFallback(queryParts) {
       base: { lat: 41.6940, lng: 44.8840 },
       step: { lat: 0, lng: 0 },
       address: "ვარკეთილი",
+    },
+    {
+      tokens: ["ორთაჭალა", "ორთაჭალაში", "ortachala"],
+      base: { lat: 41.6868, lng: 44.8338 },
+      step: { lat: 0.000010, lng: 0.000010 },
+      address: "ორთაჭალა",
+    },
+    {
+      tokens: ["გულუა", "გულუას", "gulua"],
+      base: { lat: 41.6868, lng: 44.8338 },
+      step: { lat: 0.000010, lng: 0.000010 },
+      address: "გულუას ქუჩა",
     },
     {
       tokens: ["გლდანი", "გლდანის", "gldani"],
@@ -1540,6 +1556,8 @@ function normalizeGeocodeQuery(value) {
   return String(value ?? "")
     .normalize("NFC")
     .replace(/[\u00A0\s]+/g, " ")
+    .replace(/ორთაჭალაში/gi, "ორთაჭალა")
+    .replace(/ვარკეთილში/gi, "ვარკეთილი")
     .replace(/\s*,\s*/g, ", ")
     .replace(/(?:,\s*){2,}/g, ", ")
     .replace(/\s+/g, " ")
