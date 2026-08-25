@@ -1,6 +1,6 @@
 "use strict";
 
-const ADDRESS_DIRECTORY_DATA_URL = "data/address-directory.json?v=2";
+const ADDRESS_DIRECTORY_DATA_URL = "data/address-directory.json?v=3";
 const ADDRESS_DIRECTORY_FALLBACK = [
   {
     "city": "თბილისი",
