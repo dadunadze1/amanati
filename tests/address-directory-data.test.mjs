@@ -14,6 +14,8 @@ describe("address directory data", () => {
     assert.ok(total >= 4159);
     assert.ok(streetsByDistrict.get("გლდანი")?.includes("9 აპრილის ქუჩა"));
     assert.ok(streetsByDistrict.get("ისანი")?.includes("ალექსანდრე როინაშვილის ქუჩა"));
+    assert.ok(streetsByDistrict.get("ისანი")?.includes("ვაზისუბნის IV მიკრორაიონი"));
+    assert.ok(streetsByDistrict.get("ისანი")?.includes("ვაზისუბნის IV მიკრორაიონი I კვარტალი"));
     assert.ok(streetsByDistrict.get("დიდუბე")?.includes("გიორგი ბალანჩინის ქუჩა"));
     assert.ok(streetsByDistrict.get("კრწანისი")?.includes("გია გულუას ქ."));
   });

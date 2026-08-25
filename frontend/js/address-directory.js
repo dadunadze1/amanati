@@ -1,6 +1,6 @@
 "use strict";
 
-const ADDRESS_DIRECTORY_DATA_URL = "data/address-directory.json?v=3";
+const ADDRESS_DIRECTORY_DATA_URL = "data/address-directory.json?v=4";
 const ADDRESS_DIRECTORY_FALLBACK = [
   {
     "city": "თბილისი",
@@ -168,7 +168,7 @@ const ADDRESS_DIRECTORY_CASE_NORMALIZATIONS = [
   [/ხარფუხში|ხარფუხის/giu, "ხარფუხი"],
   [/ავლაბარში|ავლაბრის/giu, "ავლაბარი"],
   [/ნავთლუღში|ნავთლუღის/giu, "ნავთლუღი"],
-  [/ვაზისუბანში|ვაზისუბნის/giu, "ვაზისუბანი"],
+  [/ვაზისუბანში|ვაზისუბნის|ვაზისუბანის/giu, "ვაზისუბანი"],
   [/ლილოში|ლილოს/giu, "ლილო"],
   [/ორხევში|ორხევის/giu, "ორხევი"],
   [/აეროპორტში|აეროპორტის/giu, "აეროპორტი"],
