@@ -793,6 +793,7 @@ function extractStickerName(lines, phone, paymentAmount) {
   const allCandidates = lines
     .map((line, index) => {
       const cleaned = stripStickerLineNoise(line, phone, paymentAmount)
+        .replace(/^(?:სახელი|მიმღები)\s*[:.\-]?\s*/i, "")
         .replace(/[0-9#+№.,:;()/-]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
@@ -847,7 +848,7 @@ function cleanStickerAddressCandidate(line) {
     .replace(/ორთაჭალაში/gi, "ორთაჭალა")
     .replace(/ვარკეთილში/gi, "ვარკეთილი")
     .replace(/გულუა(?:ს)?\s*(?:ქუჩა|ქ\.?|ქ)?\s*(?:№|#|ნომერი|n)?\s*(\d{1,4}[ა-ჰa-z]?)/gi, "გულუას ქ. $1")
-    .replace(/(^|[\s,])ქ\s*\.?\s*/gi, "$1ქ. ")
+    .replace(/(^|[\s,])ქ\.?(?=\s|\d|$)/gi, "$1ქ.")
     .replace(/\bკორპ(?:უსი)?\s*\.?\s*(\d{1,4}[ა-ჰa-z]?)/gi, "კორპ. $1")
     .replace(/\bსართ(?:ულ(?:ი|ზე)?)?\s*\.?\s*(\d{1,3})/gi, "სართული $1")
     .replace(/\s*(?:№|#)\s*/g, " ")

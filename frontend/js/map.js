@@ -1281,7 +1281,10 @@ async function searchAddress(query) {
       }
     }
     const acceptedResults = results.filter((result) => result.acceptedForSearch);
-    const ranked = rankAddressResults(dedupeAddressResults(acceptedResults), queryParts);
+    const streetMatchedResults = shouldRequireStreetMatchForSearch(queryParts)
+      ? acceptedResults.filter((result) => streetMatchesResult(result, queryParts.street))
+      : acceptedResults;
+    const ranked = rankAddressResults(dedupeAddressResults(streetMatchedResults), queryParts);
     const finalResults = ranked.length ? ranked : searchLocalAddressFallback(queryParts);
     console.log("[geocode] search response count", results.length);
     console.log("[geocode] search accepted count", finalResults.length);
@@ -1517,6 +1520,14 @@ function rankAddressResults(results, queryParts) {
     .sort((a, b) => b.score - a.score);
 
   return ranked;
+}
+
+
+function shouldRequireStreetMatchForSearch(queryParts) {
+  const street = normalizeAddressToken(queryParts?.street || "");
+  if (!street) return false;
+  const tokens = street.split(" ").filter((token) => token.length > 2);
+  return tokens.length > 0 && tokens.some((token) => token.length >= 4);
 }
 
 

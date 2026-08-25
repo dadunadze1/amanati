@@ -348,8 +348,20 @@ function normalizeAddressDirectoryStreetKey(value) {
 function addressDirectoryMatches(value, query) {
   const normalizedQuery = normalizeAddressDirectoryText(query);
   if (!normalizedQuery) return true;
-  return normalizeAddressDirectoryText(value).includes(normalizedQuery)
-    || normalizeAddressDirectoryStreetKey(value).includes(normalizeAddressDirectoryStreetKey(query));
+  return normalizedTokenSequenceIncludes(normalizeAddressDirectoryText(value), normalizedQuery)
+    || normalizedTokenSequenceIncludes(normalizeAddressDirectoryStreetKey(value), normalizeAddressDirectoryStreetKey(query));
+}
+
+function normalizedTokenSequenceIncludes(value, query) {
+  const valueTokens = String(value || "").split(" ").filter(Boolean);
+  const queryTokens = String(query || "").split(" ").filter(Boolean);
+  if (!queryTokens.length) return true;
+  if (queryTokens.length > valueTokens.length) return false;
+
+  for (let index = 0; index <= valueTokens.length - queryTokens.length; index += 1) {
+    if (queryTokens.every((token, offset) => valueTokens[index + offset] === token)) return true;
+  }
+  return false;
 }
 
 function getAddressDirectoryStreetMatches({ city, district, query, limit = 12 } = {}) {
@@ -422,13 +434,16 @@ function findAddressDirectoryNeighborhoodInText(address, city) {
       ...item,
       key: normalizeAddressDirectoryText(item.name),
     }))
-    .filter((item) => item.key && normalizedAddress.includes(item.key))
+    .filter((item) => item.key && normalizedTokenSequenceIncludes(normalizedAddress, item.key))
     .sort((a, b) => b.key.length - a.key.length || a.name.localeCompare(b.name, "ka-GE"))[0] || null;
 }
 
 function scoreAddressDirectoryPartStreetMatch(item, part) {
   if (!part?.key) return Infinity;
-  if (part.text.includes(item.streetText) || (item.streetKey.length >= 4 && part.key.includes(item.streetKey))) return 0;
+  if (
+    normalizedTokenSequenceIncludes(part.text, item.streetText)
+    || (item.streetKey.length >= 4 && normalizedTokenSequenceIncludes(part.key, item.streetKey))
+  ) return 0;
 
   const streetTokens = item.streetKey.split(" ").filter((token) => token.length >= 2);
   const partTokens = new Set(part.key.split(" ").filter(Boolean));
@@ -441,8 +456,8 @@ function scoreAddressDirectoryPartStreetMatch(item, part) {
 }
 
 function scoreAddressDirectoryTextStreetMatch(item, normalizedAddress, normalizedStreetAddress, parts) {
-  const wholeAddressMatch = normalizedAddress.includes(item.streetText)
-    || (item.streetKey.length >= 4 && normalizedStreetAddress.includes(item.streetKey));
+  const wholeAddressMatch = normalizedTokenSequenceIncludes(normalizedAddress, item.streetText)
+    || (item.streetKey.length >= 4 && normalizedTokenSequenceIncludes(normalizedStreetAddress, item.streetKey));
   let score = wholeAddressMatch ? 30 : Infinity;
 
   for (const part of parts) {

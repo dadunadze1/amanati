@@ -71,4 +71,18 @@ describe("sticker OCR parser", () => {
     assert.equal(parsed.paymentAmount, 0);
     assert.equal(parsed.address, "თბილისი, ლერმონტოვის 9");
   });
+
+  it("keeps full street words intact on simple white-background labels", () => {
+    const parsed = parseStickerText(`
+      ტყიბულის ქუჩა
+      110 ლარი
+      ნომერი 599489320
+      სახელი. სადნრო დადუნაძე
+    `);
+
+    assert.equal(parsed.fullName, "სადნრო დადუნაძე");
+    assert.equal(parsed.phone, "+995599489320");
+    assert.equal(parsed.paymentAmount, 110);
+    assert.equal(parsed.address, "თბილისი, ტყიბულის ქუჩა");
+  });
 });
