@@ -99,4 +99,29 @@ describe("sticker OCR parser", () => {
     assert.equal(parsed.paymentAmount, 110);
     assert.equal(parsed.address, "თბილისი, ვაჟა ფშაველას 6 კვარტალი");
   });
+
+  it("extracts microdistrict and plateau labels across Tbilisi areas", () => {
+    const cases = [
+      ["გლდანის მე2 მიკრო", "თბილისი, გლდანის 2 მიკრო"],
+      ["მუხიანის მე4 მიკრორაიონი", "თბილისი, მუხიანის 4 მიკრორაიონი"],
+      ["თემქის მე11 მ/რ", "თბილისი, თემქის 11 მიკრორაიონი"],
+      ["ნუცუბიძის მე2 პლატო", "თბილისი, ნუცუბიძის 2 პლატო"],
+      ["დიღმის მასივის მე6 კვარტალი", "თბილისი, დიღმის მასივის 6 კვარტალი"],
+      ["ვარკეთილის პირველი პლატოს მეორე კვარტალი", "თბილისი, ვარკეთილის პირველი პლატო მეორე კვარტალი"],
+    ];
+
+    for (const [address, expected] of cases) {
+      const parsed = parseStickerText(`
+        ${address}
+        110 ლარი
+        ნომერი 599489320
+        სახელი. სადნრო დადუნაძე
+      `);
+
+      assert.equal(parsed.address, expected, address);
+      assert.equal(parsed.fullName, "სადნრო დადუნაძე");
+      assert.equal(parsed.phone, "+995599489320");
+      assert.equal(parsed.paymentAmount, 110);
+    }
+  });
 });

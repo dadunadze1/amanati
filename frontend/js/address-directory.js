@@ -307,6 +307,9 @@ function normalizeAddressDirectoryText(value) {
     .replace(/მკრ\.?/giu, " მიკრორაიონი ")
     .replace(/მიკრო(?:რაიონი)?/giu, " მიკრორაიონი ")
     .replace(/(^|[^\p{L}\p{N}])მე\s*[-.]?\s*(\d{1,2})(?=\s*(?:კვარტალი|კვ\.?|მიკრო|მიკრორაიონი|მკრ|მიკრორაიონი|პლატო)(?:$|[^\p{L}\p{N}]))/giu, "$1$2")
+    .replace(/პლატოს/giu, "პლატო")
+    .replace(/კვარტლის/giu, "კვარტალი")
+    .replace(/მიკროს|მიკრორაიონის/giu, "მიკრორაიონი")
     .replace(/კვ(?:არტალი|არტ\.?)/giu, " კვარტალი ")
     .replace(/კორპ\.?/giu, " კორპუსი ")
     .replace(/ზღვის\s+უბანი/giu, "ზღვისუბანი")
@@ -441,6 +444,7 @@ function findAddressDirectoryNeighborhoodInText(address, city) {
 
 function scoreAddressDirectoryPartStreetMatch(item, part) {
   if (!part?.key) return Infinity;
+  if (!addressDirectoryCategoryMatches(item.streetText, part.text)) return Infinity;
   if (
     normalizedTokenSequenceIncludes(part.text, item.streetText)
     || (item.streetKey.length >= 4 && normalizedTokenSequenceIncludes(part.key, item.streetKey))
@@ -456,9 +460,20 @@ function scoreAddressDirectoryPartStreetMatch(item, part) {
   return Infinity;
 }
 
+function addressDirectoryCategoryMatches(streetKey, queryKey) {
+  const categories = ["მიკრორაიონი", "კვარტალი", "პლატო"];
+  const streetCategories = categories.filter((token) => String(streetKey || "").split(" ").includes(token));
+  const queryCategories = categories.filter((token) => String(queryKey || "").split(" ").includes(token));
+  if (!streetCategories.length || !queryCategories.length) return true;
+  return queryCategories.some((token) => streetCategories.includes(token));
+}
+
 function scoreAddressDirectoryTextStreetMatch(item, normalizedAddress, normalizedStreetAddress, parts) {
-  const wholeAddressMatch = normalizedTokenSequenceIncludes(normalizedAddress, item.streetText)
-    || (item.streetKey.length >= 4 && normalizedTokenSequenceIncludes(normalizedStreetAddress, item.streetKey));
+  const wholeAddressMatch = addressDirectoryCategoryMatches(item.streetText, normalizedAddress)
+    && (
+      normalizedTokenSequenceIncludes(normalizedAddress, item.streetText)
+      || (item.streetKey.length >= 4 && normalizedTokenSequenceIncludes(normalizedStreetAddress, item.streetKey))
+    );
   let score = wholeAddressMatch ? 30 : Infinity;
 
   for (const part of parts) {

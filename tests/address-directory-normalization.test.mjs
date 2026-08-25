@@ -63,4 +63,30 @@ describe("address directory normalization", () => {
     assert.equal(normalized.neighborhood, "ვაჟა-ფშაველა");
     assert.equal(normalized.match.street, "ვაჟა-ფშაველას VI კვარტალი");
   });
+
+  it("matches Georgian quarter, microdistrict, and plateau aliases across districts", async () => {
+    const helpers = await loadAddressDirectoryHelpers();
+    const cases = [
+      ["გლდანის მე2 მიკრო", "გლდანი", "გლდანის II მიკრორაიონი"],
+      ["მუხიანის მე4 მიკრორაიონი", "მუხიანი", "მუხიანის IV მიკრორაიონი"],
+      ["თემქის მე11 მ/რ", "თემქა", "თემქა XI მიკრორაიონი"],
+      ["ნუცუბიძის მე2 პლატო", "ნუცუბიძე", "ნუცუბიძის II პლატო"],
+      ["დიღმის მასივის მე6 კვარტალი", "დიღმის მასივი", "დიღმის მასივი VI კვარტალი"],
+    ];
+
+    for (const [address, neighborhood, street] of cases) {
+      const normalized = helpers.normalizeAddressDirectoryAddress(address);
+      assert.equal(normalized.neighborhood, neighborhood, address);
+      assert.equal(normalized.match.street, street, address);
+    }
+  });
+
+  it("does not coerce unmatched plateau quarters into microdistricts", async () => {
+    const helpers = await loadAddressDirectoryHelpers();
+
+    const normalized = helpers.normalizeAddressDirectoryAddress("ვარკეთილის პირველი პლატოს მეორე კვარტალი");
+
+    assert.equal(normalized.address, "ვარკეთილის პირველი პლატოს მეორე კვარტალი");
+    assert.equal(normalized.match, null);
+  });
 });
