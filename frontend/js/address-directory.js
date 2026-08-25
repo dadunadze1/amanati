@@ -398,15 +398,88 @@ function getAddressDirectoryAllStreets(city) {
   }));
 }
 
+function getAddressDirectoryAddressParts(address) {
+  return String(address || "")
+    .split(",")
+    .map((part, index) => {
+      const raw = cleanAddressInput(part);
+      return {
+        raw,
+        index,
+        text: normalizeAddressDirectoryText(raw),
+        key: normalizeAddressDirectoryStreetKey(raw),
+        hasNumber: /\d/.test(raw),
+      };
+    })
+    .filter((part) => part.raw && part.text);
+}
+
+function findAddressDirectoryNeighborhoodInText(address, city) {
+  const normalizedAddress = normalizeAddressDirectoryText(address);
+  if (!normalizedAddress) return null;
+  return getAddressDirectoryNeighborhoods(city)
+    .map((item) => ({
+      ...item,
+      key: normalizeAddressDirectoryText(item.name),
+    }))
+    .filter((item) => item.key && normalizedAddress.includes(item.key))
+    .sort((a, b) => b.key.length - a.key.length || a.name.localeCompare(b.name, "ka-GE"))[0] || null;
+}
+
+function scoreAddressDirectoryPartStreetMatch(item, part) {
+  if (!part?.key) return Infinity;
+  if (part.text.includes(item.streetText) || (item.streetKey.length >= 4 && part.key.includes(item.streetKey))) return 0;
+
+  const streetTokens = item.streetKey.split(" ").filter((token) => token.length >= 2);
+  const partTokens = new Set(part.key.split(" ").filter(Boolean));
+  if (streetTokens.length >= 2 && streetTokens.every((token) => partTokens.has(token))) return 4;
+
+  const matchedTokens = streetTokens.filter((token) => token.length >= 4 && partTokens.has(token));
+  const hasStreetType = /(ქუჩა|ქ\.?|გამზირი|გამზ\.?|ჩიხი|შესახვევი|გზატკეცილი|პროსპექტი)/i.test(item.street);
+  if (hasStreetType && part.hasNumber && matchedTokens.length) return 8 + Math.max(0, streetTokens.length - matchedTokens.length);
+  return Infinity;
+}
+
+function scoreAddressDirectoryTextStreetMatch(item, normalizedAddress, normalizedStreetAddress, parts) {
+  const wholeAddressMatch = normalizedAddress.includes(item.streetText)
+    || (item.streetKey.length >= 4 && normalizedStreetAddress.includes(item.streetKey));
+  let score = wholeAddressMatch ? 30 : Infinity;
+
+  for (const part of parts) {
+    const partScore = scoreAddressDirectoryPartStreetMatch(item, part);
+    if (!Number.isFinite(partScore)) continue;
+    score = Math.min(score, partScore + (part.hasNumber ? -12 : 0) + part.index);
+  }
+
+  if (!Number.isFinite(score)) return Infinity;
+  const locationKey = normalizeAddressDirectoryStreetKey(item.neighborhood || item.district || "");
+  const numberedPartExists = parts.some((part) => part.hasNumber);
+  if (locationKey && item.streetKey === locationKey && numberedPartExists) score += 60;
+  return score;
+}
+
+function findAddressDirectoryStreetPart(parts, match) {
+  return parts
+    .map((part) => ({
+      part,
+      score: scoreAddressDirectoryPartStreetMatch(match, part) + (part.hasNumber ? -12 : 0) + part.index,
+    }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => a.score - b.score || b.part.key.length - a.part.key.length)[0]?.part?.raw || "";
+}
+
 function findAddressDirectoryStreetInText(address, city) {
   const normalizedAddress = normalizeAddressDirectoryText(address);
   const normalizedStreetAddress = normalizeAddressDirectoryStreetKey(address);
   if (!normalizedAddress) return null;
+  const parts = getAddressDirectoryAddressParts(address);
   const matches = getAddressDirectoryAllStreets(city)
-    .filter((item) => {
-      return normalizedAddress.includes(item.streetText) || (item.streetKey.length >= 4 && normalizedStreetAddress.includes(item.streetKey));
-    })
-    .sort((a, b) => b.streetKey.length - a.streetKey.length);
+    .map((item) => ({
+      ...item,
+      score: scoreAddressDirectoryTextStreetMatch(item, normalizedAddress, normalizedStreetAddress, parts),
+    }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => a.score - b.score || b.streetKey.length - a.streetKey.length);
   return matches[0] || null;
 }
 
@@ -418,7 +491,9 @@ function normalizeAddressDirectoryAddress(address, options = {}) {
   if (!match) return { address: rawAddress, corrected: false, match: null };
 
   const normalizedParts = rawAddress.split(",").map((part) => cleanAddressInput(part)).filter(Boolean);
+  const addressParts = getAddressDirectoryAddressParts(rawAddress);
   const geocodeCity = getAddressDirectoryGeocodeCity(match.city) || match.city;
+  const explicitNeighborhood = findAddressDirectoryNeighborhoodInText(rawAddress, city);
   const hasCity = normalizedParts.some((part) => (
     normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(match.city)
     || normalizeAddressDirectoryText(part) === normalizeAddressDirectoryText(geocodeCity)
@@ -433,12 +508,16 @@ function normalizeAddressDirectoryAddress(address, options = {}) {
     normalizeAddressDirectoryText(part).includes(normalizeAddressDirectoryText(match.street))
     || normalizeAddressDirectoryStreetKey(part).includes(normalizeAddressDirectoryStreetKey(match.street))
   ));
-  const streetPart = streetIndex >= 0 ? normalizedParts[streetIndex] : match.street;
-  const nextAddress = [cityPart, match.neighborhood || match.district, streetPart].filter(Boolean).join(", ");
+  const streetPart = streetIndex >= 0 ? normalizedParts[streetIndex] : findAddressDirectoryStreetPart(addressParts, match) || match.street;
+  const locationPart = explicitNeighborhood?.name || match.neighborhood || match.district;
+  const usableStreetPart = normalizeAddressDirectoryStreetKey(streetPart) === normalizeAddressDirectoryStreetKey(locationPart) ? "" : streetPart;
+  const nextAddress = [cityPart, locationPart, usableStreetPart].filter(Boolean).join(", ");
   return {
     address: nextAddress,
     corrected: normalizeAddressDirectoryText(nextAddress) !== normalizeAddressDirectoryText(rawAddress),
     match,
+    neighborhood: locationPart,
+    streetPart: usableStreetPart,
   };
 }
 

@@ -1304,12 +1304,12 @@ function parseAddressQuery(query) {
   const numberPattern = /(?:^|[\s,])(?:#|№|N|No\.?)?\s*(\d+[A-Za-zა-ჰ]?(?:[-/]\d+[A-Za-zა-ჰ]?)?)\s*$/i;
   let match = original.match(numberPattern);
   let houseNumber = match?.[1] || "";
-  let street = houseNumber ? original.slice(0, match.index).trim() : original;
+  let street = houseNumber ? extractGeocodeStreetCandidate(original.slice(0, match.index).trim()) : extractGeocodeStreetCandidate(original);
 
   if (!houseNumber) {
     match = original.match(/^(?:#|№|N|No\.?)?\s*(\d+[A-Za-zა-ჰ]?(?:[-/]\d+[A-Za-zა-ჰ]?)?)\s+(.+)$/i);
     houseNumber = match?.[1] || "";
-    street = match?.[2]?.trim() || street;
+    street = match?.[2]?.trim() ? extractGeocodeStreetCandidate(match[2].trim()) : street;
   }
 
   street = normalizeAddressQueryStreet(street || original);
@@ -1320,6 +1320,21 @@ function parseAddressQuery(query) {
     street,
     houseNumber: normalizeHouseNumber(houseNumber),
   };
+}
+
+
+function extractGeocodeStreetCandidate(value) {
+  const parts = String(value || "")
+    .split(",")
+    .map((part) => cleanAddressInput(part))
+    .filter(Boolean);
+  if (parts.length <= 1) return value;
+
+  const addressParts = parts.filter((part) => {
+    const token = normalizeAddressToken(part);
+    return token && !/^(tbilisi|rustavi|georgia|თბილისი|რუსთავი|საქართველო)$/.test(token);
+  });
+  return addressParts[addressParts.length - 1] || value;
 }
 
 
@@ -1340,11 +1355,12 @@ function buildAddressSearchParams(queryParts) {
   const houseNumber = queryParts.houseNumber;
   const defaultCity = /rustavi|რუსთავი/i.test(queryParts.original || query) ? "რუსთავი" : "თბილისი";
   const variants = [
-    query,
+    houseNumber && street ? normalizeGeocodeQuery(`${street} ${houseNumber}, ${defaultCity}`) : "",
     houseNumber && street ? normalizeGeocodeQuery(`${street} ${houseNumber}`) : "",
     houseNumber && street ? normalizeGeocodeQuery(`${houseNumber} ${street}`) : "",
     houseNumber && street ? normalizeGeocodeQuery(street) : "",
     houseNumber && street ? normalizeGeocodeQuery(`${street}, ${defaultCity}`) : "",
+    query,
     queryParts.original && queryParts.original !== query ? queryParts.original : "",
     queryParts.original ? `${defaultCity} ${queryParts.original}` : "",
     queryParts.original ? `${queryParts.original} საქართველო` : "",
@@ -1433,7 +1449,18 @@ function searchLocalAddressFallback(queryParts) {
     },
   ];
 
-  const street = knownStreets.find((item) => item.tokens.some((token) => streetToken.includes(normalizeAddressToken(token))));
+  const street = knownStreets
+    .map((item) => {
+      const score = item.tokens.reduce((best, token) => {
+        const normalizedToken = normalizeAddressToken(token);
+        if (!normalizedToken || !streetToken.includes(normalizedToken)) return best;
+        const streetTypeBonus = /ქუჩა|გამზირი|ჩიხი|შესახვევი|გზატკეცილი/.test(item.address) ? 20 : 0;
+        return Math.max(best, normalizedToken.length + streetTypeBonus);
+      }, 0);
+      return { item, score };
+    })
+    .filter((match) => match.score > 0)
+    .sort((a, b) => b.score - a.score)[0]?.item;
   if (!street) return [];
 
   const houseNumber = Number.parseInt(queryParts.houseNumber, 10);

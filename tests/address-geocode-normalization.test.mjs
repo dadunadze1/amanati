@@ -35,6 +35,18 @@ describe("address geocode normalization", () => {
     assert.match(parsed.searchQuery, /ორთაჭალა/);
   });
 
+  it("uses the street segment from comma-separated OCR addresses", async () => {
+    const helpers = await loadMapAddressHelpers();
+
+    const gulua = helpers.parseAddressQuery("თბილისი, ორთაჭალა, გულუას ქ. 10");
+    assert.equal(gulua.houseNumber, "10");
+    assert.equal(gulua.street, "გულუას ქ.");
+
+    const didiDighomi = helpers.parseAddressQuery("თბილისი, დიდი დიღომი, არჩილ მეფის 10");
+    assert.equal(didiDighomi.houseNumber, "10");
+    assert.equal(didiDighomi.street, "არჩილ მეფის");
+  });
+
   it("normalizes common Tbilisi neighborhood case forms", async () => {
     const helpers = await loadMapAddressHelpers();
     const cases = [
@@ -61,6 +73,6 @@ describe("address geocode normalization", () => {
     const results = helpers.searchLocalAddressFallback(parsed);
 
     assert.equal(results.length, 1);
-    assert.equal(results[0].address, "ორთაჭალა 10");
+    assert.equal(results[0].address, "გულუას ქუჩა 10");
   });
 });
