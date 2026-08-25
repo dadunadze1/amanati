@@ -38,6 +38,7 @@ const MAX_STICKER_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
 const googleAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
 const STICKER_ADDRESS_START_PATTERN = /(თბილისი|რუსთავი|ორთაჭალ(?:ა|აში)?|(?:დიდი|დაბალი)\s+დიღომი|დიღომი|ნუცუბიძ(?:ე|ის)?|ვარკეთილ(?:ი|ში)?|გლდანი|ვაკე|საბურთალო|ისანი|სამგორი|ვერა|მთაწმინდა|გულუა(?:ს)?|ლერმონტოვ(?:ი|ის)?|არჩილ\s+მეფ(?:ე|ის)?|ფარნავაზ(?:ი|ის)?|ორბელიან(?:ი|ის)?)/i;
 const STICKER_AMOUNT_KEYWORD_PATTERN = /(თანხ|ქეშ|კოდ\b|cod\b|cash\b|გადასახდ|გადახდ|ფასი|ლარი|კურიერთან)/i;
+const STICKER_SECONDARY_ADDRESS_PATTERN = /(სადარბაზ|სართ|სართული|ბინა|აპარტ|კორპ|კორპუს|შენობა|შემოსასვლ|შესასვლ|ეზოდან|კონები|კომენტ|შენიშვნ|მიტან|მოუხვევ|დარეკ|დანიშნეთ|დღეებში)/i;
 
 class NoPushDevicesError extends Error {
   constructor(notification) {
@@ -914,13 +915,50 @@ function scoreNameLine(line, index = -1, phoneIndex = -1) {
 }
 
 function normalizeStickerAddress(value) {
-  const address = cleanStickerAddressCandidate(value)
+  const address = extractStickerPrimaryAddress(cleanStickerAddressCandidate(value))
     .replace(/^[,.\-:; ]+|[,.\-:; ]+$/g, "")
     .replace(/\s+(№|#)\s*/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (!address) return "";
   return /თბილისი|რუსთავი/i.test(address) ? address : `თბილისი, ${address}`;
+}
+
+function extractStickerPrimaryAddress(value) {
+  const segments = String(value || "")
+    .split(",")
+    .map((segment) => segment.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (!segments.length) return "";
+
+  const primary = [];
+  for (const segment of segments) {
+    if (STICKER_SECONDARY_ADDRESS_PATTERN.test(segment)) {
+      const beforeSecondary = segment.split(STICKER_SECONDARY_ADDRESS_PATTERN)[0]?.trim() || "";
+      const corpusNumber = segment.match(/(?:^|[\s,])კორპ(?:უსი)?\.?\s*(\d{1,4}[ა-ჰa-z]?)/i)?.[1] || "";
+      const hasPrimaryNumber = /\d/.test(primary.join(" "));
+      const shouldKeepBeforeSecondary = beforeSecondary && (!primary.length || (!hasPrimaryNumber && (/\d/.test(beforeSecondary) || corpusNumber)));
+      if (shouldKeepBeforeSecondary) {
+        primary.push(
+          corpusNumber && !/\d/.test(beforeSecondary)
+            ? `${beforeSecondary} ${corpusNumber}`
+            : beforeSecondary,
+        );
+      }
+      if (corpusNumber && primary.length && !/\d/.test(primary.join(" "))) {
+        primary[primary.length - 1] = `${primary[primary.length - 1]} ${corpusNumber}`;
+      }
+      break;
+    }
+    primary.push(segment);
+  }
+
+  let result = primary.join(", ")
+    .replace(/\s+(?:სადარბაზ|სართ|სართული|ბინა|აპარტ|შენობა|შემოსასვლ|შესასვლ|ეზოდან)\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  result = result.replace(/(^|[\s,])კორპ(?:უსი)?\.?\s*(\d{1,4}[ა-ჰa-z]?)/gi, "$1$2").replace(/\s+/g, " ").trim();
+  return result || segments[0] || "";
 }
 
 function countGeorgianLetters(value) {

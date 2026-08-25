@@ -39,7 +39,7 @@ describe("sticker OCR parser", () => {
     assert.equal(parsed.fullName, "მარი მელაშვილი");
     assert.equal(parsed.phone, "+995577595595");
     assert.equal(parsed.paymentAmount, 0);
-    assert.match(parsed.address, /^თბილისი, ნუცუბიძის პირველი პლატო/);
+    assert.equal(parsed.address, "თბილისი, ნუცუბიძის პირველი პლატო 5");
   });
 
   it("combines short Georgian sticker address lines", () => {
@@ -54,7 +54,7 @@ describe("sticker OCR parser", () => {
     assert.equal(parsed.fullName, "თამარ ტაბატაძე");
     assert.equal(parsed.phone, "+995593799966");
     assert.equal(parsed.paymentAmount, 0);
-    assert.equal(parsed.address, "თბილისი, დიდი დიღომი, არჩილ მეფის 10, ფარნავაზის შენობაა, სართული 5");
+    assert.equal(parsed.address, "თბილისი, დიდი დიღომი, არჩილ მეფის 10");
   });
 
   it("keeps numbered apartment style addresses separate from payment amounts", () => {
