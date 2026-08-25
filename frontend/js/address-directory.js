@@ -142,6 +142,50 @@ const ADDRESS_NEIGHBORHOOD_KEYWORDS = [
   { name: "თხინვალა", patterns: ["თხინვალა"] },
   { name: "ლისი", patterns: ["ლისი", "ლისის"] },
 ];
+const ADDRESS_DIRECTORY_CASE_NORMALIZATIONS = [
+  [/დიდ\s+დიღომში|დიდი\s+დიღმის/giu, "დიდი დიღომი"],
+  [/დაბალ\s+დიღომში|დაბალი\s+დიღმის/giu, "დაბალი დიღომი"],
+  [/სოფ(?:ელ|\.)?\s+დიღომში|სოფ(?:ელი|\.)?\s+დიღმის/giu, "სოფელი დიღომი"],
+  [/დიღმის\s+მასივში|დიღმის\s+მასივის/giu, "დიღმის მასივი"],
+  [/ვაჟა[-\s]?ფშაველაზე|ვაჟა[-\s]?ფშაველას|ვაჟაზე/giu, "ვაჟა-ფშაველა"],
+  [/ზღვის\s+უბანში|ზღვისუბანში|ზღვისუბნის/giu, "ზღვისუბანი"],
+  [/ორთაჭალაში|ორთაჭალის/giu, "ორთაჭალა"],
+  [/ვარკეთილში|ვარკეთილის/giu, "ვარკეთილი"],
+  [/გლდანში|გლდანის/giu, "გლდანი"],
+  [/ნუცუბიძეზე|ნუცუბიძის/giu, "ნუცუბიძე"],
+  [/ვაკეში|ვაკის/giu, "ვაკე"],
+  [/საბურთალოზე|საბურთალოს/giu, "საბურთალო"],
+  [/ისანში|ისნის/giu, "ისანი"],
+  [/სამგორში|სამგორის/giu, "სამგორი"],
+  [/მუხიანში|მუხიანის/giu, "მუხიანი"],
+  [/ავჭალაში|ავჭალის/giu, "ავჭალა"],
+  [/თემქაზე|თემქაში|თემქის/giu, "თემქა"],
+  [/სანზონაში|სანზონის/giu, "სანზონა"],
+  [/ლოტკინზე|ლოტკინში|ლოტკინის/giu, "ლოტკინი"],
+  [/ვერაზე|ვერის/giu, "ვერა"],
+  [/სოლოლაკში|სოლოლაკის/giu, "სოლოლაკი"],
+  [/ფონიჭალაში|ფონიჭალის/giu, "ფონიჭალა"],
+  [/ხარფუხში|ხარფუხის/giu, "ხარფუხი"],
+  [/ავლაბარში|ავლაბრის/giu, "ავლაბარი"],
+  [/ნავთლუღში|ნავთლუღის/giu, "ნავთლუღი"],
+  [/ვაზისუბანში|ვაზისუბნის/giu, "ვაზისუბანი"],
+  [/ლილოში|ლილოს/giu, "ლილო"],
+  [/ორხევში|ორხევის/giu, "ორხევი"],
+  [/აეროპორტში|აეროპორტის/giu, "აეროპორტი"],
+  [/კუკიაზე|კუკიის/giu, "კუკია"],
+  [/მარჯანიშვილზე|მარჯანიშვილის/giu, "მარჯანიშვილი"],
+  [/წყნეთში|წყნეთის/giu, "წყნეთი"],
+  [/ბაგებში|ბაგების/giu, "ბაგები"],
+  [/ახალდაბაში|ახალდაბის/giu, "ახალდაბა"],
+  [/ბეთანიაში|ბეთანიის/giu, "ბეთანია"],
+  [/თხინვალაში|თხინვალის/giu, "თხინვალა"],
+  [/ლისზე|ლისში|ლისის/giu, "ლისი"],
+  [/მთაწმინდაზე|მთაწმინდის/giu, "მთაწმინდა"],
+  [/კრწანისში|კრწანისის/giu, "კრწანისი"],
+  [/დიდუბეში|დიდუბის/giu, "დიდუბე"],
+  [/ჩუღურეთში|ჩუღურეთის/giu, "ჩუღურეთი"],
+  [/ნაძალადევში|ნაძალადევის/giu, "ნაძალადევი"],
+];
 
 function getAddressDirectoryCities() {
   return ADDRESS_DIRECTORY.map((item) => item.city);
@@ -257,7 +301,7 @@ function getAddressDirectoryDistrictForNeighborhood(city, neighborhood) {
 }
 
 function normalizeAddressDirectoryText(value) {
-  const tokens = String(value || "")
+  const tokens = normalizeAddressDirectoryNeighborhoodCases(value)
     .toLocaleLowerCase("ka-GE")
     .replace(/მ\s*\/\s*რ/giu, " მიკრორაიონი ")
     .replace(/მკრ\.?/giu, " მიკრორაიონი ")
@@ -267,8 +311,6 @@ function normalizeAddressDirectoryText(value) {
     .replace(/ზღვის\s+უბანი/giu, "ზღვისუბანი")
     .replace(/თემქის/giu, "თემქა")
     .replace(/დიღმის\s+მასივის/giu, "დიღმის მასივი")
-    .replace(/ორთაჭალაში/giu, "ორთაჭალა")
-    .replace(/ვარკეთილში/giu, "ვარკეთილი")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -278,6 +320,13 @@ function normalizeAddressDirectoryText(value) {
     .filter((token, index) => !(token === "მე" && /^\d+$/.test(tokens[index + 1] || "")))
     .map(normalizeAddressDirectoryOrdinalToken)
     .join(" ");
+}
+
+function normalizeAddressDirectoryNeighborhoodCases(value) {
+  return ADDRESS_DIRECTORY_CASE_NORMALIZATIONS.reduce(
+    (text, [pattern, replacement]) => text.replace(pattern, replacement),
+    String(value || ""),
+  );
 }
 
 function normalizeAddressDirectoryOrdinalToken(token) {

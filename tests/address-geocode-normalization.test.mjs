@@ -35,6 +35,26 @@ describe("address geocode normalization", () => {
     assert.match(parsed.searchQuery, /ორთაჭალა/);
   });
 
+  it("normalizes common Tbilisi neighborhood case forms", async () => {
+    const helpers = await loadMapAddressHelpers();
+    const cases = [
+      ["ვაკეში აბაშიძის 12", "ვაკე აბაშიძის 12"],
+      ["საბურთალოზე საირმის 8", "საბურთალო საირმის 8"],
+      ["გლდანში ხიზანიშვილის 20", "გლდანი ხიზანიშვილის 20"],
+      ["ისანში ქეთევან წამებულის 44", "ისანი ქეთევან წამებულის 44"],
+      ["სამგორში მოსკოვის 15", "სამგორი მოსკოვის 15"],
+      ["ავლაბარში მესხიშვილის 3", "ავლაბარი მესხიშვილის 3"],
+      ["კრწანისში გორგასლის 9", "კრწანისი გორგასლის 9"],
+      ["დიდ დიღომში მირიან მეფის 22", "დიდი დიღომი მირიან მეფის 22"],
+      ["მთაწმინდაზე ჭონქაძის 6", "მთაწმინდა ჭონქაძის 6"],
+      ["ნაძალადევში ცოტნე დადიანის 11", "ნაძალადევი ცოტნე დადიანის 11"],
+    ];
+
+    for (const [input, expected] of cases) {
+      assert.equal(helpers.normalizeGeocodeQuery(input), expected, input);
+    }
+  });
+
   it("falls back locally for ortachala and gulua searches", async () => {
     const helpers = await loadMapAddressHelpers();
     const parsed = helpers.parseAddressQuery("თბილისი, ორთაჭალაში გულუას ქ 10");

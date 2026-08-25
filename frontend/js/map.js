@@ -9,6 +9,50 @@ const DEFAULT_MAP_ZOOM = 15;
 const MIN_VALID_MAP_ZOOM = 7;
 const MAX_VALID_MAP_ZOOM = 19;
 const LOGIN_VIEWPORT_ENFORCE_DELAYS = [0, 80, 220, 520, 1000, 1600];
+const GEORGIAN_NEIGHBORHOOD_CASE_NORMALIZATIONS = [
+  [/დიდ\s+დიღომში|დიდი\s+დიღმის/gi, "დიდი დიღომი"],
+  [/დაბალ\s+დიღომში|დაბალი\s+დიღმის/gi, "დაბალი დიღომი"],
+  [/სოფ(?:ელ|\.)?\s+დიღომში|სოფ(?:ელი|\.)?\s+დიღმის/gi, "სოფელი დიღომი"],
+  [/დიღმის\s+მასივში|დიღმის\s+მასივის/gi, "დიღმის მასივი"],
+  [/ვაჟა[-\s]?ფშაველაზე|ვაჟა[-\s]?ფშაველას|ვაჟაზე/gi, "ვაჟა-ფშაველა"],
+  [/ზღვის\s+უბანში|ზღვისუბანში|ზღვისუბნის/gi, "ზღვისუბანი"],
+  [/ორთაჭალაში|ორთაჭალის/gi, "ორთაჭალა"],
+  [/ვარკეთილში|ვარკეთილის/gi, "ვარკეთილი"],
+  [/გლდანში|გლდანის/gi, "გლდანი"],
+  [/ნუცუბიძეზე|ნუცუბიძის/gi, "ნუცუბიძე"],
+  [/ვაკეში|ვაკის/gi, "ვაკე"],
+  [/საბურთალოზე|საბურთალოს/gi, "საბურთალო"],
+  [/ისანში|ისნის/gi, "ისანი"],
+  [/სამგორში|სამგორის/gi, "სამგორი"],
+  [/მუხიანში|მუხიანის/gi, "მუხიანი"],
+  [/ავჭალაში|ავჭალის/gi, "ავჭალა"],
+  [/თემქაზე|თემქაში|თემქის/gi, "თემქა"],
+  [/სანზონაში|სანზონის/gi, "სანზონა"],
+  [/ლოტკინზე|ლოტკინში|ლოტკინის/gi, "ლოტკინი"],
+  [/ვერაზე|ვერის/gi, "ვერა"],
+  [/სოლოლაკში|სოლოლაკის/gi, "სოლოლაკი"],
+  [/ფონიჭალაში|ფონიჭალის/gi, "ფონიჭალა"],
+  [/ხარფუხში|ხარფუხის/gi, "ხარფუხი"],
+  [/ავლაბარში|ავლაბრის/gi, "ავლაბარი"],
+  [/ნავთლუღში|ნავთლუღის/gi, "ნავთლუღი"],
+  [/ვაზისუბანში|ვაზისუბნის/gi, "ვაზისუბანი"],
+  [/ლილოში|ლილოს/gi, "ლილო"],
+  [/ორხევში|ორხევის/gi, "ორხევი"],
+  [/აეროპორტში|აეროპორტის/gi, "აეროპორტი"],
+  [/კუკიაზე|კუკიის/gi, "კუკია"],
+  [/მარჯანიშვილზე|მარჯანიშვილის/gi, "მარჯანიშვილი"],
+  [/წყნეთში|წყნეთის/gi, "წყნეთი"],
+  [/ბაგებში|ბაგების/gi, "ბაგები"],
+  [/ახალდაბაში|ახალდაბის/gi, "ახალდაბა"],
+  [/ბეთანიაში|ბეთანიის/gi, "ბეთანია"],
+  [/თხინვალაში|თხინვალის/gi, "თხინვალა"],
+  [/ლისზე|ლისში|ლისის/gi, "ლისი"],
+  [/მთაწმინდაზე|მთაწმინდის/gi, "მთაწმინდა"],
+  [/კრწანისში|კრწანისის/gi, "კრწანისი"],
+  [/დიდუბეში|დიდუბის/gi, "დიდუბე"],
+  [/ჩუღურეთში|ჩუღურეთის/gi, "ჩუღურეთი"],
+  [/ნაძალადევში|ნაძალადევის/gi, "ნაძალადევი"],
+];
 
 
 async function initializeMap() {
@@ -947,7 +991,7 @@ function formatCoordsAddress(coords) {
 
 
 function normalizeAddressToken(value) {
-  return String(value || "")
+  return normalizeGeorgianNeighborhoodCases(value)
     .toLocaleLowerCase()
     .replace(/[.,;:"'()]/g, " ")
     .replace(/\b(street|st|avenue|ave|road|rd|lane|ln|drive|dr)\b/gi, " ")
@@ -1285,8 +1329,6 @@ function normalizeAddressQueryStreet(value) {
     .replace(/\b(tbilisi|rustavi|georgia|თბილისი|რუსთავი|საქართველო)\b/gi, " ")
     .replace(/(^|[\s,])(თბილისი|რუსთავი|საქართველო)(?=$|[\s,])/gi, " ")
     .replace(/(^|[\s,])(ქუჩა|ქ|გამზირი|გამზ|ჩიხი|შესახვევი|გზატკეცილი)(?=$|[\s,])/gi, " ")
-    .replace(/ორთაჭალაში/gi, "ორთაჭალა")
-    .replace(/ვარკეთილში/gi, "ვარკეთილი")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1553,16 +1595,22 @@ function isTbilisiReferencedResult(result) {
 
 
 function normalizeGeocodeQuery(value) {
-  return String(value ?? "")
+  return normalizeGeorgianNeighborhoodCases(value)
     .normalize("NFC")
     .replace(/[\u00A0\s]+/g, " ")
-    .replace(/ორთაჭალაში/gi, "ორთაჭალა")
-    .replace(/ვარკეთილში/gi, "ვარკეთილი")
     .replace(/\s*,\s*/g, ", ")
     .replace(/(?:,\s*){2,}/g, ", ")
     .replace(/\s+/g, " ")
     .trim()
     .toLocaleLowerCase();
+}
+
+
+function normalizeGeorgianNeighborhoodCases(value) {
+  return GEORGIAN_NEIGHBORHOOD_CASE_NORMALIZATIONS.reduce(
+    (text, [pattern, replacement]) => text.replace(pattern, replacement),
+    String(value ?? ""),
+  );
 }
 
 
