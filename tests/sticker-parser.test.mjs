@@ -24,4 +24,51 @@ describe("sticker OCR parser", () => {
     assert.equal(parsed.address, "თბილისი, ორთაჭალა, გულუას ქ. 10");
     assert.deepEqual(parsed.warnings, []);
   });
+
+  it("does not treat house, corpus, or floor numbers as COD without payment keywords", () => {
+    const parsed = parseStickerText(`
+      მარი მელაშვილი
+      577 595 595
+      ნუცუბიძის პირველი პლატო,
+      კორპ 5 / სართ 1.
+      შემოსასვლელი ეზოდან.
+      თუ ქუჩებზე მოუნევს - მითითებულ მისამართზე კონები.
+      დანიშნეთ დღეებში 12:00-19:00მდე ჯამბაკურ ორბელიანის 24.
+    `);
+
+    assert.equal(parsed.fullName, "მარი მელაშვილი");
+    assert.equal(parsed.phone, "+995577595595");
+    assert.equal(parsed.paymentAmount, 0);
+    assert.match(parsed.address, /^თბილისი, ნუცუბიძის პირველი პლატო/);
+  });
+
+  it("combines short Georgian sticker address lines", () => {
+    const parsed = parseStickerText(`
+      თამარ ტაბატაძე
+      593799966
+      დიდი დიღომი, არჩილ მეფის
+      10, ფარნავაზის შენობაა,
+      სართული 5
+    `);
+
+    assert.equal(parsed.fullName, "თამარ ტაბატაძე");
+    assert.equal(parsed.phone, "+995593799966");
+    assert.equal(parsed.paymentAmount, 0);
+    assert.equal(parsed.address, "თბილისი, დიდი დიღომი, არჩილ მეფის 10, ფარნავაზის შენობაა, სართული 5");
+  });
+
+  it("keeps numbered apartment style addresses separate from payment amounts", () => {
+    const parsed = parseStickerText(`
+      სოდა ზურიკო
+      +995
+      ლაშა ოთიძე
+      593338770
+      ლერმონტოვის #9
+    `);
+
+    assert.equal(parsed.fullName, "ლაშა ოთიძე");
+    assert.equal(parsed.phone, "+995593338770");
+    assert.equal(parsed.paymentAmount, 0);
+    assert.equal(parsed.address, "თბილისი, ლერმონტოვის 9");
+  });
 });

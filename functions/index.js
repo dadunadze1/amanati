@@ -36,7 +36,7 @@ const NOTIFICATION_TITLE_PREFIXES = {
 const VISION_API_URL = "https://vision.googleapis.com/v1/images:annotate";
 const MAX_STICKER_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
 const googleAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
-const STICKER_ADDRESS_START_PATTERN = /(თბილისი|რუსთავი|ორთაჭალ(?:ა|აში)?|გლდანი|ვაკე|საბურთალო|ისანი|სამგორი|დიღომი|ვარკეთილი|ვერა|მთაწმინდა|გულუა(?:ს)?)/i;
+const STICKER_ADDRESS_START_PATTERN = /(თბილისი|რუსთავი|ორთაჭალ(?:ა|აში)?|(?:დიდი|დაბალი)\s+დიღომი|დიღომი|ნუცუბიძ(?:ე|ის)?|ვარკეთილ(?:ი|ში)?|გლდანი|ვაკე|საბურთალო|ისანი|სამგორი|ვერა|მთაწმინდა|გულუა(?:ს)?|ლერმონტოვ(?:ი|ის)?|არჩილ\s+მეფ(?:ე|ის)?|ფარნავაზ(?:ი|ის)?|ორბელიან(?:ი|ის)?)/i;
 const STICKER_AMOUNT_KEYWORD_PATTERN = /(თანხ|ქეშ|კოდ\b|cod\b|cash\b|გადასახდ|გადახდ|ფასი|ლარი|კურიერთან)/i;
 
 class NoPushDevicesError extends Error {
@@ -756,6 +756,9 @@ function normalizeStickerLines(text) {
 
 function extractStickerPhone(text) {
   const normalized = String(text || "").replace(/[–—−]/g, "-");
+  const digits = normalized.replace(/\D/g, "");
+  const digitMatch = digits.match(/(?:995)?(5\d{8})/);
+  if (digitMatch) return `+995${digitMatch[1]}`;
   const match = normalized.match(/(?:\+?\s*995\s*)?(5\d{2})\D{0,4}(\d{2})\D{0,4}(\d{2})\D{0,4}(\d{2})/);
   if (!match) return "";
   return `+995${match[1]}${match[2]}${match[3]}${match[4]}`;
@@ -770,15 +773,10 @@ function extractStickerAmount(lines) {
   }
 
   const keywordLines = lines.filter((line) => !looksLikePhoneLine(line) && STICKER_AMOUNT_KEYWORD_PATTERN.test(line));
-  const bottomLines = lines
-    .filter((line) => !looksLikePhoneLine(line) && !looksLikeBareBuildingLine(line))
-    .slice(-3)
-    .reverse();
-  const likelyLines = keywordLines.length ? keywordLines : bottomLines;
-  for (const line of likelyLines) {
+  for (const line of keywordLines) {
     const numbers = [...line.matchAll(/\b(\d{1,3}(?:[.,]\d{1,2})?)\b/g)]
       .map((match) => normalizeStickerMoney(match[1]))
-      .filter((value) => Number.isFinite(value) && value > 0 && value < 1000);
+      .filter((value) => Number.isFinite(value) && value > 0 && value < 10000);
     if (numbers.length) return numbers[numbers.length - 1];
   }
   return NaN;
@@ -790,12 +788,28 @@ function normalizeStickerMoney(value) {
 }
 
 function extractStickerName(lines, phone, paymentAmount) {
-  const candidates = lines
-    .map((line) => stripStickerLineNoise(line, phone, paymentAmount))
-    .filter((line) => line && !looksLikeAddressLine(line) && !looksLikePhoneLine(line) && !looksLikeAmountLine(line))
-    .map((line) => line.replace(/[0-9#+№.,:;()/-]/g, " ").replace(/\s+/g, " ").trim())
-    .filter((line) => countGeorgianLetters(line) >= 4 && line.length <= 48);
-  return candidates.sort((a, b) => scoreNameLine(b) - scoreNameLine(a))[0] || "";
+  const phoneIndex = lines.findIndex((line) => looksLikePhoneLine(line));
+  const allCandidates = lines
+    .map((line, index) => {
+      const cleaned = stripStickerLineNoise(line, phone, paymentAmount)
+        .replace(/[0-9#+№.,:;()/-]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return { line: cleaned, index };
+    })
+    .filter(({ line }) => (
+      line
+      && !looksLikeAddressLine(line)
+      && !looksLikePhoneLine(line)
+      && !looksLikeAmountLine(line)
+      && !STICKER_ADDRESS_START_PATTERN.test(line)
+    ))
+    .filter(({ line }) => countGeorgianLetters(line) >= 4 && line.length <= 48);
+  const candidates = phoneIndex > 0 && allCandidates.some(({ index }) => index < phoneIndex)
+    ? allCandidates.filter(({ index }) => index < phoneIndex)
+    : allCandidates;
+  return candidates
+    .sort((a, b) => scoreNameLine(b.line, b.index, phoneIndex) - scoreNameLine(a.line, a.index, phoneIndex))[0]?.line || "";
 }
 
 function extractStickerAddress(lines, phone, paymentAmount, fullName) {
@@ -803,10 +817,13 @@ function extractStickerAddress(lines, phone, paymentAmount, fullName) {
     .map((line) => stripStickerLineNoise(line, phone, paymentAmount))
     .filter((line) => line && line !== fullName && !looksLikePhoneLine(line) && !looksLikeAmountLine(line))
     .map(cleanStickerAddressCandidate)
-    .filter(Boolean);
-  const combinedAddressLines = addressLines.flatMap((line, index) => (
-    index > 0 ? [`${addressLines[index - 1]} ${line}`, line] : [line]
-  ));
+    .filter((line) => line && (STICKER_ADDRESS_START_PATTERN.test(line) || scoreAddressLine(line) >= 4));
+  const combinedAddressLines = addressLines.flatMap((line, index) => {
+    const combinations = [line];
+    if (index + 1 < addressLines.length) combinations.push(`${line} ${addressLines[index + 1]}`);
+    if (index + 2 < addressLines.length) combinations.push(`${line} ${addressLines[index + 1]} ${addressLines[index + 2]}`);
+    return combinations;
+  });
   const candidates = combinedAddressLines
     .map(cleanStickerAddressCandidate)
     .filter((line) => line && !looksLikeBareBuildingLine(line))
@@ -819,20 +836,25 @@ function cleanStickerAddressCandidate(line) {
   let value = String(line || "")
     .replace(/\b\d{1,2}[:.]\d{2}\s*(?:საათამდე|მდე)?/gi, " ")
     .replace(/\b(?:საათამდე|საათზე|მოიტანე|მოიტანენ|მომიტანე|მოგვიტანე|თუ|მაქ|აქ)\b/gi, " ")
+    .replace(/\//g, ", ")
     .replace(/\s+/g, " ")
     .trim();
   const addressStart = value.search(STICKER_ADDRESS_START_PATTERN);
-  if (addressStart > 0) value = value.slice(addressStart).trim();
+  if (addressStart > 0 && !/\d/.test(value.slice(0, addressStart))) value = value.slice(addressStart).trim();
   value = value
     .replace(/^(?:ინ|ში|მისამართი|მის\.?|address)\s*[:\-]?\s*/i, "")
     .replace(/ორთაჭალაში/gi, "ორთაჭალა")
+    .replace(/ვარკეთილში/gi, "ვარკეთილი")
     .replace(/გულუა(?:ს)?\s*(?:ქუჩა|ქ\.?|ქ)?\s*(?:№|#|ნომერი|n)?\s*(\d{1,4}[ა-ჰa-z]?)/gi, "გულუას ქ. $1")
     .replace(/(^|[\s,])ქ\s*\.?\s*/gi, "$1ქ. ")
+    .replace(/\bკორპ(?:უსი)?\s*\.?\s*(\d{1,4}[ა-ჰa-z]?)/gi, "კორპ. $1")
+    .replace(/\bსართ(?:ულ(?:ი|ზე)?)?\s*\.?\s*(\d{1,3})/gi, "სართული $1")
     .replace(/\s*(?:№|#)\s*/g, " ")
     .replace(/\s*,\s*/g, ", ")
     .replace(/\s+/g, " ")
     .trim();
   value = value.replace(/^(ორთაჭალა)\s+(?!,)/i, "$1, ");
+  value = value.replace(/([^,\s])\s+(სართული\s+\d{1,3})\b/gi, "$1, $2");
   return value.replace(/^[,.\-:; ]+|[,.\-:; ]+$/g, "").trim();
 }
 
@@ -849,7 +871,9 @@ function stripStickerLineNoise(line, phone, paymentAmount) {
 }
 
 function looksLikePhoneLine(line) {
-  return /(?:\+?\s*995\s*)?5\d{2}\D{0,4}\d{2}\D{0,4}\d{2}\D{0,4}\d{2}/.test(String(line || ""));
+  const value = String(line || "");
+  if (/(?:\+?\s*995\s*)?5\d{2}\D{0,4}\d{2}\D{0,4}\d{2}\D{0,4}\d{2}/.test(value)) return true;
+  return /(?:995)?5\d{8}/.test(value.replace(/\D/g, ""));
 }
 
 function looksLikeAmountLine(line) {
@@ -869,17 +893,23 @@ function scoreAddressLine(line) {
   let score = 0;
   if (/\d/.test(value)) score += 3;
   if (/(ქუჩა|ქ\.?|გამზირი|გამზ\.?|ჩიხი|შესახვევი|გზატკეცილი|პროსპექტი|№|#|n\s?\d)/i.test(value)) score += 5;
-  if (/(თბილისი|რუსთავი|ორთაჭალა|გულუა|ვაკე|საბურთალო|ისანი|სამგორი|გლდანი|დიღომი|ვარკეთილი|ვერა|მთაწმინდა)/i.test(value)) score += 2;
+  if (/(კორპუსი|კორპ\.?|სართული|პლატო|შესახვევი)/i.test(value)) score += 4;
+  if (/(თბილისი|რუსთავი|ორთაჭალა|გულუა|ნუცუბიძე|ნუცუბიძის|დიღომი|ვარკეთილი|ლერმონტოვი|ლერმონტოვის|არჩილ მეფე|არჩილ მეფის|ფარნავაზი|ფარნავაზის|ორბელიანი|ორბელიანის|ვაკე|საბურთალო|ისანი|სამგორი|გლდანი|ვერა|მთაწმინდა)/i.test(value)) score += 2;
+  if (/^(?:თბილისი,\s*)?(?:ორთაჭალა|დიდი დიღომი|დაბალი დიღომი|დიღომი|ნუცუბიძე|ნუცუბიძის|ვარკეთილი|გლდანი|ვაკე|საბურთალო|ისანი|სამგორი)/i.test(value)) score += 8;
+  if (/(?:დიდი დიღომი|დაბალი დიღომი|ნუცუბიძე|ნუცუბიძის|ორთაჭალა|ვარკეთილი|გლდანი|ვაკე|საბურთალო|ისანი|სამგორი).*\d/i.test(value)) score += 4;
   if (countGeorgianLetters(value) >= 4) score += 1;
   if (value.length > 80) score -= 2;
   return score;
 }
 
-function scoreNameLine(line) {
+function scoreNameLine(line, index = -1, phoneIndex = -1) {
   const words = String(line || "").split(/\s+/).filter(Boolean);
   let score = countGeorgianLetters(line);
   if (words.length >= 2 && words.length <= 4) score += 8;
   if (words.length === 1) score += 2;
+  if (phoneIndex > 0 && index >= 0 && index < phoneIndex) {
+    score += Math.max(0, 12 - ((phoneIndex - index) * 3));
+  }
   return score;
 }
 
