@@ -85,4 +85,18 @@ describe("sticker OCR parser", () => {
     assert.equal(parsed.paymentAmount, 110);
     assert.equal(parsed.address, "თბილისი, ტყიბულის ქუჩა");
   });
+
+  it("extracts numbered quarter addresses from plain labels", () => {
+    const parsed = parseStickerText(`
+      ვაჟა ფშაველას მე6 კვარტალი
+      110 ლარი
+      ნომერი 599489320
+      სახელი. სადნრო დადუნაძე
+    `);
+
+    assert.equal(parsed.fullName, "სადნრო დადუნაძე");
+    assert.equal(parsed.phone, "+995599489320");
+    assert.equal(parsed.paymentAmount, 110);
+    assert.equal(parsed.address, "თბილისი, ვაჟა ფშაველას 6 კვარტალი");
+  });
 });

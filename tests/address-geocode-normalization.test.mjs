@@ -45,6 +45,9 @@ describe("address geocode normalization", () => {
     const didiDighomi = helpers.parseAddressQuery("თბილისი, დიდი დიღომი, არჩილ მეფის 10");
     assert.equal(didiDighomi.houseNumber, "10");
     assert.equal(didiDighomi.street, "არჩილ მეფის");
+
+    const vajaQuarter = helpers.parseAddressQuery("ვაჟა ფშაველას მე6 კვარტალი");
+    assert.equal(vajaQuarter.street, "ვაჟა-ფშაველა 6 კვარტალი");
   });
 
   it("normalizes common Tbilisi neighborhood case forms", async () => {

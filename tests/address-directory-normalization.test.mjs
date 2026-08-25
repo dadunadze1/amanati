@@ -53,4 +53,14 @@ describe("address directory normalization", () => {
     assert.equal(normalized.streetPart, "ტყიბულის ქუჩა");
     assert.match(normalized.match.street, /ტყიბულის/);
   });
+
+  it("normalizes attached Georgian ordinal quarter numbers", async () => {
+    const helpers = await loadAddressDirectoryHelpers();
+
+    const normalized = helpers.normalizeAddressDirectoryAddress("ვაჟა ფშაველას მე6 კვარტალი");
+
+    assert.equal(normalized.address, "თბილისი, ვაჟა-ფშაველა, ვაჟა ფშაველას მე6 კვარტალი");
+    assert.equal(normalized.neighborhood, "ვაჟა-ფშაველა");
+    assert.equal(normalized.match.street, "ვაჟა-ფშაველას VI კვარტალი");
+  });
 });

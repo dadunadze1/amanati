@@ -1635,6 +1635,7 @@ function isTbilisiReferencedResult(result) {
 function normalizeGeocodeQuery(value) {
   return normalizeGeorgianNeighborhoodCases(value)
     .normalize("NFC")
+    .replace(/(^|[^\p{L}\p{N}])მე\s*[-.]?\s*(\d{1,2})(?=\s*(?:კვარტალი|კვ\.?|მიკრო|მიკრორაიონი|მკრ|მ\s*\/\s*რ|პლატო)(?:$|[^\p{L}\p{N}]))/giu, "$1$2")
     .replace(/[\u00A0\s]+/g, " ")
     .replace(/\s*,\s*/g, ", ")
     .replace(/(?:,\s*){2,}/g, ", ")
