@@ -586,9 +586,9 @@ function getParcelTariff(db, parcel = {}) {
   return tariffs[getParcelTariffId(parcel)] || tariffs.city;
 }
 
-function getParcelFinanceSnapshot(db, parcel = {}) {
+function getParcelFinanceSnapshot(db, parcel = {}, options = {}) {
   const tariff = getParcelTariff(db, parcel);
-  const hasFinanceSnapshot = hasStoredMoney(parcel.deliveryTotalPrice)
+  const hasFinanceSnapshot = !options.forceCurrentTariff && hasStoredMoney(parcel.deliveryTotalPrice)
     && (
       storedMoney(parcel.deliveryTotalPrice) > 0
       || storedMoney(parcel.courierPay) > 0
@@ -1252,10 +1252,10 @@ function getParcelPaymentAmount(parcel) {
     .find((amount) => Number.isFinite(amount) && amount > 0) || 0;
 }
 
-function applyDeliveredFinance(db, parcel) {
+function applyDeliveredFinance(db, parcel, options = {}) {
   if (!parcel || parcel.status !== "delivered") return;
   const paymentAmount = getParcelPaymentAmount(parcel);
-  const finance = getParcelFinanceSnapshot(db, parcel);
+  const finance = getParcelFinanceSnapshot(db, parcel, options);
   parcel.paymentAmount = paymentAmount;
   parcel.cashAmount = paymentAmount;
   parcel.tariffId = finance.tariffId;
@@ -1263,6 +1263,24 @@ function applyDeliveredFinance(db, parcel) {
   parcel.deliveryTotalPrice = finance.deliveryTotalPrice;
   parcel.courierPay = finance.courierPay;
   parcel.adminProfit = finance.adminProfit;
+}
+
+function getParcelDateRangeFilter(url) {
+  const start = String(url.searchParams.get("dateFrom") || url.searchParams.get("startDate") || "").trim();
+  const end = String(url.searchParams.get("dateTo") || url.searchParams.get("endDate") || start).trim();
+  return {
+    start: isDateKey(start) ? start : "",
+    end: isDateKey(end) ? end : "",
+  };
+}
+
+function parcelMatchesWorkdayDateRange(parcel, range) {
+  if (!range.start && !range.end) return true;
+  const dateKey = getParcelWorkdayDateKey(parcel);
+  if (!dateKey) return false;
+  const start = range.start || range.end;
+  const end = range.end || range.start;
+  return start <= end ? dateKey >= start && dateKey <= end : dateKey >= end && dateKey <= start;
 }
 
 function isCoordinateLabel(value) {
@@ -1780,12 +1798,14 @@ async function handleApi(request, response, url) {
     const session = requireSession(request);
     await backfillPartnerParcelLocations(db);
     const partnerId = String(url.searchParams.get("partnerId") || "").trim();
+    const dateRange = getParcelDateRangeFilter(url);
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
     const parcels = db.parcels
       .filter((parcel) => {
         if (parcel.archivedAt || isDeletedParcel(parcel)) return false;
+        if (!parcelMatchesWorkdayDateRange(parcel, dateRange)) return false;
         if (session.role === "partner") return parcelBelongsToPartner(parcel, partnerUser);
         if (session.role === "admin" && !parcelMatchesPartnerFilter(parcel, partnerId)) return false;
         return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
@@ -1975,6 +1995,7 @@ async function handleApi(request, response, url) {
     if (status === "failed" && !String(body.failureReason || "").trim()) throw httpError(400, "ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
     const workdayKey = getCurrentWorkdayKey(db, new Date(now));
+    const wasDelivered = parcel.status === "delivered";
     parcel.status = status;
     parcel.updatedAt = now;
     if (status === "pending") {
@@ -1984,6 +2005,9 @@ async function handleApi(request, response, url) {
       parcel.failureReason = "";
       parcel.completedWorkdayKey = "";
       parcel.financeDateKey = "";
+      parcel.deliveryTotalPrice = "";
+      parcel.courierPay = "";
+      parcel.adminProfit = "";
     } else {
       parcel.completedAt = now;
       parcel.completedWorkdayKey = workdayKey;
@@ -1993,7 +2017,7 @@ async function handleApi(request, response, url) {
       parcel.failedAt = "";
       parcel.failureReason = "";
       parcel.financeDateKey = workdayKey;
-      applyDeliveredFinance(db, parcel);
+      applyDeliveredFinance(db, parcel, { forceCurrentTariff: !wasDelivered });
     }
     if (status === "failed") {
       parcel.failedAt = now;
@@ -2100,6 +2124,7 @@ async function handleApi(request, response, url) {
 
   if (method === "GET" && path === "/api/history") {
     const session = requireSession(request);
+    const dateRange = getParcelDateRangeFilter(url);
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
@@ -2107,6 +2132,7 @@ async function handleApi(request, response, url) {
       .filter((parcel) => {
         if (!parcel.archivedAt) return false;
         if (isDeletedParcel(parcel)) return false;
+        if (!parcelMatchesWorkdayDateRange(parcel, dateRange)) return false;
         if (session.role === "partner") return parcelBelongsToPartner(parcel, partnerUser);
         return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
       })

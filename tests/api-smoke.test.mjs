@@ -232,9 +232,14 @@ describe("local API smoke flow", () => {
     const failed = await api(`/api/parcels/search?status=failed&courier=${encodeURIComponent(courierUsername)}`, { token: adminToken });
     assert.equal(failed.parcels.length, 0);
 
-    const today = new Date().toISOString().slice(0, 10);
-    const byDate = await api(`/api/parcels/search?dateFrom=${today}&dateTo=${today}`, { token: adminToken });
+    const createdCalendarDate = new Date(createdParcel.createdAt).toISOString().slice(0, 10);
+    const byDate = await api(`/api/parcels/search?dateFrom=${createdCalendarDate}&dateTo=${createdCalendarDate}`, { token: adminToken });
     assert.ok(byDate.parcels.some((parcel) => parcel.id === createdParcel.id));
+
+    const workdayDate = createdParcel.workdayKey || createdCalendarDate;
+    const tomorrow = addDaysToDateKey(workdayDate, 1);
+    const futureActive = await api(`/api/parcels?dateFrom=${tomorrow}&dateTo=${tomorrow}`, { token: adminToken });
+    assert.equal(futureActive.parcels.some((parcel) => parcel.id === createdParcel.id), false);
 
     const paged = await api(`/api/parcels/search?status=pending&limit=1&offset=0`, { token: adminToken });
     assert.equal(paged.parcels.length, 1);
@@ -294,6 +299,22 @@ describe("local API smoke flow", () => {
     const hiddenPickups = await api("/api/partner-pickups", { token: adminToken });
     assert.equal(hiddenPickups.pickups.some((pickup) => pickup.partnerUsername === partnerUsername), false);
 
+    await api("/api/tariffs", {
+      method: "PUT",
+      token: adminToken,
+      body: {
+        tariffs: {
+          volume_5_10: { partnerPrice: 10, courierPay: 6 },
+        },
+      },
+    });
+    const staleSnapshotDb = await readTestDb();
+    const staleVolumeParcel = staleSnapshotDb.parcels.find((parcel) => parcel.id === volumeCreated.parcel.id);
+    staleVolumeParcel.deliveryTotalPrice = 10;
+    staleVolumeParcel.courierPay = 3.5;
+    staleVolumeParcel.adminProfit = 6.5;
+    await writeTestDb(staleSnapshotDb);
+
     const postAckCreated = await api("/api/parcels", {
       method: "POST",
       token: adminToken,
@@ -322,8 +343,8 @@ describe("local API smoke flow", () => {
     });
     volumeParcel = volumeDelivered.parcel;
     assert.equal(volumeParcel.deliveryTotalPrice, 10);
-    assert.equal(volumeParcel.courierPay, 3.5);
-    assert.equal(volumeParcel.adminProfit, 6.5);
+    assert.equal(volumeParcel.courierPay, 6);
+    assert.equal(volumeParcel.adminProfit, 4);
   });
 
   it("allows courier status updates and archive flow", async () => {
@@ -343,6 +364,11 @@ describe("local API smoke flow", () => {
 
     const history = await api(`/api/history?courier=${encodeURIComponent(courierUsername)}`, { token: adminToken });
     assert.ok(history.history.some((parcel) => parcel.id === createdParcel.id));
+
+    const deliveredWorkday = delivered.parcel.financeDateKey || delivered.parcel.completedWorkdayKey || delivered.parcel.workdayKey || new Date().toISOString().slice(0, 10);
+    const tomorrow = addDaysToDateKey(deliveredWorkday, 1);
+    const futureHistory = await api(`/api/history?courier=${encodeURIComponent(courierUsername)}&dateFrom=${tomorrow}&dateTo=${tomorrow}`, { token: adminToken });
+    assert.equal(futureHistory.history.some((parcel) => parcel.id === createdParcel.id), false);
 
   });
 

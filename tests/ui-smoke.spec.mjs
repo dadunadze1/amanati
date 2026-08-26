@@ -330,6 +330,96 @@ test("finance dashboard lists partner service balances", async ({ page }) => {
   expect(partnerBadgeText).toContain("მისაღები: 0.00");
 });
 
+test("admin statistics dashboard summarizes finance data", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const batchId = Date.now();
+  const result = await page.evaluate(async ({ batchId }) => {
+    const apiRequest = async (path, options = {}) => {
+      const response = await fetch(path, {
+        method: options.method || "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${options.token || state.authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      if (!response.ok) throw new Error(`${options.method || "GET"} ${path} ${response.status}`);
+      return response.json();
+    };
+
+    const courierUsername = `stats-courier-${batchId}`;
+    await apiRequest("/api/users", {
+      method: "POST",
+      body: {
+        username: courierUsername,
+        password: "pass123",
+        role: "courier",
+        firstName: "Stats",
+        lastName: "Courier",
+        phone: "555440001",
+      },
+    });
+    const courierLogin = await apiRequest("/api/login", {
+      method: "POST",
+      token: "",
+      body: { username: courierUsername, password: "pass123" },
+    });
+
+    const partner = await apiRequest("/api/partners", {
+      method: "POST",
+      body: {
+        username: `stats-partner-${batchId}@test.local`,
+        password: "pass123",
+        companyName: `Stats Partner ${batchId}`,
+        contactPerson: "Stats Contact",
+        phone: "555440002",
+      },
+    });
+
+    const parcel = await apiRequest("/api/parcels", {
+      method: "POST",
+      body: {
+        courierUsername,
+        partnerId: partner.partner.id,
+        city: "Tbilisi",
+        address: "Stats Street 12",
+        fullAddress: "Tbilisi, Stats Street 12",
+        fullName: "Stats Recipient",
+        phone: "555440003",
+        paymentAmount: 100,
+        lat: 41.7151,
+        lng: 44.8271,
+      },
+    });
+    await apiRequest(`/api/parcels/${parcel.parcel.id}/status`, {
+      method: "PATCH",
+      token: courierLogin.token,
+      body: { status: "delivered", expectedUpdatedAt: parcel.parcel.updatedAt },
+    });
+
+    await window.openStatisticsDashboard();
+    return {
+      courierUsername,
+      partnerName: partner.partner.companyName,
+    };
+  }, { batchId });
+
+  await expect(page.locator("#dialogModal")).toHaveClass(/active/);
+  await expect(page.locator("#dialogTitle")).toContainText("სტატისტიკა");
+  await expect(page.locator("#dialogBody")).toContainText("Total Orders");
+  await expect(page.locator("#dialogBody")).toContainText("Company Revenue");
+  await expect(page.locator("#dialogBody")).toContainText("100.00");
+
+  await page.locator("[data-statistics-view-select]").selectOption("partners");
+  await expect(page.locator("#dialogBody")).toContainText(result.partnerName);
+
+  await page.locator("[data-statistics-view-select]").selectOption("couriers");
+  await expect(page.locator("#dialogBody")).toContainText(result.courierUsername);
+});
+
 test("admin partner management uses a tall scrollable list", async ({ page }) => {
   await page.goto("/");
   await ensureAdminSession(page);

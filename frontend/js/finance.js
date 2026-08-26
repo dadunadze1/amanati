@@ -265,10 +265,14 @@ function getCourierOutstandingCash(username, allRecords) {
 }
 
 
-async function getAllFinanceRecords() {
+async function getAllFinanceRecords(options = {}) {
+  const range = options.startDate || options.endDate
+    ? normalizeDateRange(options.startDate, options.endDate || options.startDate)
+    : null;
+  const recordOptions = range ? { dateFrom: range.start, dateTo: range.end } : {};
   const [pins, history] = await Promise.all([
-    getPins(""),
-    getHistory(""),
+    getPins(options.username || "", recordOptions),
+    getHistory(options.username || "", recordOptions),
   ]);
   return [...pins, ...history];
 }
@@ -968,10 +972,11 @@ async function getFinanceAdminReport() {
     state.financeWorkdayInitialized = true;
   }
   const range = getFinanceCourierRange();
+  const recordOptions = { dateFrom: range.start, dateTo: range.end };
   const [users, pins, history, partners] = await Promise.all([
     getUsers().catch(() => []),
-    getPins("").catch(() => []),
-    getHistory("").catch(() => []),
+    getPins("", recordOptions).catch(() => []),
+    getHistory("", recordOptions).catch(() => []),
     typeof getPartners === "function" ? getPartners().catch(() => []) : [],
     typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
   ]);
@@ -1568,14 +1573,14 @@ function bindFinanceDashboardEvents(report) {
     await openFinanceDashboard();
   });
   document.querySelectorAll(".modal-filters [data-finance-dashboard-tab]").forEach((button) => {
-    button.addEventListener("click", async () => {
+    button.addEventListener("click", () => {
       state.financeAdminView = getFinanceAdminView(button.dataset.financeDashboardTab);
-      await openFinanceDashboard();
+      updateFinanceDashboardContent(report);
     });
   });
-  document.querySelector("[data-finance-dashboard-tab-select]")?.addEventListener("change", async (event) => {
+  document.querySelector("[data-finance-dashboard-tab-select]")?.addEventListener("change", (event) => {
     state.financeAdminView = getFinanceAdminView(event.currentTarget.value);
-    await openFinanceDashboard();
+    updateFinanceDashboardContent(report);
   });
   const searchInput = document.getElementById("financeAdminSearch");
   if (searchInput) {
@@ -1604,6 +1609,771 @@ async function openFinanceDashboard(options = {}) {
   bindFinanceDashboardEvents(report);
 }
 
+const STATISTICS_VIEWS = [
+  { id: "overview", label: "ყველა" },
+  { id: "partners", label: "პარტნიორები" },
+  { id: "couriers", label: "კურიერები" },
+  { id: "daily", label: "დღეები" },
+  { id: "failed", label: "ვერ ჩაბარდა" },
+  { id: "payments", label: "გადახდები" },
+  { id: "orders", label: "შეკვეთები" },
+];
+
+
+function getStatisticsView(view = state.statisticsView) {
+  return STATISTICS_VIEWS.some((item) => item.id === view) ? view : "overview";
+}
+
+
+function getStatisticsRange(defaultDate = toDateKey(new Date())) {
+  return normalizeDateRange(
+    state.statisticsRangeStart || defaultDate,
+    state.statisticsRangeEnd || state.statisticsRangeStart || defaultDate,
+  );
+}
+
+
+function setStatisticsRange(start, end) {
+  const range = normalizeDateRange(start, end);
+  state.statisticsRangeStart = range.start;
+  state.statisticsRangeEnd = range.end;
+  return range;
+}
+
+
+function getStatisticsQuickRange(value, todayKey = toDateKey(new Date())) {
+  const today = normalizeDateKey(todayKey) || toDateKey(new Date());
+  const date = new Date(`${today}T12:00:00`);
+  const weekday = date.getDay() || 7;
+  if (value === "today") return { start: today, end: today };
+  if (value === "yesterday") {
+    const yesterday = addDaysToDateKey(today, -1);
+    return { start: yesterday, end: yesterday };
+  }
+  if (value === "this-week") return { start: addDaysToDateKey(today, 1 - weekday), end: today };
+  if (value === "last-week") {
+    const end = addDaysToDateKey(today, -weekday);
+    return { start: addDaysToDateKey(end, -6), end };
+  }
+  if (value === "this-month") return { start: `${today.slice(0, 8)}01`, end: today };
+  if (value === "last-month") {
+    const month = new Date(`${today.slice(0, 8)}01T12:00:00`);
+    month.setMonth(month.getMonth() - 1);
+    const start = toDateKey(month);
+    month.setMonth(month.getMonth() + 1);
+    month.setDate(0);
+    return { start, end: toDateKey(month) };
+  }
+  return getStatisticsRange(today);
+}
+
+
+function getStatisticsRangeDayCount(range) {
+  const start = Date.parse(`${range.start}T00:00:00Z`);
+  const end = Date.parse(`${range.end}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 1;
+  return Math.max(1, Math.round((end - start) / 86400000) + 1);
+}
+
+
+function dedupeStatisticsRecords(records = []) {
+  const byId = new Map();
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    const key = String(record?.id || "").trim() || `${record?.createdAt || ""}|${record?.phone || ""}|${record?.fullName || ""}`;
+    const current = byId.get(key);
+    if (!current || String(record?.updatedAt || record?.archivedAt || record?.createdAt || "") > String(current.updatedAt || current.archivedAt || current.createdAt || "")) {
+      byId.set(key, record);
+    }
+  });
+  return [...byId.values()];
+}
+
+
+function getStatisticsSuccessRate(delivered, failed) {
+  const closed = Number(delivered || 0) + Number(failed || 0);
+  return closed ? Math.round((Number(delivered || 0) / closed) * 1000) / 10 : 0;
+}
+
+
+function statisticsRangesOverlap(startA, endA, startB, endB) {
+  if (!startA || !endA || !startB || !endB) return false;
+  return startA <= endB && endA >= startB;
+}
+
+
+function statisticsLedgerMatchesRange(entry, range) {
+  const start = normalizeDateKey(entry.rangeStart || entry.dateKey);
+  const end = normalizeDateKey(entry.rangeEnd || entry.dateKey || entry.rangeStart) || start;
+  return statisticsRangesOverlap(start, end, range.start, range.end);
+}
+
+
+function getStatisticsPaidAmount(ledger, type, owner, range) {
+  return safeMoney((Array.isArray(ledger) ? ledger : [])
+    .filter((entry) => entry.status === "paid" && entry.type === type && statisticsLedgerMatchesRange(entry, range))
+    .filter((entry) => {
+      if (type === "courier") return normalizeUsername(entry.username) === normalizeUsername(owner);
+      const partner = owner || {};
+      const id = partnerCashIdentity(partner);
+      return Boolean(
+        (id && (entry.partnerId === id || normalizeUsername(entry.partnerUsername) === normalizeUsername(id)))
+        || (partner.username && normalizeUsername(entry.partnerUsername || entry.username) === normalizeUsername(partner.username)),
+      );
+    })
+    .reduce((sum, entry) => sum + safeMoney(entry.amount), 0));
+}
+
+
+function getStatisticsDailyBreakdown(records, range) {
+  const days = [];
+  for (let day = range.start; day <= range.end; day = addDaysToDateKey(day, 1)) {
+    days.push({
+      dateKey: day,
+      total: 0,
+      delivered: 0,
+      failed: 0,
+      pending: 0,
+      cod: 0,
+      deliveryRevenue: 0,
+      courierEarnings: 0,
+      companyRevenue: 0,
+    });
+    if (days.length > 370) break;
+  }
+  const byDay = new Map(days.map((day) => [day.dateKey, day]));
+  (Array.isArray(records) ? records : []).forEach((order) => {
+    const day = byDay.get(getParcelStatsDateKey(order));
+    if (!day) return;
+    day.total += 1;
+    if (order.status === "delivered") {
+      day.delivered += 1;
+      day.cod = safeMoney(day.cod + getPaymentAmount(order));
+      day.deliveryRevenue = safeMoney(day.deliveryRevenue + getDeliveryTotal(order));
+      day.courierEarnings = safeMoney(day.courierEarnings + getCourierPay(order));
+      day.companyRevenue = safeMoney(day.companyRevenue + getAdminProfit(order));
+    } else if (order.status === "failed") {
+      day.failed += 1;
+    } else {
+      day.pending += 1;
+    }
+  });
+  return days;
+}
+
+
+function getStatisticsFailedReasons(records) {
+  const grouped = new Map();
+  (Array.isArray(records) ? records : [])
+    .filter((order) => order.status === "failed")
+    .forEach((order) => {
+      const reason = String(order.failureReason || "მიზეზი არ არის მითითებული").trim();
+      const current = grouped.get(reason) || { reason, count: 0, orders: [] };
+      current.count += 1;
+      current.orders.push(order);
+      grouped.set(reason, current);
+    });
+  return [...grouped.values()].sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
+}
+
+
+async function getStatisticsReport() {
+  const workday = typeof getWorkdayState === "function"
+    ? await getWorkdayState().catch(() => null)
+    : null;
+  if (!state.statisticsInitialized && workday?.currentWorkdayKey) {
+    setStatisticsRange(workday.currentWorkdayKey, workday.currentWorkdayKey);
+    state.statisticsInitialized = true;
+  }
+
+  const range = getStatisticsRange(workday?.currentWorkdayKey || toDateKey(new Date()));
+  const [users, recordsRaw, partners, ledger] = await Promise.all([
+    getUsers().catch(() => []),
+    getAllFinanceRecords({ startDate: range.start, endDate: range.end }).catch(() => []),
+    typeof getPartners === "function" ? getPartners().catch(() => []) : [],
+    (async () => {
+      if (typeof loadPartnerCashAdjustments === "function") await loadPartnerCashAdjustments().catch(() => []);
+      return loadDailyBalanceLedger().catch(() => readDailyBalanceLedger());
+    })(),
+  ]);
+
+  const records = dedupeStatisticsRecords(recordsRaw)
+    .filter((order) => parcelMatchesStatsDateRange(order, range.start, range.end));
+  const couriers = users.filter((user) => user.role === "courier");
+  const dayCount = getStatisticsRangeDayCount(range);
+  const financeSummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
+  const delivered = financeSummary.delivered;
+  const failed = financeSummary.failed;
+  const pending = financeSummary.pending;
+  const successRate = getStatisticsSuccessRate(delivered, failed);
+
+  const courierSummaries = couriers.map((courier) => {
+    const summary = calculateFinanceSummary({ records }, { username: courier.username, startDate: range.start, endDate: range.end });
+    const assigned = summary.filteredOrdersCount;
+    const paid = getStatisticsPaidAmount(ledger, "courier", courier.username, range);
+    return {
+      courier,
+      summary,
+      assigned,
+      paid,
+      remaining: Math.max(0, safeMoney(summary.finalPay - paid)),
+      successRate: getStatisticsSuccessRate(summary.delivered, summary.failed),
+      averagePerDay: summary.delivered / dayCount,
+    };
+  });
+
+  const partnerSummaries = (Array.isArray(partners) ? partners : []).map((partner) => {
+    const summary = calculatePartnerCashSummaryForRange(partner, records, range.start, range.end);
+    const paid = getStatisticsPaidAmount(ledger, "partner", partner, range);
+    return {
+      partner,
+      summary,
+      paid,
+      remainingToPay: Math.max(0, safeMoney(summary.partnerReturnDue - paid)),
+      successRate: getStatisticsSuccessRate(summary.deliveredOrders.length, summary.orders.filter((order) => order.status === "failed").length),
+      averagePerDay: summary.orders.length / dayCount,
+    };
+  }).filter(({ summary }) => summary.orders.length > 0);
+
+  const totalCourierPaid = safeMoney(courierSummaries.reduce((sum, item) => sum + item.paid, 0));
+  const totalPartnerPaid = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.paid, 0));
+  const daily = getStatisticsDailyBreakdown(records, range);
+  const failedReasons = getStatisticsFailedReasons(records);
+  const paymentRows = (Array.isArray(ledger) ? ledger : [])
+    .filter((entry) => entry.status === "paid" && statisticsLedgerMatchesRange(entry, range))
+    .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || "") - Date.parse(a.updatedAt || a.createdAt || ""));
+
+  return {
+    range,
+    workday,
+    users,
+    couriers,
+    partners,
+    records,
+    ledger,
+    financeSummary,
+    courierSummaries,
+    partnerSummaries,
+    daily,
+    failedReasons,
+    paymentRows,
+    totals: {
+      totalOrders: records.length,
+      delivered,
+      failed,
+      pending,
+      successRate,
+      totalCod: financeSummary.totalOrdersAmount,
+      deliveryRevenue: financeSummary.deliveryFees,
+      partnerCodPayable: safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.partnerReturnDue, 0)),
+      partnerPaid: totalPartnerPaid,
+      partnerRemaining: safeMoney(partnerSummaries.reduce((sum, item) => sum + item.remainingToPay, 0)),
+      courierEarnings: financeSummary.finalPay,
+      courierPaid: totalCourierPaid,
+      courierPayable: Math.max(0, safeMoney(financeSummary.finalPay - totalCourierPaid)),
+      companyRevenue: safeMoney(financeSummary.deliveryFees - financeSummary.finalPay),
+    },
+  };
+}
+
+
+function renderStatisticsMetric(label, value, icon = "•", className = "") {
+  return renderFinanceSummaryItem({ className, icon, label, value });
+}
+
+
+function renderStatisticsFilters(report) {
+  const quickRanges = [
+    { label: "დღეს", value: "today" },
+    { label: "გუშინ", value: "yesterday" },
+    { label: "ეს კვირა", value: "this-week" },
+    { label: "წინა კვირა", value: "last-week" },
+    { label: "ეს თვე", value: "this-month" },
+    { label: "წინა თვე", value: "last-month" },
+    { label: "CSV", value: "export" },
+  ];
+  return `
+    <div class="finance-workbench-head statistics-head">
+      <p class="finance-workday-label">პერიოდი: <strong>${escapeHtml(formatDateRangeLabel(report.range.start, report.range.end))}</strong></p>
+      <div class="finance-workbench-topline">
+        <div class="finance-toolbar finance-range-toolbar finance-workbench-range">
+          <label>
+            <span>საწყისი</span>
+            <input class="finance-input" id="statisticsStartDate" type="date" value="${escapeAttr(report.range.start)}" aria-label="საწყისი თარიღი">
+          </label>
+          <label>
+            <span>დასასრული</span>
+            <input class="finance-input" id="statisticsEndDate" type="date" value="${escapeAttr(report.range.end)}" aria-label="დასრულების თარიღი">
+          </label>
+          <button class="mini-button finance-button-primary" type="button" data-statistics-apply>ნახვა</button>
+        </div>
+        <div class="finance-workbench-selects">
+          <label class="finance-workbench-select">
+            <span>პერიოდი</span>
+            <select class="finance-input" data-statistics-range-select aria-label="სტატისტიკის პერიოდი">
+              <option value="">Custom</option>
+              ${quickRanges.map((item) => `<option value="${escapeAttr(item.value)}">${escapeHtml(item.label)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="finance-workbench-select">
+            <span>განყოფილება</span>
+            <select class="finance-input" data-statistics-view-select aria-label="სტატისტიკის განყოფილება">
+              ${STATISTICS_VIEWS.map((item) => `<option value="${escapeAttr(item.id)}" ${getStatisticsView() === item.id ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="finance-workbench-select">
+            <span>ძებნა</span>
+            <input class="finance-input" id="statisticsSearch" type="search" value="${escapeAttr(state.statisticsSearch || "")}" placeholder="ძებნა">
+          </label>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+function renderStatisticsKpis(report) {
+  const totals = report.totals;
+  return `
+    ${renderStatisticsMetric("Total Orders", String(totals.totalOrders), "Σ", "finance-summary-item--accent")}
+    ${renderStatisticsMetric("Delivered", String(totals.delivered), "✓", "finance-summary-item--delivered")}
+    ${renderStatisticsMetric("Failed", String(totals.failed), "!", "finance-summary-item--alert")}
+    ${renderStatisticsMetric("Pending", String(totals.pending), "•", "finance-summary-item--compact")}
+    ${renderStatisticsMetric("Success Rate", `${totals.successRate}%`, "%", "finance-summary-item--final")}
+    ${renderStatisticsMetric("Total COD", formatMoney(totals.totalCod), "₾", "finance-summary-item--cash")}
+    ${renderStatisticsMetric("Delivery Revenue", formatMoney(totals.deliveryRevenue), "₾", "finance-summary-item--base")}
+    ${renderStatisticsMetric("Courier Earnings", formatMoney(totals.courierEarnings), "₾", "finance-summary-item--base")}
+    ${renderStatisticsMetric("Courier Payable", formatMoney(totals.courierPayable), "₾", "finance-summary-item--alert")}
+    ${renderStatisticsMetric("Partner COD Payable", formatMoney(totals.partnerRemaining), "₾", "finance-summary-item--partner")}
+    ${renderStatisticsMetric("Company Revenue", formatMoney(totals.companyRevenue), "₾", "finance-summary-item--hero finance-summary-item--final")}
+  `;
+}
+
+
+function renderStatisticsDailyChart(report) {
+  const maxOrders = Math.max(1, ...report.daily.map((day) => day.total));
+  return `
+    <section class="finance-section statistics-chart-panel">
+      <div class="finance-analytics-bars statistics-bars">
+        ${report.daily.map((day) => {
+          const height = Math.max(8, Math.round((day.total / maxOrders) * 100));
+          const tooltip = `${day.dateKey}: ${day.total} order, ${day.delivered} delivered, ${formatMoney(day.companyRevenue)}`;
+          return `
+            <button class="finance-analytics-bar statistics-bar" type="button" data-action="statisticsDay" data-value="${escapeAttr(day.dateKey)}" data-tooltip="${escapeAttr(tooltip)}" aria-label="${escapeAttr(tooltip)}">
+              <span style="--bar-height: ${height}%"></span>
+              <small>${escapeHtml(day.dateKey.slice(5))}</small>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+
+function renderStatisticsOverview(report) {
+  return `
+    ${renderStatisticsDailyChart(report)}
+    <section class="finance-section finance-action-queue statistics-action-queue">
+      <article class="finance-action-card finance-action-card--collect finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["partners", report.totals.partnerRemaining]))}">
+        <div><strong>Partner Statistics</strong><span>${escapeHtml(`${report.partnerSummaries.length} პარტნიორი · ${formatMoney(report.totals.partnerRemaining)}`)}</span></div>
+        <button class="mini-button finance-button-primary" type="button" data-action="statisticsView" data-value="partners">გაშლა</button>
+      </article>
+      <article class="finance-action-card finance-action-card--pay finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["couriers", report.totals.courierPayable]))}">
+        <div><strong>Courier Statistics</strong><span>${escapeHtml(`${report.courierSummaries.length} კურიერი · ${formatMoney(report.totals.courierPayable)}`)}</span></div>
+        <button class="mini-button finance-button-primary" type="button" data-action="statisticsView" data-value="couriers">გაშლა</button>
+      </article>
+      <article class="finance-action-card finance-action-card--closed finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText(["failed", report.totals.failed]))}">
+        <div><strong>Failed Orders</strong><span>${escapeHtml(`${report.totals.failed} ვერ ჩაბარდა · ${report.failedReasons.length} მიზეზი`)}</span></div>
+        <button class="mini-button finance-button-primary" type="button" data-action="statisticsView" data-value="failed">გაშლა</button>
+      </article>
+    </section>
+    ${renderStatisticsPartnerTable(report, 5)}
+    ${renderStatisticsCourierTable(report, 5)}
+  `;
+}
+
+
+function renderStatisticsPartnerTable(report, limit = 0) {
+  const rows = (limit ? report.partnerSummaries.slice(0, limit) : report.partnerSummaries).map(({ partner, summary, paid, remainingToPay, successRate, averagePerDay }) => {
+    const failed = summary.orders.filter((order) => order.status === "failed").length;
+    return `
+      <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([partnerName(partner), partner.username, summary.orders.length, summary.baseCash]))}">
+        ${renderFinanceCell("პარტნიორი", renderFinanceTableText(partnerName(partner), partner.username || partner.id || ""))}
+        ${renderFinanceCell("Orders", String(summary.orders.length))}
+        ${renderFinanceCell("Delivered", String(summary.deliveredOrders.length))}
+        ${renderFinanceCell("Failed", String(failed))}
+        ${renderFinanceCell("Pending", String(summary.pendingOrders.length))}
+        ${renderFinanceCell("Success", `${successRate}%`)}
+        ${renderFinanceCell("COD", formatMoney(summary.baseCash))}
+        ${renderFinanceCell("Service", formatMoney(summary.serviceFees))}
+        ${renderFinanceCell("Net COD", formatMoney(summary.netBalance))}
+        ${renderFinanceCell("Paid", formatMoney(paid))}
+        ${renderFinanceCell("Remaining", formatMoney(remainingToPay))}
+        ${renderFinanceCell("Avg / Day", averagePerDay.toFixed(1))}
+        ${renderFinanceCell("მოქმედება", renderFinanceTableAction("statisticsPartner", "დეტალურად", partner.username || partner.id || "", "mini-button finance-button-primary"))}
+      </tr>
+    `;
+  });
+  return renderFinanceListPanel({
+    title: "Partner Statistics",
+    badges: [`პარტნიორი: ${report.partnerSummaries.length}`, `გადასარიცხი: ${formatMoney(report.totals.partnerRemaining)}`],
+    headers: ["პარტნიორი", "Orders", "Delivered", "Failed", "Pending", "Success", "COD", "Service", "Net COD", "Paid", "Remaining", "Avg / Day", ""],
+    rows: rows.length ? rows : [`<tr><td colspan="13">პარტნიორის შეკვეთები ამ პერიოდში არ არის</td></tr>`],
+  });
+}
+
+
+function renderStatisticsCourierTable(report, limit = 0) {
+  const rows = (limit ? report.courierSummaries.slice(0, limit) : report.courierSummaries).map(({ courier, summary, assigned, paid, remaining, successRate, averagePerDay }) => `
+    <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([userDisplayName(courier), courier.username, assigned, summary.finalPay]))}">
+      ${renderFinanceCell("კურიერი", renderFinanceTableText(userDisplayName(courier), courier.username))}
+      ${renderFinanceCell("Assigned", String(assigned))}
+      ${renderFinanceCell("Delivered", String(summary.delivered))}
+      ${renderFinanceCell("Failed", String(summary.failed))}
+      ${renderFinanceCell("Pending", String(summary.pending))}
+      ${renderFinanceCell("Success", `${successRate}%`)}
+      ${renderFinanceCell("Earnings", formatMoney(summary.finalPay))}
+      ${renderFinanceCell("Paid", formatMoney(paid))}
+      ${renderFinanceCell("Remaining", formatMoney(remaining))}
+      ${renderFinanceCell("Avg / Day", averagePerDay.toFixed(1))}
+      ${renderFinanceCell("მოქმედება", renderFinanceTableAction("statisticsCourier", "დეტალურად", courier.username, "mini-button finance-button-primary"))}
+    </tr>
+  `);
+  return renderFinanceListPanel({
+    title: "Courier Statistics",
+    badges: [`კურიერი: ${report.courierSummaries.length}`, `გადასახდელი: ${formatMoney(report.totals.courierPayable)}`],
+    headers: ["კურიერი", "Assigned", "Delivered", "Failed", "Pending", "Success", "Earnings", "Paid", "Remaining", "Avg / Day", ""],
+    rows: rows.length ? rows : [`<tr><td colspan="11">კურიერი ჯერ არ არის დამატებული</td></tr>`],
+  });
+}
+
+
+function renderStatisticsDailyTable(report) {
+  const rows = report.daily.map((day) => `
+    <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([day.dateKey, day.total, day.delivered, day.failed, day.pending]))}">
+      ${renderFinanceCell("დღე", renderFinanceTableText(day.dateKey, `${getStatisticsSuccessRate(day.delivered, day.failed)}% success`))}
+      ${renderFinanceCell("Orders", String(day.total))}
+      ${renderFinanceCell("Delivered", String(day.delivered))}
+      ${renderFinanceCell("Failed", String(day.failed))}
+      ${renderFinanceCell("Pending", String(day.pending))}
+      ${renderFinanceCell("COD", formatMoney(day.cod))}
+      ${renderFinanceCell("Delivery", formatMoney(day.deliveryRevenue))}
+      ${renderFinanceCell("Courier", formatMoney(day.courierEarnings))}
+      ${renderFinanceCell("Company", formatMoney(day.companyRevenue))}
+      ${renderFinanceCell("მოქმედება", renderFinanceTableAction("statisticsDay", "შეკვეთები", day.dateKey, "mini-button finance-button-primary"))}
+    </tr>
+  `);
+  return renderFinanceListPanel({
+    title: "Daily Statistics",
+    badges: [`დღე: ${report.daily.length}`],
+    headers: ["დღე", "Orders", "Delivered", "Failed", "Pending", "COD", "Delivery", "Courier", "Company", ""],
+    rows,
+  });
+}
+
+
+function renderStatisticsFailedTable(report) {
+  const rows = report.failedReasons.map((item) => `
+    <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([item.reason, item.count]))}">
+      ${renderFinanceCell("მიზეზი", renderFinanceTableText(item.reason, `${item.orders.length} შეკვეთა`))}
+      ${renderFinanceCell("რაოდენობა", String(item.count))}
+      ${renderFinanceCell("მოქმედება", renderFinanceTableAction("statisticsOrders", "შეკვეთები", `failed|${item.reason}`, "mini-button finance-button-primary"))}
+    </tr>
+  `);
+  return renderFinanceListPanel({
+    title: "Failed Orders",
+    badges: [`ვერ ჩაბარდა: ${report.totals.failed}`, `მიზეზი: ${report.failedReasons.length}`],
+    headers: ["მიზეზი", "რაოდენობა", ""],
+    rows: rows.length ? rows : [`<tr><td colspan="3">ამ პერიოდში ვერ ჩაბარებული შეკვეთა არ არის</td></tr>`],
+  });
+}
+
+
+function renderStatisticsPaymentsTable(report) {
+  const rows = report.paymentRows.map((entry) => {
+    const owner = entry.type === "partner" ? entry.label || entry.partnerUsername || entry.partnerId : entry.label || entry.username;
+    return `
+      <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([entry.type, owner, entry.amount, entry.rangeStart, entry.rangeEnd]))}">
+        ${renderFinanceCell("ტიპი", entry.type === "partner" ? "Partner" : "Courier")}
+        ${renderFinanceCell("ვისზე", renderFinanceTableText(owner, formatDateRangeLabel(entry.rangeStart, entry.rangeEnd)))}
+        ${renderFinanceCell("თანხა", formatMoney(entry.amount))}
+        ${renderFinanceCell("დრო", formatDateTime(entry.updatedAt || entry.createdAt))}
+        ${renderFinanceCell("შენიშვნა", escapeHtml(entry.note || ""))}
+      </tr>
+    `;
+  });
+  return renderFinanceListPanel({
+    title: "Payment History",
+    badges: [`ჩანაწერი: ${report.paymentRows.length}`, `კურიერი: ${formatMoney(report.totals.courierPaid)}`, `პარტნიორი: ${formatMoney(report.totals.partnerPaid)}`],
+    headers: ["ტიპი", "ვისზე", "თანხა", "დრო", "შენიშვნა"],
+    rows: rows.length ? rows : [`<tr><td colspan="5">ამ პერიოდში გადახდის ჩანაწერი არ არის</td></tr>`],
+  });
+}
+
+
+function renderStatisticsOrdersTable(report, orders = report.records, title = "Orders") {
+  const rows = (Array.isArray(orders) ? orders : []).map((order) => `
+    <tr class="finance-workbench-search-row" data-finance-search="${escapeAttr(financeSearchText([order.fullName, order.phone, order.courierUsername, orderPartnerName(order), order.status]))}">
+      ${renderFinanceCell("მიმღები", renderFinanceTableText(order.fullName || "სახელი არ არის", order.phone || ""))}
+      ${renderFinanceCell("სტატუსი", renderAppStatusBadge(order.status || "pending", order.status || "pending"))}
+      ${renderFinanceCell("პარტნიორი", escapeHtml(orderPartnerName(order)))}
+      ${renderFinanceCell("კურიერი", escapeHtml(order.courierUsername || "მიუბმელი"))}
+      ${renderFinanceCell("COD", formatMoney(getPaymentAmount(order)))}
+      ${renderFinanceCell("Delivery", formatMoney(getDeliveryTotal(order)))}
+      ${renderFinanceCell("Courier", formatMoney(getCourierPay(order)))}
+      ${renderFinanceCell("Company", formatMoney(getAdminProfit(order)))}
+      ${renderFinanceCell("დღე", escapeHtml(getParcelStatsDateKey(order)))}
+      ${renderFinanceCell("მოქმედება", order.id ? renderFinanceTableAction("focusStatsParcel", "რუკა", order.id, "mini-button") : "")}
+    </tr>
+  `);
+  return renderFinanceListPanel({
+    title,
+    badges: [`შეკვეთა: ${orders.length}`],
+    headers: ["მიმღები", "სტატუსი", "პარტნიორი", "კურიერი", "COD", "Delivery", "Courier", "Company", "დღე", ""],
+    rows: rows.length ? rows : [`<tr><td colspan="10">ამ პერიოდში შეკვეთა არ არის</td></tr>`],
+  });
+}
+
+
+function renderStatisticsContent(report) {
+  const view = getStatisticsView();
+  if (view === "partners") return renderStatisticsPartnerTable(report);
+  if (view === "couriers") return renderStatisticsCourierTable(report);
+  if (view === "daily") return `${renderStatisticsDailyChart(report)}${renderStatisticsDailyTable(report)}`;
+  if (view === "failed") return renderStatisticsFailedTable(report);
+  if (view === "payments") return renderStatisticsPaymentsTable(report);
+  if (view === "orders") return renderStatisticsOrdersTable(report);
+  return renderStatisticsOverview(report);
+}
+
+
+function renderStatisticsDashboard(report) {
+  return renderFinanceModalLayout({
+    filters: renderStatisticsFilters(report),
+    summary: renderStatisticsKpis(report),
+    content: `<div class="finance-workbench statistics-workbench">${renderStatisticsContent(report)}<p class="history-empty finance-workbench-empty" hidden>ჩანაწერი ვერ მოიძებნა.</p></div>`,
+  });
+}
+
+
+function bindStatisticsDashboardEvents(report) {
+  document.querySelector("[data-statistics-apply]")?.addEventListener("click", async () => {
+    const range = normalizeDateRange(
+      document.getElementById("statisticsStartDate")?.value,
+      document.getElementById("statisticsEndDate")?.value,
+    );
+    setStatisticsRange(range.start, range.end);
+    await openStatisticsDashboard({ preserveSearch: true });
+  });
+  document.querySelector("[data-statistics-range-select]")?.addEventListener("change", async (event) => {
+    const value = event.currentTarget.value;
+    if (!value) return;
+    if (value === "export") {
+      exportStatisticsCsv(report);
+      event.currentTarget.value = "";
+      return;
+    }
+    const range = getStatisticsQuickRange(value, report.workday?.currentWorkdayKey || toDateKey(new Date()));
+    setStatisticsRange(range.start, range.end);
+    await openStatisticsDashboard({ preserveSearch: true });
+  });
+  document.querySelector("[data-statistics-view-select]")?.addEventListener("change", (event) => {
+    state.statisticsView = getStatisticsView(event.currentTarget.value);
+    const workbench = document.querySelector(".statistics-workbench");
+    if (workbench) {
+      workbench.innerHTML = `${renderStatisticsContent(report)}<p class="history-empty finance-workbench-empty" hidden>ჩანაწერი ვერ მოიძებნა.</p>`;
+      applyFinanceDashboardSearch();
+    }
+  });
+  const searchInput = document.getElementById("statisticsSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      state.statisticsSearch = searchInput.value;
+      state.financeAdminSearch = state.statisticsSearch;
+      applyFinanceDashboardSearch();
+    });
+    state.financeAdminSearch = state.statisticsSearch || "";
+    applyFinanceDashboardSearch();
+  }
+}
+
+
+async function openStatisticsDashboard(options = {}) {
+  if (!state.isAdmin) return;
+  state.statisticsView = getStatisticsView(state.statisticsView);
+  if (!options.preserveSearch) state.statisticsSearch = "";
+  const report = await getStatisticsReport();
+  state.statisticsReport = report;
+  state.financeAdminSearch = state.statisticsSearch || "";
+  showDialog("სტატისტიკა", renderStatisticsDashboard(report), [
+    { label: "CSV", variant: "primary", action: () => exportStatisticsCsv(report) },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+  bindStatisticsDashboardEvents(report);
+}
+
+
+async function getActiveStatisticsReport() {
+  return state.statisticsReport || getStatisticsReport();
+}
+
+
+async function openStatisticsPartner(identity) {
+  const report = await getActiveStatisticsReport();
+  const partnerSummary = report.partnerSummaries.find(({ partner }) => (
+    normalizeUsername(partner.username) === normalizeUsername(identity)
+    || String(partner.id || "") === String(identity || "")
+  ));
+  if (!partnerSummary) return;
+  const { partner, summary, paid, remainingToPay, successRate, averagePerDay } = partnerSummary;
+  const daily = getStatisticsDailyBreakdown(summary.orders, report.range);
+  const body = renderFinanceModalLayout({
+    summary: `
+      ${renderStatisticsMetric("Orders", String(summary.orders.length), "Σ", "finance-summary-item--accent")}
+      ${renderStatisticsMetric("Delivered", String(summary.deliveredOrders.length), "✓", "finance-summary-item--delivered")}
+      ${renderStatisticsMetric("Failed", String(summary.orders.filter((order) => order.status === "failed").length), "!", "finance-summary-item--alert")}
+      ${renderStatisticsMetric("Success Rate", `${successRate}%`, "%", "finance-summary-item--final")}
+      ${renderStatisticsMetric("Total COD", formatMoney(summary.baseCash), "₾", "finance-summary-item--cash")}
+      ${renderStatisticsMetric("Delivery Cost", formatMoney(summary.serviceFees), "₾", "finance-summary-item--base")}
+      ${renderStatisticsMetric("Net COD", formatMoney(summary.netBalance), "₾", "finance-summary-item--partner")}
+      ${renderStatisticsMetric("Paid To Partner", formatMoney(paid), "₾", "finance-summary-item--base")}
+      ${renderStatisticsMetric("Remaining To Pay", formatMoney(remainingToPay), "₾", "finance-summary-item--hero finance-summary-item--final")}
+      ${renderStatisticsMetric("Avg Orders / Day", averagePerDay.toFixed(1), "∅", "finance-summary-item--compact")}
+    `,
+    content: `<div class="finance-workbench statistics-workbench">${renderStatisticsDailyTable({ ...report, daily })}${renderStatisticsOrdersTable(report, summary.orders, "Partner Orders")}</div>`,
+  });
+  showDialog(`${partnerName(partner)} სტატისტიკა`, body, [
+    { label: "უკან", variant: "secondary", action: openStatisticsDashboard },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+async function openStatisticsCourier(username) {
+  const report = await getActiveStatisticsReport();
+  const courierSummary = report.courierSummaries.find(({ courier }) => normalizeUsername(courier.username) === normalizeUsername(username));
+  if (!courierSummary) return;
+  const { courier, summary, assigned, paid, remaining, successRate, averagePerDay } = courierSummary;
+  const daily = getStatisticsDailyBreakdown(summary.records, report.range);
+  const body = renderFinanceModalLayout({
+    summary: `
+      ${renderStatisticsMetric("Assigned", String(assigned), "Σ", "finance-summary-item--accent")}
+      ${renderStatisticsMetric("Delivered", String(summary.delivered), "✓", "finance-summary-item--delivered")}
+      ${renderStatisticsMetric("Failed", String(summary.failed), "!", "finance-summary-item--alert")}
+      ${renderStatisticsMetric("Pending", String(summary.pending), "•", "finance-summary-item--compact")}
+      ${renderStatisticsMetric("Success Rate", `${successRate}%`, "%", "finance-summary-item--final")}
+      ${renderStatisticsMetric("Courier Earnings", formatMoney(summary.finalPay), "₾", "finance-summary-item--cash")}
+      ${renderStatisticsMetric("Already Paid", formatMoney(paid), "₾", "finance-summary-item--base")}
+      ${renderStatisticsMetric("Remaining To Pay", formatMoney(remaining), "₾", "finance-summary-item--hero finance-summary-item--final")}
+      ${renderStatisticsMetric("Avg Deliveries / Day", averagePerDay.toFixed(1), "∅", "finance-summary-item--compact")}
+    `,
+    content: `<div class="finance-workbench statistics-workbench">${renderStatisticsDailyTable({ ...report, daily })}${renderStatisticsOrdersTable(report, summary.records, "Courier Orders")}</div>`,
+  });
+  showDialog(`${userDisplayName(courier)} სტატისტიკა`, body, [
+    { label: "უკან", variant: "secondary", action: openStatisticsDashboard },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+async function openStatisticsDay(dateKey) {
+  const report = await getActiveStatisticsReport();
+  const day = normalizeDateKey(dateKey);
+  if (!day) return;
+  const orders = report.records.filter((order) => getParcelStatsDateKey(order) === day);
+  const summary = calculateFinanceSummary({ records: orders }, { startDate: day, endDate: day });
+  const body = renderFinanceModalLayout({
+    summary: `
+      ${renderStatisticsMetric("Orders", String(orders.length), "Σ", "finance-summary-item--accent")}
+      ${renderStatisticsMetric("Delivered", String(summary.delivered), "✓", "finance-summary-item--delivered")}
+      ${renderStatisticsMetric("Failed", String(summary.failed), "!", "finance-summary-item--alert")}
+      ${renderStatisticsMetric("Pending", String(summary.pending), "•", "finance-summary-item--compact")}
+      ${renderStatisticsMetric("COD", formatMoney(summary.totalOrdersAmount), "₾", "finance-summary-item--cash")}
+      ${renderStatisticsMetric("Company", formatMoney(summary.adminProfit), "₾", "finance-summary-item--hero finance-summary-item--final")}
+    `,
+    content: `<div class="finance-workbench statistics-workbench">${renderStatisticsOrdersTable(report, orders, `${day} Orders`)}</div>`,
+  });
+  showDialog(`${day} სტატისტიკა`, body, [
+    { label: "უკან", variant: "secondary", action: openStatisticsDashboard },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+async function openStatisticsOrders(value = "all") {
+  const report = await getActiveStatisticsReport();
+  const [status, reason] = String(value || "all").split("|");
+  const orders = report.records.filter((order) => {
+    if (status === "all") return true;
+    if (order.status !== status) return false;
+    return !reason || String(order.failureReason || "მიზეზი არ არის მითითებული").trim() === reason;
+  });
+  showDialog("შეკვეთები", renderFinanceModalLayout({
+    content: `<div class="finance-workbench statistics-workbench">${renderStatisticsOrdersTable(report, orders)}</div>`,
+  }), [
+    { label: "უკან", variant: "secondary", action: openStatisticsDashboard },
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
+}
+
+
+function setStatisticsView(value) {
+  state.statisticsView = getStatisticsView(value);
+  return openStatisticsDashboard({ preserveSearch: true });
+}
+
+
+function exportStatisticsCsv(report = state.statisticsReport) {
+  if (!report) return;
+  const rows = [
+    ["range", report.range.start, report.range.end],
+    ["totalOrders", report.totals.totalOrders],
+    ["delivered", report.totals.delivered],
+    ["failed", report.totals.failed],
+    ["pending", report.totals.pending],
+    ["successRate", report.totals.successRate],
+    ["totalCod", report.totals.totalCod],
+    ["deliveryRevenue", report.totals.deliveryRevenue],
+    ["courierEarnings", report.totals.courierEarnings],
+    ["courierPaid", report.totals.courierPaid],
+    ["courierPayable", report.totals.courierPayable],
+    ["partnerPaid", report.totals.partnerPaid],
+    ["partnerRemaining", report.totals.partnerRemaining],
+    ["companyRevenue", report.totals.companyRevenue],
+    [],
+    ["daily", "orders", "delivered", "failed", "pending", "cod", "deliveryRevenue", "courierEarnings", "companyRevenue"],
+    ...report.daily.map((day) => [day.dateKey, day.total, day.delivered, day.failed, day.pending, day.cod, day.deliveryRevenue, day.courierEarnings, day.companyRevenue]),
+    [],
+    ["partners", "orders", "delivered", "failed", "pending", "cod", "service", "netCod", "paid", "remaining"],
+    ...report.partnerSummaries.map(({ partner, summary, paid, remainingToPay }) => [
+      partnerName(partner),
+      summary.orders.length,
+      summary.deliveredOrders.length,
+      summary.orders.filter((order) => order.status === "failed").length,
+      summary.pendingOrders.length,
+      summary.baseCash,
+      summary.serviceFees,
+      summary.netBalance,
+      paid,
+      remainingToPay,
+    ]),
+    [],
+    ["couriers", "assigned", "delivered", "failed", "pending", "earnings", "paid", "remaining"],
+    ...report.courierSummaries.map(({ courier, summary, assigned, paid, remaining }) => [
+      userDisplayName(courier),
+      assigned,
+      summary.delivered,
+      summary.failed,
+      summary.pending,
+      summary.finalPay,
+      paid,
+      remaining,
+    ]),
+  ];
+  downloadFinanceCsv(`statistics-${report.range.start}-${report.range.end}.csv`, rows);
+  showToast("სტატისტიკის CSV მზადაა");
+}
+
 
 async function openAdminDailyBalance(startDate = state.financeRangeStart || state.financeDate || toDateKey(new Date()), endDate = state.financeRangeEnd || startDate) {
   if (!state.isAdmin) return;
@@ -1613,7 +2383,7 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
 
   const [users, records, partners, ledger] = await Promise.all([
     getUsers().catch(() => []),
-    getAllFinanceRecords(),
+    getAllFinanceRecords({ startDate: range.start, endDate: range.end }),
     typeof getPartners === "function" ? getPartners().catch(() => []) : [],
     (async () => {
       if (typeof loadPartnerCashAdjustments === "function") await loadPartnerCashAdjustments().catch(() => []);
@@ -2013,10 +2783,11 @@ async function openFinanceCourier(username) {
   }
   state.selectedCourier = username;
   const range = getFinanceCourierRange();
+  const recordOptions = { dateFrom: range.start, dateTo: range.end };
   const [users, pins, history] = await Promise.all([
     getUsers().catch(() => []),
-    getPins(username),
-    getHistory(username),
+    getPins(username, recordOptions),
+    getHistory(username, recordOptions),
   ]);
   const courier = users.find((user) => normalizeUsername(user.username) === normalizeUsername(username)) || { username };
   const courierAllRecords = [...pins, ...history];
@@ -2112,9 +2883,12 @@ async function openFinanceCourier(username) {
 
 async function openFinanceCash() {
   if (!state.isAdmin) return;
-  const [users, records] = await Promise.all([getUsers(), getAllFinanceRecords()]);
-  const couriers = users.filter((user) => user.role === "courier");
   const range = getFinanceCourierRange();
+  const [users, records] = await Promise.all([
+    getUsers(),
+    getAllFinanceRecords({ startDate: range.start, endDate: range.end }),
+  ]);
+  const couriers = users.filter((user) => user.role === "courier");
   const filters = renderDateRangeToolbar({
     startId: "financeCashStartDate",
     endId: "financeCashEndDate",
@@ -2166,9 +2940,12 @@ async function openFinanceCash() {
 
 async function openFinanceCourierPay() {
   if (!state.isAdmin) return;
-  const [users, records] = await Promise.all([getUsers(), getAllFinanceRecords()]);
-  const couriers = users.filter((user) => user.role === "courier");
   const range = getFinanceCourierRange();
+  const [users, records] = await Promise.all([
+    getUsers(),
+    getAllFinanceRecords({ startDate: range.start, endDate: range.end }),
+  ]);
+  const couriers = users.filter((user) => user.role === "courier");
   const filters = renderDateRangeToolbar({
     startId: "financePayStartDate",
     endId: "financePayEndDate",
@@ -2227,7 +3004,7 @@ async function openFinancePartnerCash() {
   const range = getFinanceCourierRange();
   const [partners, records] = await Promise.all([
     getPartners().catch(() => []),
-    typeof getAllPartnerCashRecords === "function" ? getAllPartnerCashRecords().catch(() => []) : getAllFinanceRecords(),
+    getAllFinanceRecords({ startDate: range.start, endDate: range.end }),
     typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
   ]);
   const summaries = partners.map((partner) => ({
@@ -2282,8 +3059,9 @@ async function openFinancePartnerCash() {
 
 async function openFinanceDayClose() {
   if (!state.isAdmin) return;
-  const [pins, history] = await Promise.all([getPins(""), getHistory("")]);
   const todayKey = toDateKey(new Date());
+  const recordOptions = { dateFrom: todayKey, dateTo: todayKey };
+  const [pins, history] = await Promise.all([getPins("", recordOptions), getHistory("", recordOptions)]);
   const records = [...pins, ...history];
   const todaySummary = calculateFinanceSummary({ records }, { startDate: todayKey, endDate: todayKey });
   const delivered = pins.filter((pin) => pin.status === "delivered").length;
@@ -2330,7 +3108,8 @@ async function openFinanceDayClose() {
 async function openFinanceAdmin() {
   if (!state.isAdmin) return;
   const range = getFinanceCourierRange();
-  const [pins, history] = await Promise.all([getPins(""), getHistory("")]);
+  const recordOptions = { dateFrom: range.start, dateTo: range.end };
+  const [pins, history] = await Promise.all([getPins("", recordOptions), getHistory("", recordOptions)]);
   const allRecords = [...pins, ...history];
   const summaryResult = calculateFinanceSummary({ records: allRecords }, { startDate: range.start, endDate: range.end });
   const delivered = summaryResult.delivered;
@@ -2382,8 +3161,8 @@ async function openFinanceAdmin() {
 
 async function openCashAdjustmentDialog(username) {
   if (!state.isAdmin) return;
-  const records = await getAllFinanceRecords();
   const range = getFinanceCourierRange();
+  const records = await getAllFinanceRecords({ startDate: range.start, endDate: range.end });
   const currentCash = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end }).cashReceived;
   const content = `
     <div class="finance-card finance-mini-card finance-section stats-card">
@@ -2443,7 +3222,7 @@ function calculateAdjustmentDelta(currentAmount, amount, mode = "subtract", rawC
 
 async function addCashAdjustment(username, amount, mode = "subtract") {
   const range = getFinanceCourierRange();
-  const records = await getAllFinanceRecords();
+  const records = await getAllFinanceRecords({ startDate: range.start, endDate: range.end });
   const summary = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
   const currentCash = summary.cashReceived;
   const rawCash = safeMoney(summary.totalOrdersAmount + summary.cashAdjustmentTotal);
@@ -2476,7 +3255,7 @@ async function addCashAdjustment(username, amount, mode = "subtract") {
 
 async function zeroCashAdjustment(username) {
   const range = getFinanceCourierRange();
-  const records = await getAllFinanceRecords();
+  const records = await getAllFinanceRecords({ startDate: range.start, endDate: range.end });
   const currentCash = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end }).cashReceived;
   await addCashAdjustment(username, currentCash);
 }
@@ -2485,7 +3264,7 @@ async function zeroCashAdjustment(username) {
 async function openPayAdjustmentDialog(username) {
   if (!state.isAdmin) return;
   const range = getFinanceCourierRange();
-  const records = [...await getPins(""), ...await getHistory("")];
+  const records = await getAllFinanceRecords({ startDate: range.start, endDate: range.end });
   const { basePay, adjustmentTotal, finalPay } = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
   const recentAdjustments = renderFinanceAdjustmentHistorySection(username, range.start, range.end);
   const summary = `
@@ -2599,7 +3378,7 @@ async function resetPayAdjustment(username) {
 
 async function addPayAdjustment(username, amount, mode = "subtract") {
   const range = getFinanceCourierRange();
-  const records = [...await getPins(""), ...await getHistory("")];
+  const records = await getAllFinanceRecords({ startDate: range.start, endDate: range.end });
   const summary = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
   const currentPay = summary.finalPay;
   const rawPay = safeMoney(summary.basePay + summary.adjustmentTotal);
@@ -2634,7 +3413,7 @@ async function addPayAdjustment(username, amount, mode = "subtract") {
 
 async function zeroPayAdjustment(username) {
   const range = getFinanceCourierRange();
-  const records = [...await getPins(""), ...await getHistory("")];
+  const records = await getAllFinanceRecords({ startDate: range.start, endDate: range.end });
   const { finalPay: currentPay } = calculateFinanceSummary({ records }, { username, startDate: range.start, endDate: range.end });
   await addPayAdjustment(username, currentPay);
 }

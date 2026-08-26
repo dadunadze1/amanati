@@ -286,14 +286,23 @@ function clearStaticLocalDataStores() {
   ].filter(Boolean).forEach(clearData);
 }
 
-function normalizeStaticParcelFinance(parcel, store = loadStaticBootstrap.cache) {
+function normalizeStaticParcelFinance(parcel, store = loadStaticBootstrap.cache, options = {}) {
   if (!parcel || typeof parcel !== "object") return parcel;
   const paymentAmount = getStaticParcelPaymentAmount(parcel);
-  const finance = getStaticParcelFinanceSnapshot(parcel, store);
-  return {
+  const normalized = {
     ...parcel,
     paymentAmount,
     cashAmount: paymentAmount,
+  };
+  if (parcel.status !== "delivered" && !options.includePreview) {
+    delete normalized.deliveryTotalPrice;
+    delete normalized.courierPay;
+    delete normalized.adminProfit;
+    return normalized;
+  }
+  const finance = getStaticParcelFinanceSnapshot(parcel, store, options);
+  return {
+    ...normalized,
     tariffId: finance.tariffId,
     tariffLabel: finance.tariffLabel,
     deliveryTotalPrice: finance.deliveryTotalPrice,
@@ -362,11 +371,11 @@ function assertStaticParcelTariffAllowed(tariffId) {
   }
 }
 
-function getStaticParcelFinanceSnapshot(parcel = {}, store = loadStaticBootstrap.cache) {
+function getStaticParcelFinanceSnapshot(parcel = {}, store = loadStaticBootstrap.cache, options = {}) {
   const tariffs = getStaticTariffSettings(store);
   const tariffId = getStaticParcelTariffId(parcel);
   const tariff = tariffs[tariffId] || tariffs.city;
-  const hasFinanceSnapshot = hasStaticMoneyValue(parcel.deliveryTotalPrice)
+  const hasFinanceSnapshot = !options.forceCurrentTariff && hasStaticMoneyValue(parcel.deliveryTotalPrice)
     && (
       getStaticMoney(parcel.deliveryTotalPrice) > 0
       || getStaticMoney(parcel.courierPay) > 0
@@ -748,6 +757,24 @@ function getStaticParcelWorkdayDateKey(parcel) {
   return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
 }
 
+function getStaticParcelDateRangeFilter(url) {
+  const start = String(url.searchParams.get("dateFrom") || url.searchParams.get("startDate") || "").trim();
+  const end = String(url.searchParams.get("dateTo") || url.searchParams.get("endDate") || start).trim();
+  return {
+    start: isStaticDateKey(start) ? start : "",
+    end: isStaticDateKey(end) ? end : "",
+  };
+}
+
+function staticParcelMatchesWorkdayDateRange(parcel, range) {
+  if (!range.start && !range.end) return true;
+  const dateKey = getStaticParcelWorkdayDateKey(parcel);
+  if (!dateKey) return false;
+  const start = range.start || range.end;
+  const end = range.end || range.start;
+  return start <= end ? dateKey >= start && dateKey <= end : dateKey >= end && dateKey <= start;
+}
+
 function staticPaginatedPayload(key, records, pagination) {
   if (!pagination.limit) return { [key]: records };
   const total = records.length;
@@ -1084,7 +1111,7 @@ function getStaticZoneNames(zoneIds) {
 
 function publicStaticParcel(store, parcel) {
   const courier = store.users.find((user) => normalizeUsername(user.username) === normalizeUsername(parcel.courierUsername));
-  const normalizedParcel = normalizeStaticParcelFinance(parcel, store);
+  const normalizedParcel = normalizeStaticParcelFinance(parcel, store, { includePreview: true });
   return {
     ...normalizedParcel,
     status: normalizedParcel.status || "pending",
@@ -1527,9 +1554,11 @@ async function staticApi(path, options = {}) {
   if (method === "GET" && apiPath === "/api/parcels") {
     const courier = url.searchParams.get("courier") || "";
     const partnerId = url.searchParams.get("partnerId") || "";
+    const dateRange = getStaticParcelDateRangeFilter(url);
     const parcels = store.parcels
       .filter((parcel) => {
         if (parcel.archivedAt || isStaticDeletedParcel(parcel)) return false;
+        if (!staticParcelMatchesWorkdayDateRange(parcel, dateRange)) return false;
         if (state.isPartner) return staticParcelBelongsToPartner(parcel, state.currentUserProfile || {});
         if (!staticParcelMatchesPartnerFilter(parcel, partnerId)) return false;
         return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
@@ -1540,8 +1569,10 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/history") {
     const courier = url.searchParams.get("courier") || "";
+    const dateRange = getStaticParcelDateRangeFilter(url);
     const history = mergeStaticRecordsByKey([], [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)], getStaticParcelKey, resolveStaticParcelRecord)
       .filter((parcel) => !isStaticDeletedParcel(parcel))
+      .filter((parcel) => staticParcelMatchesWorkdayDateRange(parcel, dateRange))
       .filter((parcel) => !state.isPartner || staticParcelBelongsToPartner(parcel, state.currentUserProfile || {}))
       .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
       .map((parcel) => publicStaticParcel(store, parcel));
@@ -1850,6 +1881,7 @@ async function staticApi(path, options = {}) {
     if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
     const workdayKey = getStaticCurrentWorkdayKey(store, new Date(now));
+    const wasDelivered = parcel.status === "delivered";
     parcel.status = body.status || parcel.status;
     parcel.updatedAt = now;
     if (parcel.status === "delivered") {
@@ -1859,7 +1891,7 @@ async function staticApi(path, options = {}) {
       parcel.failureReason = "";
       parcel.completedWorkdayKey = workdayKey;
       parcel.financeDateKey = workdayKey;
-      Object.assign(parcel, normalizeStaticParcelFinance(parcel, store));
+      Object.assign(parcel, normalizeStaticParcelFinance(parcel, store, { forceCurrentTariff: !wasDelivered }));
     }
     if (parcel.status === "failed") {
       parcel.completedAt = body.completedAt || now;
@@ -1875,6 +1907,9 @@ async function staticApi(path, options = {}) {
       parcel.failureReason = "";
       parcel.completedWorkdayKey = "";
       parcel.financeDateKey = "";
+      parcel.deliveryTotalPrice = "";
+      parcel.courierPay = "";
+      parcel.adminProfit = "";
     }
     if (["delivered", "failed"].includes(parcel.status)) {
       queueStaticPushNotification(store, buildStaticParcelStatusNotification(parcel, parcel.status, body));
@@ -2056,7 +2091,7 @@ async function getWorkdayState() {
 async function getPins(username, options = {}) {
   const params = new URLSearchParams();
   if (username) params.set("courier", username);
-  ["partnerId", "limit", "offset"].forEach((key) => {
+  ["partnerId", "dateFrom", "dateTo", "startDate", "endDate", "limit", "offset"].forEach((key) => {
     if (options[key] !== undefined && options[key] !== null && options[key] !== "") params.set(key, options[key]);
   });
   const query = params.toString() ? `?${params.toString()}` : "";
@@ -2066,7 +2101,7 @@ async function getPins(username, options = {}) {
 async function getHistory(username, options = {}) {
   const params = new URLSearchParams();
   if (username) params.set("courier", username);
-  ["limit", "offset"].forEach((key) => {
+  ["dateFrom", "dateTo", "startDate", "endDate", "limit", "offset"].forEach((key) => {
     if (options[key] !== undefined && options[key] !== null && options[key] !== "") params.set(key, options[key]);
   });
   const query = params.toString() ? `?${params.toString()}` : "";
