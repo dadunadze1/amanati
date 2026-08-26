@@ -410,9 +410,11 @@ function renderFinanceModalLayout({ header = "", filters = "", summary = "", con
 
 
 function addDaysToDateKey(dateKey, days) {
-  const date = new Date(`${normalizeDateKey(dateKey) || toDateKey(new Date())}T00:00:00`);
-  date.setDate(date.getDate() + Number(days || 0));
-  return toDateKey(date);
+  const normalizedDate = normalizeDateKey(dateKey) || toDateKey(new Date());
+  const date = new Date(`${normalizedDate}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
 }
 
 

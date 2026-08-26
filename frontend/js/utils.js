@@ -254,7 +254,7 @@ function renderAppStatusBadge(status, label = "") {
 
 
 function formatDateTime(value) {
-  return value ? new Date(value).toLocaleString("ka-GE") : "";
+  return value ? new Date(value).toLocaleString("ka-GE", { timeZone: APP_TIME_ZONE }) : "";
 }
 
 

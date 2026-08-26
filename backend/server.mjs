@@ -1134,9 +1134,11 @@ function paginatedPayload(key, records, pagination) {
 }
 
 function toDateKey(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 10);
+  if (typeof value === "string") {
+    const plainDateMatch = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (plainDateMatch) return `${plainDateMatch[1]}-${plainDateMatch[2]}-${plainDateMatch[3]}`;
+  }
+  return toWorkdayDateKey(value);
 }
 
 function getRetentionParcelDateKey(parcel) {

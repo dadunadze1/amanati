@@ -1700,10 +1700,10 @@ async function archiveDeliveredParcelsForDay(courierUsername) {
 
 
 function getPreviousDateKey(dateKey = getTodayKey()) {
-  const date = new Date(`${dateKey}T12:00:00`);
+  const date = new Date(`${dateKey}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() - 1);
-  return toDateKey(date);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
 }
 
 

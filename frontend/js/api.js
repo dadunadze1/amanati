@@ -653,10 +653,10 @@ function saveStaticFinanceData(financeData) {
 }
 
 function addDaysToDateKey(dateKey, days) {
-  const date = new Date(`${dateKey}T12:00:00`);
+  const date = new Date(`${dateKey}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() + Number(days || 0));
-  return toDateKey(date);
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
 }
 
 function getStaticRetentionParcelDateKey(parcel) {
@@ -707,9 +707,9 @@ function isStaticDateKey(value) {
 
 function addStaticDaysToDateKey(dateKey, days) {
   if (!isStaticDateKey(dateKey)) return "";
-  const date = new Date(`${dateKey}T12:00:00`);
-  date.setDate(date.getDate() + Number(days || 0));
-  return toDateKey(date);
+  const date = new Date(`${dateKey}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
 }
 
 function ensureStaticWorkdayState(store, now = new Date()) {

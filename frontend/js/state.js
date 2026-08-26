@@ -1,5 +1,13 @@
 ﻿"use strict";
 
+const APP_TIME_ZONE = "Asia/Tbilisi";
+const APP_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: APP_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 const state = {
   map: null,
   markers: null,
@@ -101,10 +109,20 @@ const state = {
 const els = {};
 let HtmlMapLabel = null;
 
-function toDateKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+function toDateKey(value = new Date()) {
+  if (typeof value === "string") {
+    const plainDateMatch = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (plainDateMatch) return `${plainDateMatch[1]}-${plainDateMatch[2]}-${plainDateMatch[3]}`;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = APP_DATE_FORMATTER.formatToParts(date).reduce((result, part) => {
+    result[part.type] = part.value;
+    return result;
+  }, {});
+  const year = parts.year;
+  const month = parts.month;
+  const day = parts.day;
   return `${year}-${month}-${day}`;
 }
 

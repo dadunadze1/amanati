@@ -232,7 +232,27 @@ describe("local API smoke flow", () => {
     const failed = await api(`/api/parcels/search?status=failed&courier=${encodeURIComponent(courierUsername)}`, { token: adminToken });
     assert.equal(failed.parcels.length, 0);
 
-    const createdCalendarDate = new Date(createdParcel.createdAt).toISOString().slice(0, 10);
+    const tbilisiFallbackParcelId = `tbilisi-fallback-${Date.now()}`;
+    const tbilisiFallbackDb = await readTestDb();
+    tbilisiFallbackDb.parcels.push({
+      ...createdParcel,
+      id: tbilisiFallbackParcelId,
+      workdayKey: "",
+      completedWorkdayKey: "",
+      financeDateKey: "",
+      createdAt: "2026-08-26T20:30:00.000Z",
+      assignedAt: "",
+      updatedAt: "2026-08-26T20:30:00.000Z",
+      archivedAt: "",
+      deletedAt: "",
+    });
+    await writeTestDb(tbilisiFallbackDb);
+    const tbilisiActive = await api("/api/parcels?dateFrom=2026-08-27&dateTo=2026-08-27", { token: adminToken });
+    assert.equal(tbilisiActive.parcels.some((parcel) => parcel.id === tbilisiFallbackParcelId), true);
+    const utcPreviousDayActive = await api("/api/parcels?dateFrom=2026-08-26&dateTo=2026-08-26", { token: adminToken });
+    assert.equal(utcPreviousDayActive.parcels.some((parcel) => parcel.id === tbilisiFallbackParcelId), false);
+
+    const createdCalendarDate = createdParcel.workdayKey || new Date(createdParcel.createdAt).toISOString().slice(0, 10);
     const byDate = await api(`/api/parcels/search?dateFrom=${createdCalendarDate}&dateTo=${createdCalendarDate}`, { token: adminToken });
     assert.ok(byDate.parcels.some((parcel) => parcel.id === createdParcel.id));
 
