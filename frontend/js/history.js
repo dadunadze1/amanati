@@ -333,7 +333,7 @@ async function renderHistoryForDate(username, dateKey) {
     const address = await resolveParcelAddress(item);
     const itemCourierPay = getCourierPay(item);
     const failureReason = parcelFailureReason(item);
-    const dateLabel = item.archivedAt || item.completedAt || item.deliveredAt || item.failedAt || item.updatedAt || item.createdAt;
+    const dateLabel = getParcelHistoryDisplayDate(item);
     return `
       <tr>
         <td data-label="მიმღები">${renderAppTableText(item.fullName || "უსახელო მიმღები", item.phone || "ტელეფონი არ არის")}</td>
@@ -552,7 +552,7 @@ async function renderParcelHistoryCard(item) {
 
 
 function getParcelHistoryDisplayDate(parcel) {
-  return parcel.archivedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || parcel.updatedAt || parcel.assignedAt || parcel.createdAt || "";
+  return getParcelEventDateValue(parcel);
 }
 
 
@@ -610,9 +610,7 @@ function parcelMatchesDateRangeFilter(parcel, dateFrom, dateTo) {
 
 
 function getParcelHistoryDateKeys(parcel) {
-  return [parcel.createdAt, parcel.assignedAt, parcel.completedAt, parcel.deliveredAt, parcel.failedAt, parcel.updatedAt, parcel.archivedAt]
-    .map(normalizeDateKey)
-    .filter(Boolean);
+  return getParcelStatsDateKeys(parcel);
 }
 
 
@@ -622,7 +620,7 @@ function sortParcelHistoryRecords(a, b) {
 
 
 function getParcelHistorySortTime(parcel) {
-  const value = parcel.updatedAt || parcel.completedAt || parcel.deliveredAt || parcel.failedAt || parcel.archivedAt || parcel.assignedAt || parcel.createdAt;
+  const value = getParcelHistoryDisplayDate(parcel);
   const time = Date.parse(value || "");
   return Number.isFinite(time) ? time : 0;
 }

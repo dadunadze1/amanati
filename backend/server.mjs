@@ -233,13 +233,17 @@ function closeCurrentWorkday(db, workdayKey, now = new Date()) {
 }
 
 function getParcelWorkdayDateKey(parcel) {
+  return toDateKey(getParcelEventDateValue(parcel));
+}
+
+function getParcelEventDateValue(parcel) {
   if (!parcel || typeof parcel !== "object") return "";
   const statusDates = parcel.status === "delivered"
-    ? [parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+    ? [parcel.deliveredAt, parcel.completedAt, parcel.financeDateKey, parcel.completedWorkdayKey, parcel.archivedAt, parcel.updatedAt]
     : parcel.status === "failed"
-      ? [parcel.completedWorkdayKey, parcel.workdayKey, parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
-      : [parcel.workdayKey, parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
-  return statusDates.concat([parcel.createdAt]).map((value) => (isDateKey(value) ? value : toDateKey(value))).find(Boolean) || "";
+      ? [parcel.failedAt, parcel.completedAt, parcel.completedWorkdayKey, parcel.archivedAt, parcel.updatedAt]
+      : [parcel.assignedAt, parcel.createdAt, parcel.workdayKey, parcel.updatedAt];
+  return statusDates.concat([parcel.createdAt]).find((value) => toDateKey(value)) || "";
 }
 
 function publicUser(user) {
@@ -1075,15 +1079,8 @@ function parcelSearchHaystack(db, parcel) {
 }
 
 function getParcelSearchDateKeys(parcel) {
-  return [
-    parcel.createdAt,
-    parcel.assignedAt,
-    parcel.completedAt,
-    parcel.deliveredAt,
-    parcel.failedAt,
-    parcel.updatedAt,
-    parcel.archivedAt,
-  ].map(toDateKey).filter(Boolean);
+  const dateKey = getParcelWorkdayDateKey(parcel);
+  return dateKey ? [dateKey] : [];
 }
 
 function parcelMatchesDateSearchFilter(parcel, dateFrom, dateTo) {
@@ -1996,7 +1993,6 @@ async function handleApi(request, response, url) {
     if (session.role !== "admin" && parcel.status === "delivered" && status === "failed") throw httpError(403, "ჩაბარებული შეკვეთის შეცვლა მხოლოდ ადმინს შეუძლია.");
     if (status === "failed" && !String(body.failureReason || "").trim()) throw httpError(400, "ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
-    const workdayKey = getCurrentWorkdayKey(db, new Date(now));
     const wasDelivered = parcel.status === "delivered";
     parcel.status = status;
     parcel.updatedAt = now;
@@ -2010,21 +2006,22 @@ async function handleApi(request, response, url) {
       parcel.deliveryTotalPrice = "";
       parcel.courierPay = "";
       parcel.adminProfit = "";
-    } else {
-      parcel.completedAt = now;
-      parcel.completedWorkdayKey = workdayKey;
     }
     if (status === "delivered") {
+      parcel.completedAt = now;
       parcel.deliveredAt = now;
       parcel.failedAt = "";
       parcel.failureReason = "";
-      parcel.financeDateKey = workdayKey;
+      parcel.completedWorkdayKey = toDateKey(parcel.deliveredAt);
+      parcel.financeDateKey = parcel.completedWorkdayKey;
       applyDeliveredFinance(db, parcel, { forceCurrentTariff: !wasDelivered });
     }
     if (status === "failed") {
+      parcel.completedAt = now;
       parcel.failedAt = now;
       parcel.deliveredAt = "";
       parcel.failureReason = String(body.failureReason || "").trim();
+      parcel.completedWorkdayKey = toDateKey(parcel.failedAt);
     }
     await writeDb(db);
     sendJson(response, 200, { parcel: publicParcel(db, parcel) });

@@ -103,13 +103,18 @@ function normalizeDateKey(value) {
 
 
 function getParcelStatsDateKey(parcel) {
+  return normalizeDateKey(getParcelEventDateValue(parcel));
+}
+
+
+function getParcelEventDateValue(parcel) {
   if (!parcel || typeof parcel !== "object") return "";
   const statusDates = parcel.status === "delivered"
-    ? [parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
+    ? [parcel.deliveredAt, parcel.completedAt, parcel.financeDateKey, parcel.completedWorkdayKey, parcel.archivedAt, parcel.updatedAt]
     : parcel.status === "failed"
-      ? [parcel.completedWorkdayKey, parcel.workdayKey, parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
-      : [parcel.workdayKey, parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
-  return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
+      ? [parcel.failedAt, parcel.completedAt, parcel.completedWorkdayKey, parcel.archivedAt, parcel.updatedAt]
+      : [parcel.assignedAt, parcel.createdAt, parcel.workdayKey, parcel.updatedAt];
+  return statusDates.concat([parcel.createdAt]).find((value) => normalizeDateKey(value)) || "";
 }
 
 

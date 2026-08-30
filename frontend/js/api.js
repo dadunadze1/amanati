@@ -663,10 +663,19 @@ function getStaticRetentionParcelDateKey(parcel) {
   return normalizeDateKey(parcel?.archivedAt || parcel?.completedAt || parcel?.deliveredAt || parcel?.failedAt || parcel?.updatedAt || parcel?.createdAt);
 }
 
+function getStaticParcelEventDateValue(parcel) {
+  if (!parcel || typeof parcel !== "object") return "";
+  const statusDates = parcel.status === "delivered"
+    ? [parcel.deliveredAt, parcel.completedAt, parcel.financeDateKey, parcel.completedWorkdayKey, parcel.archivedAt, parcel.updatedAt]
+    : parcel.status === "failed"
+      ? [parcel.failedAt, parcel.completedAt, parcel.completedWorkdayKey, parcel.archivedAt, parcel.updatedAt]
+      : [parcel.assignedAt, parcel.createdAt, parcel.workdayKey, parcel.updatedAt];
+  return statusDates.concat([parcel.createdAt]).find((value) => normalizeDateKey(value)) || "";
+}
+
 function getStaticParcelSearchDateKeys(parcel) {
-  return [parcel?.createdAt, parcel?.assignedAt, parcel?.completedAt, parcel?.deliveredAt, parcel?.failedAt, parcel?.updatedAt, parcel?.archivedAt]
-    .map(normalizeDateKey)
-    .filter(Boolean);
+  const dateKey = normalizeDateKey(getStaticParcelEventDateValue(parcel));
+  return dateKey ? [dateKey] : [];
 }
 
 function staticParcelMatchesDateSearchFilter(parcel, dateFrom, dateTo) {
@@ -748,13 +757,7 @@ function getStaticCurrentWorkdayKey(store, now = new Date()) {
 }
 
 function getStaticParcelWorkdayDateKey(parcel) {
-  if (!parcel || typeof parcel !== "object") return "";
-  const statusDates = parcel.status === "delivered"
-    ? [parcel.financeDateKey, parcel.completedWorkdayKey, parcel.workdayKey, parcel.deliveredAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
-    : parcel.status === "failed"
-      ? [parcel.completedWorkdayKey, parcel.workdayKey, parcel.failedAt, parcel.completedAt, parcel.archivedAt, parcel.updatedAt]
-      : [parcel.workdayKey, parcel.assignedAt, parcel.createdAt, parcel.updatedAt];
-  return statusDates.concat([parcel.createdAt]).map(normalizeDateKey).find(Boolean) || "";
+  return normalizeDateKey(getStaticParcelEventDateValue(parcel));
 }
 
 function getStaticParcelDateRangeFilter(url) {
@@ -1880,7 +1883,6 @@ async function staticApi(path, options = {}) {
     assertStaticParcelVersion(parcel, body.expectedUpdatedAt);
     if (body.status === "failed" && !String(body.failureReason || "").trim()) throw new Error("ვერ ჩაბარების მიზეზი აუცილებელია.");
     const now = new Date().toISOString();
-    const workdayKey = getStaticCurrentWorkdayKey(store, new Date(now));
     const wasDelivered = parcel.status === "delivered";
     parcel.status = body.status || parcel.status;
     parcel.updatedAt = now;
@@ -1889,8 +1891,8 @@ async function staticApi(path, options = {}) {
       parcel.deliveredAt = body.deliveredAt || parcel.completedAt;
       parcel.failedAt = "";
       parcel.failureReason = "";
-      parcel.completedWorkdayKey = workdayKey;
-      parcel.financeDateKey = workdayKey;
+      parcel.completedWorkdayKey = normalizeDateKey(parcel.deliveredAt);
+      parcel.financeDateKey = parcel.completedWorkdayKey;
       Object.assign(parcel, normalizeStaticParcelFinance(parcel, store, { forceCurrentTariff: !wasDelivered }));
     }
     if (parcel.status === "failed") {
@@ -1898,7 +1900,7 @@ async function staticApi(path, options = {}) {
       parcel.failedAt = body.failedAt || parcel.completedAt;
       parcel.deliveredAt = "";
       parcel.failureReason = body.failureReason || "";
-      parcel.completedWorkdayKey = workdayKey;
+      parcel.completedWorkdayKey = normalizeDateKey(parcel.failedAt);
     }
     if (parcel.status === "pending") {
       parcel.completedAt = "";

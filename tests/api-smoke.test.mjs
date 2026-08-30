@@ -454,9 +454,9 @@ describe("local API smoke flow", () => {
       token: courierToken,
       body: { status: "delivered", expectedUpdatedAt: secondCreated.parcel.updatedAt },
     });
-    assert.equal(secondDelivered.parcel.financeDateKey, close.workday.currentWorkdayKey);
+    assert.equal(secondDelivered.parcel.financeDateKey, currentWorkdayKey);
 
-    const oldDayClose = await api("/api/parcels/archive", {
+    const sameCalendarDayClose = await api("/api/parcels/archive", {
       method: "POST",
       token: adminToken,
       body: {
@@ -465,7 +465,10 @@ describe("local API smoke flow", () => {
         parcelIds: [secondCreated.parcel.id],
       },
     });
-    assert.equal(oldDayClose.archived, 0);
+    assert.equal(sameCalendarDayClose.archived, 1);
+
+    const sameCalendarDayHistory = await api(`/api/history?courier=${encodeURIComponent(courierUsername)}&dateFrom=${currentWorkdayKey}&dateTo=${currentWorkdayKey}`, { token: adminToken });
+    assert.equal(sameCalendarDayHistory.history.some((parcel) => parcel.id === secondCreated.parcel.id), true);
 
     const liveWorkday = await api("/api/workday", { token: adminToken });
     const calendarDateKey = liveWorkday.workday.calendarDateKey;
@@ -501,7 +504,12 @@ describe("local API smoke flow", () => {
       token: courierToken,
       body: { status: "delivered", expectedUpdatedAt: staleCreated.parcel.updatedAt },
     });
-    assert.equal(staleDelivered.parcel.financeDateKey, staleWorkdayKey);
+    assert.equal(staleDelivered.parcel.financeDateKey, calendarDateKey);
+
+    const staleDayActive = await api(`/api/parcels?dateFrom=${staleWorkdayKey}&dateTo=${staleWorkdayKey}`, { token: adminToken });
+    assert.equal(staleDayActive.parcels.some((parcel) => parcel.id === staleCreated.parcel.id), false);
+    const realDeliveryDayActive = await api(`/api/parcels?dateFrom=${calendarDateKey}&dateTo=${calendarDateKey}`, { token: adminToken });
+    assert.equal(realDeliveryDayActive.parcels.some((parcel) => parcel.id === staleCreated.parcel.id), true);
 
     const staleClose = await api("/api/parcels/archive", {
       method: "POST",
@@ -512,8 +520,24 @@ describe("local API smoke flow", () => {
         parcelIds: [staleCreated.parcel.id],
       },
     });
-    assert.equal(staleClose.archived, 1);
+    assert.equal(staleClose.archived, 0);
     assert.equal(staleClose.workday.currentWorkdayKey >= calendarDateKey, true);
     assert.notEqual(staleClose.workday.currentWorkdayKey, staleNextDayKey);
+
+    const realDeliveryDayClose = await api("/api/parcels/archive", {
+      method: "POST",
+      token: adminToken,
+      body: {
+        closeWorkday: true,
+        workdayKey: calendarDateKey,
+        parcelIds: [staleCreated.parcel.id],
+      },
+    });
+    assert.equal(realDeliveryDayClose.archived, 1);
+
+    const realDeliveryDayHistory = await api(`/api/history?courier=${encodeURIComponent(courierUsername)}&dateFrom=${calendarDateKey}&dateTo=${calendarDateKey}`, { token: adminToken });
+    assert.equal(realDeliveryDayHistory.history.some((parcel) => parcel.id === staleCreated.parcel.id), true);
+    const staleDayHistory = await api(`/api/history?courier=${encodeURIComponent(courierUsername)}&dateFrom=${staleWorkdayKey}&dateTo=${staleWorkdayKey}`, { token: adminToken });
+    assert.equal(staleDayHistory.history.some((parcel) => parcel.id === staleCreated.parcel.id), false);
   });
 });
