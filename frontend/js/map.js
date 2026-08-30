@@ -11,6 +11,8 @@ const MAX_VALID_MAP_ZOOM = 19;
 const LOGIN_VIEWPORT_ENFORCE_DELAYS = [0, 80, 220, 520, 1000, 1600];
 const ADMIN_FINANCE_TAP_WINDOW_MS = 850;
 const ADMIN_FINANCE_TAP_REQUIRED = 3;
+// Temporarily disabled until the courier map rotation interaction is finalized.
+const COURIER_MAP_ROTATION_ENABLED = false;
 const GEORGIAN_NEIGHBORHOOD_CASE_NORMALIZATIONS = [
   [/დიდ\s+დიღომში|დიდი\s+დიღმის/gi, "დიდი დიღომი"],
   [/დაბალ\s+დიღომში|დაბალი\s+დიღმის/gi, "დაბალი დიღომი"],
@@ -104,7 +106,7 @@ function bindCourierMapRotation() {
 
 
 function isCourierMapRotationEnabled() {
-  return Boolean(state.currentUser && !state.isAdmin && !state.isPartner && state.map);
+  return Boolean(COURIER_MAP_ROTATION_ENABLED && state.currentUser && !state.isAdmin && !state.isPartner && state.map);
 }
 
 
