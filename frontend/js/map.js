@@ -11,8 +11,7 @@ const MAX_VALID_MAP_ZOOM = 19;
 const LOGIN_VIEWPORT_ENFORCE_DELAYS = [0, 80, 220, 520, 1000, 1600];
 const ADMIN_FINANCE_TAP_WINDOW_MS = 850;
 const ADMIN_FINANCE_TAP_REQUIRED = 3;
-// Temporarily disabled until the courier map rotation interaction is finalized.
-const COURIER_MAP_ROTATION_ENABLED = false;
+const COURIER_MAP_ROTATION_ENABLED = true;
 const GEORGIAN_NEIGHBORHOOD_CASE_NORMALIZATIONS = [
   [/დიდ\s+დიღომში|დიდი\s+დიღმის/gi, "დიდი დიღომი"],
   [/დაბალ\s+დიღომში|დაბალი\s+დიღმის/gi, "დაბალი დიღომი"],
@@ -70,10 +69,18 @@ async function initializeMap() {
     return;
   }
 
+  const rotationSupported = Boolean(L.Map?.prototype?.setBearing && L.Map?.prototype?.getBearing);
+  const courierRotationEnabled = Boolean(COURIER_MAP_ROTATION_ENABLED && !state.isAdmin && !state.isPartner && rotationSupported);
   state.map = L.map(els.map, {
     zoomControl: false,
     minZoom: MIN_VALID_MAP_ZOOM,
     maxZoom: MAX_VALID_MAP_ZOOM,
+    rotate: courierRotationEnabled,
+    bearing: state.courierMapBearing,
+    touchRotate: courierRotationEnabled,
+    dragRotate: false,
+    shiftKeyRotate: false,
+    preventPageGestures: courierRotationEnabled,
   }).setView(getDefaultMapCenter(), DEFAULT_MAP_ZOOM);
   L.control.zoom({ position: "bottomleft" }).addTo(state.map);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -97,24 +104,15 @@ async function initializeMap() {
 function bindCourierMapRotation() {
   if (!els.map || state.courierMapRotationBound) return;
   state.courierMapRotationBound = true;
-  els.map.addEventListener("touchstart", handleCourierMapRotateStart, { passive: true });
-  els.map.addEventListener("touchmove", handleCourierMapRotateMove, { passive: false });
-  els.map.addEventListener("touchend", handleCourierMapRotateEnd, { passive: true });
-  els.map.addEventListener("touchcancel", handleCourierMapRotateEnd, { passive: true });
-  state.map?.on?.("move zoom moveend zoomend", applyCourierMapRotation);
+  if (!isCourierMapRotationEnabled() || !state.map?.on) return;
+  state.map.on("rotate", () => {
+    state.courierMapBearing = normalizeMapBearing(state.map.getBearing?.() || 0);
+  });
 }
 
 
 function isCourierMapRotationEnabled() {
-  return Boolean(COURIER_MAP_ROTATION_ENABLED && state.currentUser && !state.isAdmin && !state.isPartner && state.map);
-}
-
-
-function getTouchRotationAngle(touches) {
-  if (!touches || touches.length < 2) return 0;
-  const first = touches[0];
-  const second = touches[1];
-  return Math.atan2(second.clientY - first.clientY, second.clientX - first.clientX) * 180 / Math.PI;
+  return Boolean(COURIER_MAP_ROTATION_ENABLED && state.currentUser && !state.isAdmin && !state.isPartner && state.map?.setBearing);
 }
 
 
@@ -125,55 +123,21 @@ function normalizeMapBearing(value) {
 }
 
 
-function getShortestAngleDelta(from, to) {
-  return ((to - from + 540) % 360) - 180;
-}
-
-
-function handleCourierMapRotateStart(event) {
-  if (!isCourierMapRotationEnabled() || event.touches?.length !== 2) return;
-  state.courierMapRotationActive = true;
-  state.courierMapRotationStartAngle = getTouchRotationAngle(event.touches);
-  state.courierMapRotationBaseBearing = state.courierMapBearing || 0;
-}
-
-
-function handleCourierMapRotateMove(event) {
-  if (!state.courierMapRotationActive || !isCourierMapRotationEnabled() || event.touches?.length !== 2) return;
-  const angle = getTouchRotationAngle(event.touches);
-  const delta = getShortestAngleDelta(state.courierMapRotationStartAngle, angle);
-  if (Math.abs(delta) < 2) return;
-  state.courierMapBearing = normalizeMapBearing((state.courierMapRotationBaseBearing || 0) + delta);
-  applyCourierMapRotation();
-  event.preventDefault();
-}
-
-
-function handleCourierMapRotateEnd(event) {
-  if ((event.touches?.length || 0) < 2) {
-    state.courierMapRotationActive = false;
-  }
-}
-
-
 function syncCourierMapRotationMode() {
   if (isCourierMapRotationEnabled()) {
-    applyCourierMapRotation();
+    state.courierMapBearing = normalizeMapBearing(state.map.getBearing?.() || state.courierMapBearing || 0);
     return;
   }
   state.courierMapRotationActive = false;
   state.courierMapBearing = 0;
-  applyCourierMapRotation();
 }
 
 
 function applyCourierMapRotation() {
-  const pane = state.map?.getPane?.("mapPane");
-  if (!pane) return;
-  const baseTransform = String(pane.style.transform || "").replace(/\srotate\([^)]*\)/g, "").trim();
-  const bearing = isCourierMapRotationEnabled() ? normalizeMapBearing(state.courierMapBearing || 0) : 0;
-  pane.style.transformOrigin = "50% 50%";
-  pane.style.transform = bearing ? `${baseTransform} rotate(${bearing}deg)`.trim() : baseTransform;
+  if (!isCourierMapRotationEnabled()) return;
+  const bearing = normalizeMapBearing(state.courierMapBearing || 0);
+  if (Math.abs(normalizeMapBearing(state.map.getBearing?.() || 0) - bearing) < 0.01) return;
+  state.map.setBearing(bearing);
 }
 
 
@@ -1926,11 +1890,16 @@ function startLocationWatch() {
   if (state.watchId || !state.map) return;
 
   state.watchId = navigator.geolocation.watchPosition((position) => {
+    const hadCurrentPosition = state.hasCurrentPosition;
     state.currentPosition = {
       lat: position.coords.latitude,
       lng: position.coords.longitude,
     };
     state.hasCurrentPosition = true;
+
+    if (!hadCurrentPosition && isCourierMapRotationEnabled()) {
+      state.map.setView(toLeafletLatLng(state.currentPosition), getMapZoom(), { animate: false });
+    }
 
     if (!state.locationMarker) {
       state.locationMarker = createCircleMarker(state.currentPosition, {
