@@ -78,16 +78,31 @@ async function installLeafletMock(page) {
       latLngBounds: (items = []) => ({ isValid: () => items.length > 0 }),
       map: (element) => {
         element.classList.add("leaflet-container");
+        const mapPane = document.createElement("div");
+        mapPane.className = "leaflet-map-pane";
+        element.append(mapPane);
         return {
           addLayer() { return this; },
-          closePopup() { return this; },
+          closePopup() {
+            element.querySelector(".leaflet-popup")?.remove();
+            return this;
+          },
           fitBounds() { return this; },
+          getPane(name) { return name === "mapPane" ? mapPane : null; },
           getZoom() { return 15; },
           invalidateSize() { return this; },
           latLngToLayerPoint(value = {}) {
             return createPoint(Number(value.lng || value[1] || 0) * 1000, Number(value.lat || value[0] || 0) * 1000);
           },
           on() { return this; },
+          openPopup(html) {
+            this.closePopup();
+            const popup = document.createElement("div");
+            popup.className = "leaflet-popup";
+            popup.innerHTML = html;
+            element.append(popup);
+            return this;
+          },
           removeLayer() { return this; },
           setView() { return this; },
         };
@@ -624,6 +639,101 @@ test("partner pickup dialog acknowledges active pickup pins", async ({ page }) =
   }, { partnerUsername: result.partnerUsername, parcelId: result.parcelId });
   expect(resultAfterAck.stillVisible).toBe(false);
   expect(resultAfterAck.pickedUpAt).toBeTruthy();
+});
+
+test("partner map shows only partner-safe order popup fields", async ({ page }) => {
+  await page.goto("/");
+  await ensureAdminSession(page);
+
+  const result = await page.evaluate(async ({ batchId }) => {
+    const apiRequest = async (path, options = {}) => {
+      const response = await fetch(path, {
+        method: options.method || "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${options.token || state.authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      if (!response.ok) throw new Error(`${options.method || "GET"} ${path} ${response.status}`);
+      return response.json();
+    };
+
+    const courierUsername = `partner-map-courier-${batchId}`;
+    await apiRequest("/api/users", {
+      method: "POST",
+      body: {
+        username: courierUsername,
+        password: "pass123",
+        role: "courier",
+        firstName: "Map",
+        lastName: "Courier",
+        phone: "555460001",
+      },
+    });
+
+    const partner = await apiRequest("/api/partners", {
+      method: "POST",
+      body: {
+        username: `partner-map-${batchId}@test.local`,
+        password: "pass123",
+        companyName: `Partner Map ${batchId}`,
+        contactPerson: "Map Contact",
+        phone: "555460002",
+      },
+    });
+
+    const parcel = await apiRequest("/api/parcels", {
+      method: "POST",
+      body: {
+        courierUsername,
+        partnerId: partner.partner.id,
+        city: "Tbilisi",
+        address: "Hidden Internal Address 12",
+        fullAddress: "Tbilisi, Hidden Internal Address 12",
+        fullName: "Partner Map Recipient",
+        phone: "555460003",
+        paymentAmount: 77,
+        lat: 41.7151,
+        lng: 44.8271,
+      },
+    });
+
+    const partnerLogin = await apiRequest("/api/login", {
+      method: "POST",
+      token: "",
+      body: { username: partner.partner.username, password: "pass123" },
+    });
+    state.authToken = partnerLogin.token;
+    state.currentUser = partner.partner.username;
+    state.currentUserProfile = partner.partner;
+    state.isAdmin = false;
+    state.isPartner = true;
+    state.partnerMapActive = false;
+    els.appShell.classList.remove("is-admin-dashboard", "is-partner-dashboard");
+    window.renderActions();
+    await window.openPartnerMap();
+    window.showPartnerMapParcelPopup(state.activePins[0]);
+    return {
+      parcelId: parcel.parcel.id,
+      activeCount: state.activePins.length,
+      activeIds: state.activePins.map((item) => item.id),
+      appClass: els.appShell.className,
+      popupText: document.querySelector(".leaflet-popup")?.textContent || "",
+      bottomNavText: els.bottomNav.textContent,
+    };
+  }, { batchId: Date.now() });
+
+  expect(result.activeCount).toBe(1);
+  expect(result.activeIds).toContain(result.parcelId);
+  expect(result.appClass).toContain("is-partner-map");
+  expect(result.bottomNavText).toContain("რუკა");
+  expect(result.popupText).toContain("Partner Map Recipient");
+  expect(result.popupText).toContain("77");
+  expect(result.popupText).not.toContain("Hidden Internal Address");
+  expect(result.popupText).not.toContain("partner-map-courier");
+  expect(result.popupText).not.toContain("555460003");
 });
 
 test("partner pickup edit starts from Tbilisi when coordinates are empty", async ({ page }) => {

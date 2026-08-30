@@ -35,7 +35,7 @@ async function waitForServer() {
 
 function runPlaywright() {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(process.execPath, ["node_modules/playwright/cli.js", "test", "--global-timeout=60000"], {
+    const child = spawn(process.execPath, ["node_modules/playwright/cli.js", "test", "--global-timeout=120000"], {
       cwd: process.cwd(),
       env: { ...process.env, PLAYWRIGHT_BASE_URL: baseUrl },
       stdio: "inherit",

@@ -207,12 +207,56 @@ function mergePartnerOrderRecords(...recordSets) {
 
 
 async function getPartnerOrderRecords(partner = null) {
+  const partnerId = partner ? partnerCashIdentity(partner) : "";
   const [pins, history] = await Promise.all([
-    getPins(""),
-    getHistory(""),
+    getPins("", partnerId ? { partnerId } : {}),
+    getHistory("", partnerId ? { partnerId } : {}),
   ]);
   const orders = mergePartnerOrderRecords(pins, history);
   return partner ? orders.filter((order) => orderBelongsToPartner(order, partner)) : orders;
+}
+
+
+function isAdminConfirmedPartnerMapOrder(order, partner) {
+  if (!orderBelongsToPartner(order, partner)) return false;
+  if (!["pending", "delivered", "failed"].includes(order.status || "pending")) return false;
+  if (!hasOrderLocation(order)) return false;
+  return Boolean(
+    order.courierUsername
+    || order.locationConfirmedByAdmin
+    || order.locationAccuracy === "confirmed"
+    || order.pickedUpAt
+    || order.partnerPickupAcknowledgedAt,
+  );
+}
+
+
+async function getPartnerMapOrders(partner) {
+  const orders = await getPartnerOrderRecords(partner);
+  return orders.filter((order) => isAdminConfirmedPartnerMapOrder(order, partner));
+}
+
+
+async function openPartnerMap() {
+  if (!state.isPartner || !state.currentUser) return;
+  const partner = state.currentUserProfile || { username: state.currentUser };
+  state.partnerMapActive = true;
+  els.appShell?.classList.remove("is-partner-dashboard");
+  els.appShell?.classList.add("is-partner-map");
+  if (els.partnerDashboard) {
+    els.partnerDashboard.hidden = true;
+    els.partnerDashboard.textContent = "";
+  }
+  closeDialog();
+  const orders = await getPartnerMapOrders(partner);
+  state.activePins = orders;
+  state.partnerPickupPins = [];
+  state.selectedPinId = null;
+  clearActiveRoute();
+  renderParcelMarkers(orders);
+  fitMapToPinsOrDefault(orders);
+  renderActions();
+  if (!orders.length) showToast("რუკაზე საჩვენებელი დადასტურებული შეკვეთა არ არის.");
 }
 
 
@@ -244,14 +288,24 @@ async function renderPartnerDashboard(pins = state.activePins) {
   if (!state.isPartner || !state.currentUser) {
     els.partnerDashboard.hidden = true;
     els.partnerDashboard.textContent = "";
-    els.appShell?.classList.remove("is-partner-dashboard");
+    els.appShell?.classList.remove("is-partner-dashboard", "is-partner-map");
     return;
   }
 
-  await loadPartnerCashAdjustments();
+  if (state.partnerMapActive) {
+    els.appShell?.classList.remove("is-partner-dashboard");
+    els.appShell?.classList.add("is-partner-map");
+    els.partnerDashboard.hidden = true;
+    return;
+  }
+
   const partner = state.currentUserProfile || { username: state.currentUser };
-  const orders = await getPartnerOrderRecords(partner);
+  const [, orders] = await Promise.all([
+    loadPartnerCashAdjustments(),
+    getPartnerOrderRecords(partner),
+  ]);
   const cash = calculatePartnerCashSummary(partner, orders);
+  els.appShell?.classList.remove("is-partner-map");
   els.appShell?.classList.add("is-partner-dashboard");
   els.partnerDashboard.hidden = false;
 

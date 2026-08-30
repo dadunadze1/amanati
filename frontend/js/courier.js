@@ -87,10 +87,10 @@ async function renderCourierMobileDashboard(pins = state.activePins) {
         <span>დღის ₾</span>
         <strong>${escapeHtml(formatMoney(todayStats.courierPay || 0))}</strong>
       </div>
-      <div class="courier-day-pill">
+      <button class="courier-day-pill courier-day-pill--action" type="button" data-action="courierParcels">
         <span>აქტიური</span>
         <strong>${pending}</strong>
-      </div>
+      </button>
     </div>
     <button class="courier-mini-route" type="button" data-courier-current-order>
       <span>${nearest ? "შემდეგი მისამართი" : "შეკვეთა არ არის"}</span>
@@ -354,8 +354,10 @@ async function openCourierRoute() {
 
 async function calculateTodayStats(username) {
   const todayKey = toDateKey(new Date());
-  const active = await getPins(username);
-  const history = await getHistory(username);
+  const [active, history] = await Promise.all([
+    getPins(username),
+    getHistory(username),
+  ]);
   const allRecords = [...active, ...history];
   const summary = calculateFinanceSummary({ records: allRecords }, { username, startDate: todayKey, endDate: todayKey });
   const records = summary.records;

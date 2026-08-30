@@ -103,6 +103,7 @@ function completeLogin(payload) {
   state.authToken = payload.token;
   state.currentUser = payload.user.username;
   state.currentUserProfile = payload.user;
+  state.partnerMapActive = false;
   state.isAdmin = payload.user.role === "admin";
   state.isPartner = payload.user.role === "partner";
   state.courierPresenceStatus = state.isAdmin || state.isPartner ? "offline" : "online";
@@ -130,7 +131,7 @@ function startAuthenticatedApp() {
   state.pushGateInProgress = false;
   hideModal(els.pushGateModal);
   state.adminDashboardHidden = false;
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "is-partner-map", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   updateAppViewportVars();
   state.mapViewportResetToken += 1;
   state.mapViewportResetPending = false;
@@ -302,6 +303,7 @@ async function logout() {
   state.midnightTimer = null;
   state.currentUser = null;
   state.currentUserProfile = null;
+  state.partnerMapActive = false;
   state.authToken = null;
   state.isAdmin = false;
   state.isPartner = false;
@@ -319,6 +321,7 @@ async function logout() {
   clearHistoryPreviewMarker();
   hideSelectedParcelCard();
   renderCourierStatsCard([]);
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "is-partner-map", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   els.loginForm.reset();
   showModal(els.authModal);
 }

@@ -1572,11 +1572,13 @@ async function staticApi(path, options = {}) {
 
   if (method === "GET" && apiPath === "/api/history") {
     const courier = url.searchParams.get("courier") || "";
+    const partnerId = url.searchParams.get("partnerId") || "";
     const dateRange = getStaticParcelDateRangeFilter(url);
     const history = mergeStaticRecordsByKey([], [...store.history, ...store.parcels.filter((parcel) => parcel.archivedAt)], getStaticParcelKey, resolveStaticParcelRecord)
       .filter((parcel) => !isStaticDeletedParcel(parcel))
       .filter((parcel) => staticParcelMatchesWorkdayDateRange(parcel, dateRange))
       .filter((parcel) => !state.isPartner || staticParcelBelongsToPartner(parcel, state.currentUserProfile || {}))
+      .filter((parcel) => state.isPartner || staticParcelMatchesPartnerFilter(parcel, partnerId))
       .filter((parcel) => !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier))
       .map((parcel) => publicStaticParcel(store, parcel));
     return staticPaginatedPayload("history", history, getStaticPaginationOptions(url));
@@ -2022,12 +2024,34 @@ async function staticApi(path, options = {}) {
   return {};
 }
 
+function shouldInvalidateDerivedFinanceCaches(path, method) {
+  if (String(method || "GET").toUpperCase() === "GET") return false;
+  const apiPath = String(path || "").split("?")[0];
+  return [
+    "/api/parcels",
+    "/api/partner-cash-adjustments",
+    "/api/daily-balance-ledger",
+    "/api/tariffs",
+  ].some((prefix) => apiPath === prefix || apiPath.startsWith(`${prefix}/`));
+}
+
+
+function invalidateDerivedFinanceCaches(path, method) {
+  if (!shouldInvalidateDerivedFinanceCaches(path, method)) return;
+  if (typeof invalidateFinanceRecordsCache === "function") invalidateFinanceRecordsCache();
+  if (state) state.statisticsReport = null;
+}
+
+
 async function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
   if (isStaticDeploy() && path.startsWith("/api/")) {
     try {
-      return await staticApi(path, options);
+      const payload = await staticApi(path, options);
+      invalidateDerivedFinanceCaches(path, method);
+      return payload;
     } catch (error) {
-      if (typeof recordClientIssue === "function") recordClientIssue("static-api-error", error, { path, method: options.method || "GET" });
+      if (typeof recordClientIssue === "function") recordClientIssue("static-api-error", error, { path, method });
       throw error;
     }
   }
@@ -2039,14 +2063,14 @@ async function api(path, options = {}) {
 
   try {
     const response = await fetch(path, {
-      method: options.method || "GET",
+      method,
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
     const payload = await response.json().catch(() => ({}));
     const durationMs = Math.round(performance.now() - startedAt);
     if (durationMs > Number(CONFIG.slowRequestWarningMs || 2500)) {
-      if (typeof recordClientIssue === "function") recordClientIssue("slow-api", `${options.method || "GET"} ${path}`, { durationMs, status: response.status });
+      if (typeof recordClientIssue === "function") recordClientIssue("slow-api", `${method} ${path}`, { durationMs, status: response.status });
     }
     if (!response.ok) {
       const error = new Error(payload.error || STRINGS.serverFailed);
@@ -2055,9 +2079,10 @@ async function api(path, options = {}) {
       if (typeof recordClientIssue === "function") recordClientIssue("api-error", error, { path, status: response.status });
       throw error;
     }
+    invalidateDerivedFinanceCaches(path, method);
     return payload;
   } catch (error) {
-    if (!error.status && typeof recordClientIssue === "function") recordClientIssue("network-error", error, { path, method: options.method || "GET" });
+    if (!error.status && typeof recordClientIssue === "function") recordClientIssue("network-error", error, { path, method });
     throw error;
   }
 }
@@ -2103,7 +2128,7 @@ async function getPins(username, options = {}) {
 async function getHistory(username, options = {}) {
   const params = new URLSearchParams();
   if (username) params.set("courier", username);
-  ["dateFrom", "dateTo", "startDate", "endDate", "limit", "offset"].forEach((key) => {
+  ["partnerId", "dateFrom", "dateTo", "startDate", "endDate", "limit", "offset"].forEach((key) => {
     if (options[key] !== undefined && options[key] !== null && options[key] !== "") params.set(key, options[key]);
   });
   const query = params.toString() ? `?${params.toString()}` : "";

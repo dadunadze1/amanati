@@ -365,6 +365,16 @@ describe("local API smoke flow", () => {
     assert.equal(volumeParcel.deliveryTotalPrice, 10);
     assert.equal(volumeParcel.courierPay, 6);
     assert.equal(volumeParcel.adminProfit, 4);
+
+    await api("/api/parcels/archive", {
+      method: "POST",
+      token: adminToken,
+      body: { parcelIds: [volumeParcel.id] },
+    });
+    const partnerHistory = await api(`/api/history?partnerId=${encodeURIComponent(partner.partner.id)}`, { token: adminToken });
+    assert.equal(partnerHistory.history.some((parcel) => parcel.id === volumeParcel.id), true);
+    const otherPartnerHistory = await api("/api/history?partnerId=missing-partner", { token: adminToken });
+    assert.equal(otherPartnerHistory.history.some((parcel) => parcel.id === volumeParcel.id), false);
   });
 
   it("allows courier status updates and archive flow", async () => {

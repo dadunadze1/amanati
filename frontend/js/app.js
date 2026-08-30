@@ -179,6 +179,7 @@ function renderActions() {
   ];
   const partnerActions = [
     ["partnerNewOrder", "ახალი", "+"],
+    ["partnerMap", "რუკა", "⌖"],
     ["logout", "გასვლა", "←"],
   ];
   const actions = state.isAdmin
@@ -242,7 +243,11 @@ function renderActions() {
           <b aria-hidden="true">☰</b>
           <span>მენიუ</span>
         </button>`
-      : actions.map((item, index) => renderActionButton(item, "bottom-nav-item", index === 0)).join("");
+      : actions.map((item, index) => renderActionButton(
+        item,
+        "bottom-nav-item",
+        state.isPartner ? item[0] === "partnerMap" && state.partnerMapActive : index === 0,
+      )).join("");
   }
 }
 
@@ -882,6 +887,7 @@ async function handleAction(action, value, sourceElement) {
     courierCash: () => openFinanceCourier(state.currentUser),
     partnerDashboard: renderPartnerDashboard,
     partnerNewOrder: openPartnerNewOrderDialog,
+    partnerMap: openPartnerMap,
     partnerOrders: openPartnerOrdersDialog,
     createPartner: openPartnerCreateDialog,
     editPartner: () => openPartnerEditDialog(value),
@@ -1067,6 +1073,7 @@ async function logout() {
   state.midnightTimer = null;
   state.currentUser = null;
   state.currentUserProfile = null;
+  state.partnerMapActive = false;
   state.authToken = null;
   state.isAdmin = false;
   state.isPartner = false;
@@ -1078,7 +1085,7 @@ async function logout() {
   state.hasCurrentPosition = false;
   state.activePins = [];
   state.adminDashboardHidden = false;
-  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
+  els.appShell?.classList.remove("is-admin-dashboard", "is-courier-mobile", "is-partner-dashboard", "is-partner-map", "has-selected-pin", "courier-detail-open", "admin-dashboard-hidden");
   if (els.adminDashboard) {
     els.adminDashboard.hidden = true;
     els.adminDashboard.textContent = "";

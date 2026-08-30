@@ -9,6 +9,8 @@ const DEFAULT_MAP_ZOOM = 15;
 const MIN_VALID_MAP_ZOOM = 7;
 const MAX_VALID_MAP_ZOOM = 19;
 const LOGIN_VIEWPORT_ENFORCE_DELAYS = [0, 80, 220, 520, 1000, 1600];
+const ADMIN_FINANCE_TAP_WINDOW_MS = 850;
+const ADMIN_FINANCE_TAP_REQUIRED = 3;
 const GEORGIAN_NEIGHBORHOOD_CASE_NORMALIZATIONS = [
   [/დიდ\s+დიღომში|დიდი\s+დიღმის/gi, "დიდი დიღომი"],
   [/დაბალ\s+დიღომში|დაბალი\s+დიღმის/gi, "დაბალი დიღომი"],
@@ -83,9 +85,130 @@ async function initializeMap() {
     if (!state.currentUser) return;
     rerenderCurrentMapPins();
   });
+  bindCourierMapRotation();
   bindMapResizeInvalidation();
   resetMapToDefaultViewport();
   scheduleMapInvalidateSize();
+}
+
+
+function bindCourierMapRotation() {
+  if (!els.map || state.courierMapRotationBound) return;
+  state.courierMapRotationBound = true;
+  els.map.addEventListener("touchstart", handleCourierMapRotateStart, { passive: true });
+  els.map.addEventListener("touchmove", handleCourierMapRotateMove, { passive: false });
+  els.map.addEventListener("touchend", handleCourierMapRotateEnd, { passive: true });
+  els.map.addEventListener("touchcancel", handleCourierMapRotateEnd, { passive: true });
+  state.map?.on?.("move zoom moveend zoomend", applyCourierMapRotation);
+}
+
+
+function isCourierMapRotationEnabled() {
+  return Boolean(state.currentUser && !state.isAdmin && !state.isPartner && state.map);
+}
+
+
+function getTouchRotationAngle(touches) {
+  if (!touches || touches.length < 2) return 0;
+  const first = touches[0];
+  const second = touches[1];
+  return Math.atan2(second.clientY - first.clientY, second.clientX - first.clientX) * 180 / Math.PI;
+}
+
+
+function normalizeMapBearing(value) {
+  const bearing = Number(value);
+  if (!Number.isFinite(bearing)) return 0;
+  return ((bearing % 360) + 360) % 360;
+}
+
+
+function getShortestAngleDelta(from, to) {
+  return ((to - from + 540) % 360) - 180;
+}
+
+
+function handleCourierMapRotateStart(event) {
+  if (!isCourierMapRotationEnabled() || event.touches?.length !== 2) return;
+  state.courierMapRotationActive = true;
+  state.courierMapRotationStartAngle = getTouchRotationAngle(event.touches);
+  state.courierMapRotationBaseBearing = state.courierMapBearing || 0;
+}
+
+
+function handleCourierMapRotateMove(event) {
+  if (!state.courierMapRotationActive || !isCourierMapRotationEnabled() || event.touches?.length !== 2) return;
+  const angle = getTouchRotationAngle(event.touches);
+  const delta = getShortestAngleDelta(state.courierMapRotationStartAngle, angle);
+  if (Math.abs(delta) < 2) return;
+  state.courierMapBearing = normalizeMapBearing((state.courierMapRotationBaseBearing || 0) + delta);
+  applyCourierMapRotation();
+  event.preventDefault();
+}
+
+
+function handleCourierMapRotateEnd(event) {
+  if ((event.touches?.length || 0) < 2) {
+    state.courierMapRotationActive = false;
+  }
+}
+
+
+function syncCourierMapRotationMode() {
+  if (isCourierMapRotationEnabled()) {
+    applyCourierMapRotation();
+    return;
+  }
+  state.courierMapRotationActive = false;
+  state.courierMapBearing = 0;
+  applyCourierMapRotation();
+}
+
+
+function applyCourierMapRotation() {
+  const pane = state.map?.getPane?.("mapPane");
+  if (!pane) return;
+  const baseTransform = String(pane.style.transform || "").replace(/\srotate\([^)]*\)/g, "").trim();
+  const bearing = isCourierMapRotationEnabled() ? normalizeMapBearing(state.courierMapBearing || 0) : 0;
+  pane.style.transformOrigin = "50% 50%";
+  pane.style.transform = bearing ? `${baseTransform} rotate(${bearing}deg)`.trim() : baseTransform;
+}
+
+
+function isEmptyAdminMapTap(event) {
+  if (!state.isAdmin || !state.currentUser || !event?.latlng) return false;
+  if (state.mode && state.mode !== "idle") return false;
+  const target = event.originalEvent?.target;
+  if (!target?.closest) return true;
+  return !target.closest([
+    ".leaflet-marker-icon",
+    ".leaflet-interactive",
+    ".leaflet-control",
+    ".leaflet-popup",
+    ".pin-label-card",
+    ".partner-pickup-pin-icon",
+    ".dispatch-cluster-icon",
+  ].join(","));
+}
+
+
+function handleAdminMapFinanceTap(event) {
+  if (!isEmptyAdminMapTap(event)) {
+    state.adminMapFinanceTapTimes = [];
+    return false;
+  }
+
+  const now = performance.now();
+  const recent = (state.adminMapFinanceTapTimes || []).filter((time) => now - time <= ADMIN_FINANCE_TAP_WINDOW_MS);
+  recent.push(now);
+  state.adminMapFinanceTapTimes = recent;
+  if (recent.length < ADMIN_FINANCE_TAP_REQUIRED) return false;
+
+  state.adminMapFinanceTapTimes = [];
+  if (typeof openFinanceDashboard === "function") openFinanceDashboard({ preserveSearch: true }).catch((error) => {
+    showToast(error.message || STRINGS.serverFailed);
+  });
+  return true;
 }
 
 
@@ -653,7 +776,39 @@ function handlePinMarkerClick(pin, event) {
   stopMapClick(event);
   if (!pin?.id) return;
   state.map?.closePopup?.();
+  if (state.isPartner) {
+    showPartnerMapParcelPopup(pin);
+    return;
+  }
   openParcelTab(pin.id, { closeOpenDialog: state.isAdmin, focus: true });
+}
+
+
+function showPartnerMapParcelPopup(pin) {
+  if (!state.map || !window.L) return;
+  const status = getPartnerOrderStatusLabel(pin);
+  const failureReason = pin.status === "failed" ? parcelFailureReason(pin) : "";
+  const rows = [
+    ["მომხმარებელი", pin.fullName || "სახელი არ არის"],
+    ["COD", formatPinMoney(getPaymentAmount(pin))],
+    ["სტატუსი", status],
+    ...(failureReason ? [["მიზეზი", failureReason]] : []),
+  ];
+  const html = `
+    <div class="partner-map-popup">
+      ${rows.map(([label, value]) => `
+        <div>
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+  state.map.openPopup(html, toLeafletLatLng(pin), {
+    autoPan: true,
+    closeButton: true,
+    className: "partner-map-leaflet-popup",
+  });
 }
 
 
@@ -755,6 +910,7 @@ function renderPinLabel(pin) {
 
 
 function shouldShowPinLabel(pin) {
+  if (state.isPartner) return false;
   if (state.isAdmin) return pin?.id === state.selectedPinId;
   return pin?.id === state.selectedPinId || getMapZoom() >= 16;
 }
@@ -812,6 +968,7 @@ function collapseDeliveredPinLabels() {
 
 function rerenderCurrentMapPins() {
   if (!state.map) return;
+  syncCourierMapRotationMode();
   const visiblePins = typeof getVisiblePinsForCurrentRole === "function"
     ? getVisiblePinsForCurrentRole(state.activePins)
     : state.activePins;
@@ -847,7 +1004,7 @@ async function renderCourierStatsCard(pins = state.activePins) {
   els.courierStatsCard.setAttribute("aria-expanded", els.courierStatsCard.classList.contains("expanded") ? "true" : "false");
   els.courierStatsCard.innerHTML = `
     <div class="bottom-sheet-handle" role="button" tabindex="0" aria-label="სტატისტიკის პანელის გაშლა"></div>
-    <div class="courier-map-stats-row"><span>დარჩენილი</span><strong>${pending}</strong></div>
+    <button class="courier-map-stats-row courier-map-stats-row--action" type="button" data-action="courierParcels"><span>დარჩენილი</span><strong>${pending}</strong></button>
     <div class="courier-map-stats-row"><span>ჩაბარდა</span><strong>${deliveredPins.length}</strong></div>
     <div class="courier-map-stats-row"><span>არ ჩაბარდა</span><strong>${failed}</strong></div>
   `;

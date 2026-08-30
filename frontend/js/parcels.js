@@ -30,6 +30,7 @@ async function refreshPins() {
 
 async function refreshPinsOnce() {
   const selectedPinId = state.selectedPinId;
+  if (typeof syncCourierMapRotationMode === "function") syncCourierMapRotationMode();
 
   if (!state.currentUser || !state.map) {
     clearAdminMapPins();
@@ -55,7 +56,7 @@ async function refreshPinsOnce() {
   });
   state.activePins = pins;
   state.partnerPickupPins = partnerPickupPins;
-  const visiblePins = getVisiblePinsForCurrentRole(pins);
+  const visiblePins = state.isPartner && state.partnerMapActive ? state.activePins : getVisiblePinsForCurrentRole(pins);
   const panelSignature = getPinPanelRenderSignature(pins, partnerPickupPins);
   const shouldRenderPanels = panelSignature !== state.pinPanelRenderSignature;
   state.pinPanelRenderSignature = panelSignature;
@@ -339,6 +340,7 @@ async function handleMapClick(event) {
     return;
   }
   if (state.mode !== "selectingParcel") {
+    if (typeof handleAdminMapFinanceTap === "function" && handleAdminMapFinanceTap(event)) return;
     closeActions();
     closeAdminDrawer();
     collapseCourierStatsSheet();

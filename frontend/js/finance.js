@@ -265,16 +265,58 @@ function getCourierOutstandingCash(username, allRecords) {
 }
 
 
-async function getAllFinanceRecords(options = {}) {
-  const range = options.startDate || options.endDate
-    ? normalizeDateRange(options.startDate, options.endDate || options.startDate)
+const FINANCE_RECORDS_CACHE_TTL_MS = 12000;
+const financeRecordsCache = new Map();
+
+
+function getFinanceRecordsCacheKey(options = {}) {
+  const range = options.startDate || options.endDate || options.dateFrom || options.dateTo
+    ? normalizeDateRange(options.startDate || options.dateFrom, options.endDate || options.dateTo || options.startDate || options.dateFrom)
     : null;
-  const recordOptions = range ? { dateFrom: range.start, dateTo: range.end } : {};
-  const [pins, history] = await Promise.all([
+  return [
+    normalizeUsername(options.username || ""),
+    range?.start || "",
+    range?.end || "",
+    String(options.partnerId || ""),
+  ].join("|");
+}
+
+
+function invalidateFinanceRecordsCache() {
+  financeRecordsCache.clear();
+  state.statisticsReport = null;
+}
+
+
+async function getAllFinanceRecords(options = {}) {
+  const rangeStart = options.startDate || options.dateFrom;
+  const rangeEnd = options.endDate || options.dateTo || rangeStart;
+  const range = rangeStart || rangeEnd
+    ? normalizeDateRange(rangeStart, rangeEnd)
+    : null;
+  const recordOptions = {
+    ...(range ? { dateFrom: range.start, dateTo: range.end } : {}),
+    ...(options.partnerId ? { partnerId: options.partnerId } : {}),
+  };
+  const cacheKey = getFinanceRecordsCacheKey({ ...options, ...recordOptions });
+  const cached = financeRecordsCache.get(cacheKey);
+  const now = Date.now();
+  if (!options.forceRefresh && cached?.records && now - cached.at <= FINANCE_RECORDS_CACHE_TTL_MS) return cached.records;
+  if (!options.forceRefresh && cached?.promise) return cached.promise;
+
+  const promise = Promise.all([
     getPins(options.username || "", recordOptions),
     getHistory(options.username || "", recordOptions),
-  ]);
-  return [...pins, ...history];
+  ]).then(([pins, history]) => {
+    const records = [...pins, ...history];
+    financeRecordsCache.set(cacheKey, { at: Date.now(), records });
+    return records;
+  }).catch((error) => {
+    financeRecordsCache.delete(cacheKey);
+    throw error;
+  });
+  financeRecordsCache.set(cacheKey, { at: now, promise });
+  return promise;
 }
 
 
@@ -406,6 +448,20 @@ function renderFinanceModalLayout({ header = "", filters = "", summary = "", con
       <section class="modal-footer finance-modal-footer">${footer}</section>
     </div>
   `;
+}
+
+
+function renderFinanceLoadingState(message = "იტვირთება...") {
+  return renderFinanceModalLayout({
+    content: `
+      <div class="finance-workbench">
+        <div class="history-empty history-empty-card finance-loading-state" aria-busy="true">
+          <strong>${escapeHtml(message)}</strong>
+          <span>მონაცემები ფონურად ახლდება.</span>
+        </div>
+      </div>
+    `,
+  });
 }
 
 
@@ -974,17 +1030,16 @@ async function getFinanceAdminReport() {
     state.financeWorkdayInitialized = true;
   }
   const range = getFinanceCourierRange();
-  const recordOptions = { dateFrom: range.start, dateTo: range.end };
-  const [users, pins, history, partners] = await Promise.all([
+  const [users, records, partners] = await Promise.all([
     getUsers().catch(() => []),
-    getPins("", recordOptions).catch(() => []),
-    getHistory("", recordOptions).catch(() => []),
+    getAllFinanceRecords({ startDate: range.start, endDate: range.end }).catch(() => []),
     typeof getPartners === "function" ? getPartners().catch(() => []) : [],
     typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
   ]);
   const ledger = await loadDailyBalanceLedger().catch(() => readDailyBalanceLedger());
   const couriers = users.filter((user) => user.role === "courier");
-  const records = [...pins, ...history];
+  const pins = records.filter((record) => !record.archivedAt);
+  const history = records.filter((record) => record.archivedAt);
   const partnerRecords = typeof mergePartnerOrderRecords === "function" ? mergePartnerOrderRecords(pins, history) : records;
   const daySummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
   const courierSummaries = couriers.map((courier) => ({
@@ -1603,7 +1658,13 @@ async function openFinanceDashboard(options = {}) {
   }
   state.financeAdminView = getFinanceAdminView(state.financeAdminView);
   if (!options.preserveSearch) state.financeAdminSearch = "";
+  const requestToken = `finance:${Date.now()}:${Math.random()}`;
+  state.financeDashboardRequestToken = requestToken;
+  showDialog("ფინანსები", renderFinanceLoadingState("ფინანსური მონაცემები იტვირთება..."), [
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
   const report = await getFinanceAdminReport();
+  if (state.financeDashboardRequestToken !== requestToken || state.activeDialogTitle !== "ფინანსები") return;
   const filters = renderFinanceAdminFilters(report, state.financeAdminView);
   const content = renderFinanceDashboardWorkbench(report);
   const body = renderFinanceModalLayout({ filters, content });
@@ -2204,7 +2265,13 @@ async function openStatisticsDashboard(options = {}) {
   if (!state.isAdmin) return;
   state.statisticsView = getStatisticsView(state.statisticsView);
   if (!options.preserveSearch) state.statisticsSearch = "";
+  const requestToken = `statistics:${Date.now()}:${Math.random()}`;
+  state.statisticsDashboardRequestToken = requestToken;
+  showDialog("სტატისტიკა", renderFinanceLoadingState("სტატისტიკა იტვირთება..."), [
+    { label: "დახურვა", variant: "secondary", action: closeDialog },
+  ]);
   const report = await getStatisticsReport();
+  if (state.statisticsDashboardRequestToken !== requestToken || state.activeDialogTitle !== "სტატისტიკა") return;
   state.statisticsReport = report;
   state.financeAdminSearch = state.statisticsSearch || "";
   showDialog("სტატისტიკა", renderStatisticsDashboard(report), [

@@ -2124,6 +2124,7 @@ async function handleApi(request, response, url) {
   if (method === "GET" && path === "/api/history") {
     const session = requireSession(request);
     const dateRange = getParcelDateRangeFilter(url);
+    const partnerId = String(url.searchParams.get("partnerId") || "").trim();
     const partnerUser = session.role === "partner" ? findUser(db, session.username) : null;
     const courier = session.role === "partner" ? "" : url.searchParams.get("courier") || (session.role === "admin" ? "" : session.username);
     if (courier && !canAccessCourier(session, courier)) throw httpError(403, "წვდომა აკრძალულია.");
@@ -2133,6 +2134,7 @@ async function handleApi(request, response, url) {
         if (isDeletedParcel(parcel)) return false;
         if (!parcelMatchesWorkdayDateRange(parcel, dateRange)) return false;
         if (session.role === "partner") return parcelBelongsToPartner(parcel, partnerUser);
+        if (session.role === "admin" && !parcelMatchesPartnerFilter(parcel, partnerId)) return false;
         return !courier || normalizeUsername(parcel.courierUsername) === normalizeUsername(courier);
       })
       .map((parcel) => publicParcel(db, parcel));
