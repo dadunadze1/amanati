@@ -315,7 +315,7 @@ async function closePartnerMap() {
 
 function getPartnerCashManagementRange() {
   const today = toDateKey(new Date());
-  const defaultDate = state.currentWorkdayKey || state.financeRangeStart || today;
+  const defaultDate = today;
   return normalizeDateRange(state.partnerCashRangeStart || defaultDate, state.partnerCashRangeEnd || state.partnerCashRangeStart || defaultDate);
 }
 

@@ -1025,8 +1025,9 @@ async function getFinanceAdminReport() {
   const workday = typeof getWorkdayState === "function"
     ? await getWorkdayState().catch(() => null)
     : null;
-  if (!state.financeWorkdayInitialized && workday?.currentWorkdayKey) {
-    setFinanceCourierRange(workday.currentWorkdayKey, workday.currentWorkdayKey);
+  if (!state.financeWorkdayInitialized) {
+    const today = toDateKey(new Date());
+    setFinanceCourierRange(today, today);
     state.financeWorkdayInitialized = true;
   }
   const range = getFinanceCourierRange();
@@ -1134,7 +1135,7 @@ function renderFinanceAdminTabs(activeView) {
 
 
 function renderFinanceAdminFilters(report, activeView) {
-  const today = report.workday?.currentWorkdayKey || toDateKey(new Date());
+  const today = toDateKey(new Date());
   const yesterday = addDaysToDateKey(today, -1);
   const quickRanges = [
     { label: "დღეს", value: `${today}|${today}` },
@@ -1869,12 +1870,13 @@ async function getStatisticsReport() {
   const workday = typeof getWorkdayState === "function"
     ? await getWorkdayState().catch(() => null)
     : null;
-  if (!state.statisticsInitialized && workday?.currentWorkdayKey) {
-    setStatisticsRange(workday.currentWorkdayKey, workday.currentWorkdayKey);
+  if (!state.statisticsInitialized) {
+    const today = toDateKey(new Date());
+    setStatisticsRange(today, today);
     state.statisticsInitialized = true;
   }
 
-  const range = getStatisticsRange(workday?.currentWorkdayKey || toDateKey(new Date()));
+  const range = getStatisticsRange(toDateKey(new Date()));
   const [users, recordsRaw, partners, ledger] = await Promise.all([
     getUsers().catch(() => []),
     getAllFinanceRecords({ startDate: range.start, endDate: range.end }).catch(() => []),
@@ -2262,7 +2264,7 @@ function bindStatisticsDashboardEvents(report) {
       event.currentTarget.value = "";
       return;
     }
-    const range = getStatisticsQuickRange(value, report.workday?.currentWorkdayKey || toDateKey(new Date()));
+    const range = getStatisticsQuickRange(value, toDateKey(new Date()));
     setStatisticsRange(range.start, range.end);
     await openStatisticsDashboard({ preserveSearch: true });
   });
