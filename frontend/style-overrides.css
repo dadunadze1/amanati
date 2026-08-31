@@ -285,6 +285,56 @@
   background: #edf2f8;
 }
 
+.partner-map-controls {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 650;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(360px, calc(100vw - 28px));
+  padding: 4px;
+  gap: 4px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(12px);
+}
+
+.partner-map-controls[hidden] {
+  display: none;
+}
+
+.partner-map-filter {
+  min-width: 0;
+  min-height: 38px;
+  padding: 6px 5px;
+  overflow: hidden;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.partner-map-filter.is-active {
+  color: #ffffff;
+  background: #334155;
+  border-color: #334155;
+}
+
+.partner-map-filter:hover,
+.partner-map-filter:focus-visible {
+  border-color: #64748b;
+  outline: none;
+}
+
 .app-shell.is-partner-map .map,
 .app-shell.is-partner-map .leaflet-container {
   display: block !important;

@@ -10,7 +10,7 @@ const ADMIN_AUTO_REFRESH_MS = 30000;
 function cacheElements() {
   els.appShell = document.querySelector(".app-shell");
   [
-    "map", "adminDashboard", "courierDashboard", "partnerDashboard", "menuButton", "actionPanel", "bottomNav", "courierOrdersSheet", "modeToast", "courierStatsCard", "nearestParcelCard",
+    "map", "partnerMapControls", "adminDashboard", "courierDashboard", "partnerDashboard", "menuButton", "actionPanel", "bottomNav", "courierOrdersSheet", "modeToast", "courierStatsCard", "nearestParcelCard",
     "adminDrawerOverlay", "adminMobileDrawer", "adminMobileDrawerBody", "adminDrawerClose",
     "setupModal", "setupForm", "setupUsername", "setupPassword",
     "setupError", "authModal", "loginForm", "loginUsername", "loginPassword",
@@ -103,6 +103,7 @@ function bindEvents() {
   bindAdminDashboardSwipeEvents();
   bindAdminDashboardEdgeSwipeEvents();
   bindCourierSwipeCloseEvents();
+  bindPartnerMapSwipeCloseEvents();
   bindAdminDrawerEvents();
   document.addEventListener("click", (event) => {
     const drawerToggle = event.target.closest("[data-admin-drawer-toggle]");
@@ -141,6 +142,36 @@ function bindEvents() {
       collapseCourierStatsSheet();
     }
   });
+}
+
+
+function bindPartnerMapSwipeCloseEvents() {
+  let tracking = false;
+  let startX = 0;
+  let startY = 0;
+
+  document.addEventListener("touchstart", (event) => {
+    if (!state.isPartner || !state.partnerMapActive || event.touches.length !== 2) return;
+    if (event.target.closest("#partnerMapControls, #bottomNav, .leaflet-control, .leaflet-popup")) return;
+    startX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+    startY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+    tracking = true;
+  }, { passive: true });
+
+  document.addEventListener("touchend", (event) => {
+    if (!tracking || !state.isPartner || !state.partnerMapActive) return;
+    tracking = false;
+    if (event.changedTouches.length < 2) return;
+    const endX = (event.changedTouches[0].clientX + event.changedTouches[1].clientX) / 2;
+    const endY = (event.changedTouches[0].clientY + event.changedTouches[1].clientY) / 2;
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
+    if (deltaY > 110 && deltaY > Math.abs(deltaX) * 1.35) closePartnerMap();
+  }, { passive: true });
+
+  document.addEventListener("touchcancel", () => {
+    tracking = false;
+  }, { passive: true });
 }
 
 
@@ -888,6 +919,7 @@ async function handleAction(action, value, sourceElement) {
     partnerDashboard: renderPartnerDashboard,
     partnerNewOrder: openPartnerNewOrderDialog,
     partnerMap: openPartnerMap,
+    partnerMapFilter: togglePartnerMapFilter,
     partnerOrders: openPartnerOrdersDialog,
     createPartner: openPartnerCreateDialog,
     editPartner: () => openPartnerEditDialog(value),
@@ -1074,6 +1106,10 @@ async function logout() {
   state.currentUser = null;
   state.currentUserProfile = null;
   state.partnerMapActive = false;
+  if (els.partnerMapControls) {
+    els.partnerMapControls.hidden = true;
+    els.partnerMapControls.textContent = "";
+  }
   state.authToken = null;
   state.isAdmin = false;
   state.isPartner = false;

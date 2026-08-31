@@ -69,18 +69,10 @@ async function initializeMap() {
     return;
   }
 
-  const rotationSupported = Boolean(L.Map?.prototype?.setBearing && L.Map?.prototype?.getBearing);
-  const courierRotationEnabled = Boolean(COURIER_MAP_ROTATION_ENABLED && !state.isAdmin && !state.isPartner && rotationSupported);
   state.map = L.map(els.map, {
     zoomControl: false,
     minZoom: MIN_VALID_MAP_ZOOM,
     maxZoom: MAX_VALID_MAP_ZOOM,
-    rotate: courierRotationEnabled,
-    bearing: state.courierMapBearing,
-    touchRotate: courierRotationEnabled,
-    dragRotate: false,
-    shiftKeyRotate: false,
-    preventPageGestures: courierRotationEnabled,
   }).setView(getDefaultMapCenter(), DEFAULT_MAP_ZOOM);
   L.control.zoom({ position: "bottomleft" }).addTo(state.map);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -94,50 +86,9 @@ async function initializeMap() {
     if (!state.currentUser) return;
     rerenderCurrentMapPins();
   });
-  bindCourierMapRotation();
   bindMapResizeInvalidation();
   resetMapToDefaultViewport();
   scheduleMapInvalidateSize();
-}
-
-
-function bindCourierMapRotation() {
-  if (!els.map || state.courierMapRotationBound) return;
-  state.courierMapRotationBound = true;
-  if (!isCourierMapRotationEnabled() || !state.map?.on) return;
-  state.map.on("rotate", () => {
-    state.courierMapBearing = normalizeMapBearing(state.map.getBearing?.() || 0);
-  });
-}
-
-
-function isCourierMapRotationEnabled() {
-  return Boolean(COURIER_MAP_ROTATION_ENABLED && state.currentUser && !state.isAdmin && !state.isPartner && state.map?.setBearing);
-}
-
-
-function normalizeMapBearing(value) {
-  const bearing = Number(value);
-  if (!Number.isFinite(bearing)) return 0;
-  return ((bearing % 360) + 360) % 360;
-}
-
-
-function syncCourierMapRotationMode() {
-  if (isCourierMapRotationEnabled()) {
-    state.courierMapBearing = normalizeMapBearing(state.map.getBearing?.() || state.courierMapBearing || 0);
-    return;
-  }
-  state.courierMapRotationActive = false;
-  state.courierMapBearing = 0;
-}
-
-
-function applyCourierMapRotation() {
-  if (!isCourierMapRotationEnabled()) return;
-  const bearing = normalizeMapBearing(state.courierMapBearing || 0);
-  if (Math.abs(normalizeMapBearing(state.map.getBearing?.() || 0) - bearing) < 0.01) return;
-  state.map.setBearing(bearing);
 }
 
 
@@ -934,7 +885,6 @@ function collapseDeliveredPinLabels() {
 
 function rerenderCurrentMapPins() {
   if (!state.map) return;
-  syncCourierMapRotationMode();
   const visiblePins = typeof getVisiblePinsForCurrentRole === "function"
     ? getVisiblePinsForCurrentRole(state.activePins)
     : state.activePins;
@@ -1890,16 +1840,11 @@ function startLocationWatch() {
   if (state.watchId || !state.map) return;
 
   state.watchId = navigator.geolocation.watchPosition((position) => {
-    const hadCurrentPosition = state.hasCurrentPosition;
     state.currentPosition = {
       lat: position.coords.latitude,
       lng: position.coords.longitude,
     };
     state.hasCurrentPosition = true;
-
-    if (!hadCurrentPosition && isCourierMapRotationEnabled()) {
-      state.map.setView(toLeafletLatLng(state.currentPosition), getMapZoom(), { animate: false });
-    }
 
     if (!state.locationMarker) {
       state.locationMarker = createCircleMarker(state.currentPosition, {

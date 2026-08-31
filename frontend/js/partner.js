@@ -237,10 +237,52 @@ async function getPartnerMapOrders(partner) {
 }
 
 
+function getPartnerMapVisibleOrders(orders = state.activePins) {
+  const filters = state.partnerMapStatusFilters || {};
+  return (Array.isArray(orders) ? orders : []).filter((order) => filters[order.status || "pending"] !== false);
+}
+
+
+function renderPartnerMapControls() {
+  if (!els.partnerMapControls) return;
+  if (!state.isPartner || !state.partnerMapActive) {
+    els.partnerMapControls.hidden = true;
+    els.partnerMapControls.textContent = "";
+    return;
+  }
+  const filters = state.partnerMapStatusFilters || {};
+  const items = [
+    ["delivered", "ჩაბარებული"],
+    ["pending", "პროცესში"],
+    ["failed", "არ ჩაბარებული"],
+  ];
+  els.partnerMapControls.hidden = false;
+  els.partnerMapControls.innerHTML = items.map(([value, label]) => `
+    <button class="partner-map-filter${filters[value] ? " is-active" : ""}" type="button" data-action="partnerMapFilter" data-value="${value}" aria-pressed="${filters[value] ? "true" : "false"}">${label}</button>
+  `).join("");
+}
+
+
+function togglePartnerMapFilter(value) {
+  if (!state.partnerMapActive || !["delivered", "pending", "failed"].includes(value)) return;
+  const filters = state.partnerMapStatusFilters || {};
+  const activeCount = Object.values(filters).filter(Boolean).length;
+  if (filters[value] && activeCount <= 1) return;
+  filters[value] = !filters[value];
+  state.partnerMapStatusFilters = filters;
+  renderPartnerMapControls();
+  renderParcelMarkers(getPartnerMapVisibleOrders());
+}
+
+
 async function openPartnerMap() {
   if (!state.isPartner || !state.currentUser) return;
+  if (state.partnerMapActive) {
+    return closePartnerMap();
+  }
   const partner = state.currentUserProfile || { username: state.currentUser };
   state.partnerMapActive = true;
+  state.partnerMapStatusFilters = { delivered: true, pending: true, failed: true };
   els.appShell?.classList.remove("is-partner-dashboard");
   els.appShell?.classList.add("is-partner-map");
   if (els.partnerDashboard) {
@@ -253,10 +295,21 @@ async function openPartnerMap() {
   state.partnerPickupPins = [];
   state.selectedPinId = null;
   clearActiveRoute();
-  renderParcelMarkers(orders);
+  renderPartnerMapControls();
+  renderParcelMarkers(getPartnerMapVisibleOrders(orders));
   fitMapToPinsOrDefault(orders);
   renderActions();
   if (!orders.length) showToast("რუკაზე საჩვენებელი დადასტურებული შეკვეთა არ არის.");
+}
+
+
+async function closePartnerMap() {
+  if (!state.partnerMapActive) return;
+  state.partnerMapActive = false;
+  renderPartnerMapControls();
+  els.appShell?.classList.remove("is-partner-map");
+  state.pinPanelRenderSignature = "";
+  await refreshPins();
 }
 
 

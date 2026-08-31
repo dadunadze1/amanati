@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_CACHE_NAME = "swift-delivery-app-shell-v51";
+const APP_CACHE_NAME = "swift-delivery-app-shell-v52";
 const DEFAULT_PUSH_VIBRATE = [220, 90, 220, 90, 320];
 const APP_CACHE_ASSETS = [
   "./",
@@ -18,7 +18,7 @@ const APP_CACHE_ASSETS = [
   "./js/notifications.js?v=29",
   "./js/api.js?v=35",
   "./js/address-directory.js?v=21",
-  "./js/map.js?v=25",
+  "./js/map.js?v=26",
   "./js/auth.js?v=13",
   "./js/zones.js?v=3",
   "./js/photo-import.js?v=1",

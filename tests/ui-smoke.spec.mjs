@@ -715,13 +715,20 @@ test("partner map shows only partner-safe order popup fields", async ({ page }) 
     window.renderActions();
     await window.openPartnerMap();
     window.showPartnerMapParcelPopup(state.activePins[0]);
+    const popupText = document.querySelector(".leaflet-popup")?.textContent || "";
+    const mapAppClass = els.appShell.className;
+    window.togglePartnerMapFilter("failed");
+    const filterState = { ...state.partnerMapStatusFilters };
+    await window.openPartnerMap();
     return {
       parcelId: parcel.parcel.id,
       activeCount: state.activePins.length,
       activeIds: state.activePins.map((item) => item.id),
-      appClass: els.appShell.className,
-      popupText: document.querySelector(".leaflet-popup")?.textContent || "",
+      appClass: mapAppClass,
+      popupText,
       bottomNavText: els.bottomNav.textContent,
+      filterState,
+      closedMap: !state.partnerMapActive && els.appShell.classList.contains("is-partner-dashboard"),
     };
   }, { batchId: Date.now() });
 
@@ -734,6 +741,8 @@ test("partner map shows only partner-safe order popup fields", async ({ page }) 
   expect(result.popupText).not.toContain("Hidden Internal Address");
   expect(result.popupText).not.toContain("partner-map-courier");
   expect(result.popupText).not.toContain("555460003");
+  expect(result.filterState).toMatchObject({ delivered: true, pending: true, failed: false });
+  expect(result.closedMap).toBe(true);
 });
 
 test("partner pickup edit starts from Tbilisi when coordinates are empty", async ({ page }) => {

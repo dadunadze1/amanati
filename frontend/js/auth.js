@@ -304,6 +304,10 @@ async function logout() {
   state.currentUser = null;
   state.currentUserProfile = null;
   state.partnerMapActive = false;
+  if (els.partnerMapControls) {
+    els.partnerMapControls.hidden = true;
+    els.partnerMapControls.textContent = "";
+  }
   state.authToken = null;
   state.isAdmin = false;
   state.isPartner = false;
