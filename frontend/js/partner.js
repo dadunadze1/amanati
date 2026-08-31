@@ -678,16 +678,19 @@ function renderPartnerCard(partner, range = getPartnerCashManagementRange()) {
 
 async function openPartnerCashAdjustmentDialog(username) {
   if (!state.isAdmin) return;
-  const [partners, records] = await Promise.all([
+  const [partners, records, , ledger] = await Promise.all([
     getPartners(),
     getAllPartnerCashRecords(),
     loadPartnerCashAdjustments(),
+    loadDailyBalanceLedger().catch(() => readDailyBalanceLedger()),
   ]);
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
 
   const range = getPartnerCashManagementRange();
-  const summary = calculatePartnerCashForRange(partner, records, range);
+  const summary = typeof applyPartnerPaidToSummary === "function"
+    ? applyPartnerPaidToSummary(calculatePartnerCashForRange(partner, records, range), getPartnerPaidAmount(ledger, partner, range))
+    : calculatePartnerCashForRange(partner, records, range);
   const content = `
     <div class="finance-card finance-mini-card finance-section stats-card">
       <strong>${escapeHtml(partnerName(partner))}</strong>
@@ -755,16 +758,19 @@ async function resetPartnerCashAdjustment(username) {
 
 
 async function addPartnerCashAdjustment(username, amount, mode = "subtract") {
-  const [partners, records] = await Promise.all([
+  const [partners, records, , ledger] = await Promise.all([
     getPartners(),
     getAllPartnerCashRecords(),
     loadPartnerCashAdjustments(),
+    loadDailyBalanceLedger().catch(() => readDailyBalanceLedger()),
   ]);
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
 
   const range = getPartnerCashManagementRange();
-  const summary = calculatePartnerCashForRange(partner, records, range);
+  const summary = typeof applyPartnerPaidToSummary === "function"
+    ? applyPartnerPaidToSummary(calculatePartnerCashForRange(partner, records, range), getPartnerPaidAmount(ledger, partner, range))
+    : calculatePartnerCashForRange(partner, records, range);
   const normalizedAmount = Math.max(0, safeMoney(amount));
   if (normalizedAmount <= 0) return;
 
@@ -818,15 +824,18 @@ async function savePartnerCashBalanceAdjustment(partner, range, options = {}) {
 
 
 async function zeroPartnerCashAdjustment(username) {
-  const [partners, records] = await Promise.all([
+  const [partners, records, , ledger] = await Promise.all([
     getPartners(),
     getAllPartnerCashRecords(),
     loadPartnerCashAdjustments(),
+    loadDailyBalanceLedger().catch(() => readDailyBalanceLedger()),
   ]);
   const partner = partners.find((item) => normalizeUsername(item.username) === normalizeUsername(username));
   if (!partner) return;
   const range = getPartnerCashManagementRange();
-  const summary = calculatePartnerCashForRange(partner, records, range);
+  const summary = typeof applyPartnerPaidToSummary === "function"
+    ? applyPartnerPaidToSummary(calculatePartnerCashForRange(partner, records, range), getPartnerPaidAmount(ledger, partner, range))
+    : calculatePartnerCashForRange(partner, records, range);
   const currentNetBalance = safeMoney(summary.netBalance);
   if (Math.abs(currentNetBalance) < 0.005) return;
   await savePartnerCashBalanceAdjustment(partner, range, {

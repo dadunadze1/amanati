@@ -1048,7 +1048,10 @@ async function getFinanceAdminReport() {
   }));
   const partnerSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
     partner,
-    summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end),
+    summary: (() => {
+      const summary = calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end);
+      return applyPartnerPaidToSummary(summary, getPartnerPaidAmount(ledger, partner, range));
+    })(),
   })).filter(({ summary }) => partnerSummaryHasOrders(summary));
   const totalCourierCash = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.cashReceived, 0));
   const totalCourierPay = safeMoney(courierSummaries.reduce((sum, item) => sum + item.summary.finalPay, 0));
@@ -1065,9 +1068,7 @@ async function getFinanceAdminReport() {
   const paidCourierTotal = safeMoney(courierSummaries.reduce((sum, item) => (
     sum + (findDailyBalanceEntry(ledger, "courier", range, item.courier.username)?.amount || 0)
   ), 0));
-  const paidPartnerTotal = safeMoney(partnerSummaries.reduce((sum, item) => (
-    sum + (findDailyBalanceEntry(ledger, "partner", range, item.partner.username || item.partner.id)?.amount || 0)
-  ), 0));
+  const paidPartnerTotal = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.paidAmount, 0));
   const closablePins = pins.filter((pin) => isCompletedParcelStatus(pin) && parcelMatchesStatsDateRange(pin, range.start, range.end));
   const deliveredOrders = daySummary.deliveredRecords || [];
   const snapshots = ledger
@@ -1670,6 +1671,31 @@ async function openFinanceDashboard(options = {}) {
   const body = renderFinanceModalLayout({ filters, content });
   showDialog("ფინანსები", body, [{ label: "დახურვა", variant: "secondary", action: closeDialog }]);
   bindFinanceDashboardEvents(report);
+}
+
+
+function getPartnerPaidAmount(ledger, partner, range) {
+  if (typeof getStatisticsPaidAmount === "function") {
+    return safeMoney(getStatisticsPaidAmount(ledger, "partner", partner, range));
+  }
+  return safeMoney(findDailyBalanceEntry(ledger, "partner", range, partner?.username || partner?.id)?.amount || 0);
+}
+
+
+function applyPartnerPaidToSummary(summary, paidAmount) {
+  const paid = Math.max(0, safeMoney(paidAmount));
+  const returnDue = Math.max(0, safeMoney(summary?.partnerReturnDue) - paid);
+  const paymentDue = Math.max(0, safeMoney(summary?.partnerPaymentDue) - paid);
+  return {
+    ...summary,
+    netBalance: returnDue > 0 ? returnDue : paymentDue > 0 ? -paymentDue : 0,
+    partnerReturnDue: returnDue,
+    partnerPaymentDue: paymentDue,
+    outstandingCash: returnDue,
+    outstandingServiceFees: paymentDue,
+    cashDue: returnDue,
+    paidAmount: paid,
+  };
 }
 
 const STATISTICS_VIEWS = [
@@ -2470,7 +2496,10 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
   }));
   const partnerSummaries = (Array.isArray(partners) ? partners : []).map((partner) => ({
     partner,
-    summary: calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end),
+    summary: (() => {
+      const summary = calculatePartnerCashSummaryForRange(partner, partnerRecords, range.start, range.end);
+      return applyPartnerPaidToSummary(summary, getPartnerPaidAmount(ledger, partner, range));
+    })(),
   })).filter(({ summary }) => partnerSummaryHasOrders(summary));
   const daySummary = calculateFinanceSummary({ records }, { startDate: range.start, endDate: range.end });
   const deliveredOrders = daySummary.deliveredRecords || [];
@@ -2488,9 +2517,7 @@ async function openAdminDailyBalance(startDate = state.financeRangeStart || stat
   const paidCourierTotal = safeMoney(courierSummaries.reduce((sum, item) => (
     sum + (findDailyBalanceEntry(ledger, "courier", range, item.courier.username)?.amount || 0)
   ), 0));
-  const paidPartnerTotal = safeMoney(partnerSummaries.reduce((sum, item) => (
-    sum + (findDailyBalanceEntry(ledger, "partner", range, item.partner.username || item.partner.id)?.amount || 0)
-  ), 0));
+  const paidPartnerTotal = safeMoney(partnerSummaries.reduce((sum, item) => sum + item.summary.paidAmount, 0));
   const snapshots = ledger
     .filter((entry) => entry.type === "snapshot" && entry.rangeStart === range.start && entry.rangeEnd === range.end)
     .sort((a, b) => Date.parse(b.createdAt || "") - Date.parse(a.createdAt || ""));
@@ -3071,14 +3098,18 @@ async function openFinanceCourierPay() {
 async function openFinancePartnerCash() {
   if (!state.isAdmin || typeof getPartners !== "function" || typeof calculatePartnerCashSummary !== "function") return;
   const range = getFinanceCourierRange();
-  const [partners, records] = await Promise.all([
+  const [partners, records, , ledger] = await Promise.all([
     getPartners().catch(() => []),
     getAllFinanceRecords({ startDate: range.start, endDate: range.end }),
     typeof loadPartnerCashAdjustments === "function" ? loadPartnerCashAdjustments().catch(() => []) : [],
+    loadDailyBalanceLedger().catch(() => readDailyBalanceLedger()),
   ]);
   const summaries = partners.map((partner) => ({
     partner,
-    summary: calculatePartnerCashSummaryForRange(partner, records, range.start, range.end),
+    summary: applyPartnerPaidToSummary(
+      calculatePartnerCashSummaryForRange(partner, records, range.start, range.end),
+      getPartnerPaidAmount(ledger, partner, range),
+    ),
   }));
   const cashDue = safeMoney(summaries.reduce((sum, item) => sum + item.summary.cashDue, 0));
   const baseCash = safeMoney(summaries.reduce((sum, item) => sum + item.summary.baseCash, 0));
